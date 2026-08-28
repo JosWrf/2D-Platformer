@@ -2,3 +2,6 @@ node_modules/
 dist/
 .DS_Store
 *.log
+
+# Git-Bundle zum Weitergeben des Branches, kein Repo-Inhalt
+*.bundle
