@@ -1,0 +1,731 @@
+import { audio } from './core/audio';
+import { Camera } from './core/camera';
+import { Input } from './core/input';
+import { clamp, rand } from './core/math';
+import { Boss } from './entities/boss';
+import { Enemy, EnemyKind, createEnemy } from './entities/enemy';
+import { MovingPlatform } from './entities/platform';
+import { Checkpoint, Pickup } from './entities/pickup';
+import { Player } from './entities/player';
+import { Projectile } from './entities/projectile';
+import { Particles } from './fx/particles';
+import { Background } from './render/background';
+import { Decor } from './render/decor';
+import { PALETTE, zoneAt } from './render/palette';
+import { glow } from './render/sprites';
+import { drawTilemap } from './render/tilemap';
+import { drawBossBar, drawHeart, drawPanel, drawTextCentered, font } from './ui/hud';
+import type { World } from './world/context';
+import { Level } from './world/level';
+import { TILE } from './world/tiles';
+
+export const VIEW_W = 960;
+export const VIEW_H = 540;
+
+export type GameState = 'title' | 'playing' | 'paused' | 'dead' | 'victory';
+
+interface SpawnRecord {
+  kind: EnemyKind;
+  x: number;
+  y: number;
+}
+
+export class Game implements World {
+  readonly level = new Level();
+  readonly particles = new Particles();
+  readonly camera = new Camera(VIEW_W, VIEW_H);
+  readonly enemies: Enemy[] = [];
+  readonly projectiles: Projectile[] = [];
+  readonly pickups: Pickup[] = [];
+  readonly checkpoints: Checkpoint[] = [];
+  readonly platforms: MovingPlatform[] = [];
+  readonly decor: Decor[] = [];
+  readonly background = new Background(VIEW_W, VIEW_H);
+
+  player: Player;
+  boss: Boss | null = null;
+
+  state: GameState = 'title';
+  time = 0;
+  playTime = 0;
+  score = 0;
+  deaths = 0;
+  gems = 0;
+  totalGems = 0;
+
+  private hitStopTimer = 0;
+  private deathTimer = 0;
+  private victoryTimer = 0;
+  private bossIntro = 0;
+  private bossGhostHp = 0;
+  private zoneBanner = { text: '', timer: 0 };
+  private currentZone = '';
+  private titlePulse = 0;
+  private readonly enemySpawns: SpawnRecord[] = [];
+  private readonly collected = new Set<string>();
+  private checkpointX: number;
+  private checkpointY: number;
+  private flashWhite = 0;
+
+  constructor() {
+    const start = this.level.spawns.find((s) => s.kind === 'player');
+    const px = (start?.tx ?? 2) * TILE;
+    const py = (start?.ty ?? 2) * TILE - 2;
+    this.player = new Player(px, py);
+    this.checkpointX = px;
+    this.checkpointY = py;
+    this.buildFromSpawns();
+    this.camera.worldBounds = { w: this.level.pixelWidth, h: this.level.pixelHeight };
+    this.camera.snapTo(this.player.cx, this.player.cy);
+    this.currentZone = zoneAt(this.player.cx).label;
+  }
+
+  private buildFromSpawns(): void {
+    for (const spawn of this.level.spawns) {
+      const x = spawn.tx * TILE;
+      const y = spawn.ty * TILE;
+      switch (spawn.kind) {
+        case 'slime':
+        case 'bat':
+        case 'skeleton':
+        case 'mage':
+          this.enemySpawns.push({ kind: spawn.kind, x, y });
+          break;
+        case 'boss':
+          this.boss = new Boss(x - 16, y - 60);
+          break;
+        case 'gem':
+          this.pickups.push(new Pickup('gem', x + 8, y + 8));
+          this.totalGems++;
+          break;
+        case 'heart':
+          this.pickups.push(new Pickup('heart', x + 6, y + 8));
+          break;
+        case 'checkpoint':
+          this.checkpoints.push(new Checkpoint(x + 4, y + TILE - 56));
+          break;
+        case 'torch': {
+          const ground = this.distanceToGround(spawn.tx, spawn.ty, 4);
+          if (ground !== null) {
+            this.decor.push(new Decor('torch', x + 8, y + TILE - 12 - ground, 'ground', ground + 4));
+          } else {
+            const ceiling = this.distanceToCeiling(spawn.tx, spawn.ty, 8) ?? 24;
+            this.decor.push(new Decor('torch', x + 8, y + 12, 'hanging', ceiling + 12));
+          }
+          break;
+        }
+        case 'crystal': {
+          const ground = this.distanceToGround(spawn.tx, spawn.ty, 6);
+          if (ground !== null) {
+            this.decor.push(new Decor('crystal', x, y + TILE - 30 + ground, 'ground'));
+          } else {
+            const ceiling = this.distanceToCeiling(spawn.tx, spawn.ty, 6) ?? 0;
+            this.decor.push(new Decor('crystal', x, y - ceiling, 'hanging'));
+          }
+          break;
+        }
+        case 'moverH':
+          this.platforms.push(new MovingPlatform('h', x, y, TILE * 3.5, 0.28, Math.random()));
+          break;
+        case 'moverV':
+          this.platforms.push(new MovingPlatform('v', x, y, TILE * 3, 0.3, Math.random()));
+          break;
+        default:
+          break;
+      }
+    }
+    this.spawnEnemiesFresh();
+    this.pickups.forEach((pickup, i) => (pickup.id = `p${i}`));
+  }
+
+  /** Pixels down to the first solid tile below a spawn tile, or null. */
+  private distanceToGround(tx: number, ty: number, maxTiles: number): number | null {
+    for (let i = 1; i <= maxTiles; i++) {
+      if (this.level.solidAt(tx, ty + i)) return (i - 1) * TILE;
+    }
+    return null;
+  }
+
+  /** Pixels up to the first solid tile above a spawn tile, or null. */
+  private distanceToCeiling(tx: number, ty: number, maxTiles: number): number | null {
+    for (let i = 1; i <= maxTiles; i++) {
+      if (this.level.solidAt(tx, ty - i)) return (i - 1) * TILE;
+    }
+    return null;
+  }
+
+  private spawnEnemiesFresh(): void {
+    this.enemies.length = 0;
+    for (const rec of this.enemySpawns) {
+      const enemy = createEnemy(rec.kind, rec.x, rec.y);
+      // Anchor ground-bound enemies on the floor of their tile.
+      if (rec.kind !== 'bat' && rec.kind !== 'mage') enemy.y = rec.y + TILE - enemy.h;
+      this.enemies.push(enemy);
+    }
+  }
+
+  /* --------------------------------------------------------- World hooks */
+
+  hitStop(seconds: number): void {
+    this.hitStopTimer = Math.max(this.hitStopTimer, seconds);
+  }
+
+  addScore(points: number, x: number, y: number, label?: string): void {
+    this.score += points;
+    if (label) this.particles.text(x, y, label, PALETTE.gold);
+  }
+
+  spawnEnemy(enemy: Enemy): void {
+    this.enemies.push(enemy);
+  }
+
+  spawnProjectile(projectile: Projectile): void {
+    this.projectiles.push(projectile);
+  }
+
+  onBossEngaged(): void {
+    this.level.gateClosed = true;
+    this.bossIntro = 3;
+    this.zoneBanner = { text: 'SCHATTENRITTER MORVAIN', timer: 3 };
+    this.camera.addShake(8);
+  }
+
+  onBossDefeated(): void {
+    this.level.gateClosed = false;
+    this.victoryTimer = 1.8;
+    this.flashWhite = 1;
+    audio.play('victory');
+  }
+
+  /* --------------------------------------------------------------- update */
+
+  update(dt: number, input: Input): void {
+    this.time += dt;
+    this.titlePulse += dt;
+    this.flashWhite = Math.max(0, this.flashWhite - dt * 1.6);
+
+    if (this.state === 'title') {
+      this.camera.follow(this.player.cx, this.player.cy, 0, dt);
+      this.particles.update(dt);
+      for (const d of this.decor) d.update(dt, this.particles, this.isVisible(d.x, d.y));
+      if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
+        audio.unlock();
+        this.state = 'playing';
+      }
+      input.endFrame();
+      return;
+    }
+
+    if (input.pressed('restart')) {
+      this.restart();
+      input.endFrame();
+      return;
+    }
+
+    if (this.state === 'paused') {
+      if (input.pressed('pause') || input.pressed('confirm')) this.state = 'playing';
+      input.endFrame();
+      return;
+    }
+
+    if (this.state === 'victory') {
+      this.particles.update(dt);
+      this.camera.follow(this.player.cx, this.player.cy - 20, 0, dt);
+      if (Math.random() < 0.28) {
+        this.particles.spawn({
+          x: this.camera.x + rand(0, VIEW_W),
+          y: this.camera.y - 10,
+          vx: rand(-20, 20),
+          vy: rand(20, 70),
+          color: Math.random() < 0.5 ? '#ffd166' : '#8fe6ff',
+          gravity: 30,
+          size: rand(2, 4),
+          life: rand(1.5, 3),
+          shape: 'circle',
+        });
+      }
+      input.endFrame();
+      return;
+    }
+
+    if (this.state === 'dead') {
+      this.deathTimer -= dt;
+      this.particles.update(dt);
+      this.camera.follow(this.player.cx, this.player.cy, 0, dt);
+      if (this.deathTimer <= 0 && (input.pressed('confirm') || input.pressed('attack') || this.deathTimer < -1.2)) {
+        this.respawnAtCheckpoint();
+      }
+      input.endFrame();
+      return;
+    }
+
+    if (input.pressed('pause')) {
+      this.state = 'paused';
+      input.endFrame();
+      return;
+    }
+
+    this.playTime += dt;
+
+    if (this.victoryTimer > 0) {
+      this.victoryTimer -= dt;
+      if (this.victoryTimer <= 0) {
+        this.state = 'victory';
+        this.score += Math.max(0, 3000 - Math.floor(this.playTime) * 5);
+      }
+    }
+
+    // Hit-stop freezes the simulation for a couple of frames on impact.
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      this.particles.update(dt * 0.25);
+      this.camera.follow(this.player.cx, this.player.cy - 10, this.player.facing * 40, dt);
+      input.endFrame();
+      return;
+    }
+
+    this.player.update(dt, input, this);
+
+    for (const platform of this.platforms) {
+      if (!this.isVisible(platform.x, platform.y, 260)) continue;
+      platform.update(dt, this.player);
+      platform.landOn(this.player);
+    }
+
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      if (!enemy.active) {
+        if (this.isVisible(enemy.x, enemy.y, 220)) enemy.active = true;
+        else continue;
+      }
+      enemy.update(dt, this);
+      enemy.touchPlayer(this);
+    }
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      if (this.enemies[i].dead) this.enemies.splice(i, 1);
+    }
+
+    if (this.boss) {
+      this.boss.update(dt, this);
+      // The lagging "ghost" bar trails the real value for a bit of drama.
+      this.bossGhostHp += (this.boss.hp - this.bossGhostHp) * Math.min(1, dt * 2.4);
+    }
+    if (this.bossIntro > 0) this.bossIntro -= dt;
+
+    for (const p of this.projectiles) {
+      p.update(dt, this);
+      if (p.dead) continue;
+      if (p.friendly) {
+        for (const enemy of this.enemies) {
+          if (!enemy.dead && enemy.overlaps(p.rect)) {
+            enemy.hurt(p.damage, Math.sign(p.vx) || 1, this);
+            p.dead = true;
+            break;
+          }
+        }
+        if (!p.dead && this.boss && !this.boss.dead && this.boss.vulnerable && this.boss.overlaps(p.rect)) {
+          this.boss.hurt(p.damage, Math.sign(p.vx) || 1, this);
+          p.dead = true;
+        }
+      } else if (!this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
+        this.player.hurt(p.damage, Math.sign(p.vx) || (this.player.cx < p.cx ? -1 : 1), this);
+        p.dead = true;
+        this.particles.burst(p.cx, p.cy, 12, '#ff9a5c', { speed: 150 });
+      }
+    }
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      if (this.projectiles[i].dead) this.projectiles.splice(i, 1);
+    }
+
+    for (const pickup of this.pickups) {
+      if (pickup.dead) continue;
+      if (!this.isVisible(pickup.x, pickup.y, 120)) continue;
+      pickup.update(dt, this);
+      if (pickup.dead) {
+        this.collected.add(pickup.id);
+        if (pickup.kind === 'gem') this.gems++;
+      }
+    }
+
+    for (const cp of this.checkpoints) {
+      if (!this.isVisible(cp.x, cp.y, 200)) continue;
+      if (cp.update(dt, this)) {
+        this.checkpointX = cp.x;
+        this.checkpointY = cp.y;
+        this.player.heal(2);
+      }
+    }
+
+    for (const d of this.decor) d.update(dt, this.particles, this.isVisible(d.x, d.y));
+
+    this.particles.update(dt);
+
+    const zone = zoneAt(this.player.cx);
+    if (zone.label !== this.currentZone) {
+      this.currentZone = zone.label;
+      if (!this.boss?.engaged) this.zoneBanner = { text: zone.label, timer: 3.2 };
+    }
+    if (this.zoneBanner.timer > 0) this.zoneBanner.timer -= dt;
+
+    const lookAhead = clamp(this.player.vx * 0.35, -110, 110);
+    const focusY = this.boss?.engaged && !this.boss.dead ? this.player.cy + 30 : this.player.cy - 10;
+    this.camera.follow(this.player.cx, focusY, lookAhead, dt);
+
+    if (this.player.dead && this.state === 'playing') {
+      this.state = 'dead';
+      this.deathTimer = 1.1;
+      this.deaths++;
+      this.camera.addShake(9);
+      this.particles.burst(this.player.cx, this.player.cy, 40, PALETTE.playerCloak, { speed: 240, gravity: 500 });
+    }
+
+    input.endFrame();
+  }
+
+  private isVisible(x: number, y: number, margin = 80): boolean {
+    return (
+      x > this.camera.x - margin &&
+      x < this.camera.x + VIEW_W + margin &&
+      y > this.camera.y - margin - 200 &&
+      y < this.camera.y + VIEW_H + margin + 200
+    );
+  }
+
+  private respawnAtCheckpoint(): void {
+    this.player.respawn(this.checkpointX, this.checkpointY - 8);
+    this.projectiles.length = 0;
+    this.particles.clear();
+    this.spawnEnemiesFresh();
+    for (const pickup of this.pickups) {
+      pickup.dead = this.collected.has(pickup.id);
+    }
+    if (this.boss) {
+      this.boss.hp = this.boss.maxHp;
+      this.bossGhostHp = this.boss.maxHp;
+      this.boss.engaged = false;
+      this.boss.state = 'dormant';
+      this.boss.dead = false;
+      this.boss.vulnerable = false;
+      this.level.gateClosed = false;
+    }
+    this.state = 'playing';
+    this.camera.snapTo(this.player.cx, this.player.cy);
+  }
+
+  restart(): void {
+    this.state = 'playing';
+    this.score = 0;
+    this.gems = 0;
+    this.deaths = 0;
+    this.playTime = 0;
+    this.collected.clear();
+    const start = this.level.spawns.find((s) => s.kind === 'player');
+    this.checkpointX = (start?.tx ?? 2) * TILE;
+    this.checkpointY = (start?.ty ?? 2) * TILE - 2;
+    for (const cp of this.checkpoints) cp.activated = false;
+    for (const pickup of this.pickups) pickup.dead = false;
+    this.victoryTimer = 0;
+    this.respawnAtCheckpoint();
+  }
+
+  /* --------------------------------------------------------------- render */
+
+  render(ctx: CanvasRenderingContext2D): void {
+    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
+    this.background.draw(ctx, this.camera, this.time);
+
+    ctx.save();
+    ctx.translate(-this.camera.renderX, -this.camera.renderY);
+
+    drawTilemap(ctx, this.level, this.camera, this.time);
+
+    for (const d of this.decor) {
+      if (this.isVisible(d.x, d.y, 120)) d.draw(ctx);
+    }
+    for (const cp of this.checkpoints) {
+      if (this.isVisible(cp.x, cp.y, 120)) cp.draw(ctx);
+    }
+    for (const platform of this.platforms) {
+      if (this.isVisible(platform.x, platform.y, 200)) platform.draw(ctx);
+    }
+    for (const pickup of this.pickups) {
+      if (!pickup.dead && this.isVisible(pickup.x, pickup.y, 100)) pickup.draw(ctx);
+    }
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(ctx, this);
+    }
+    if (this.boss && !this.boss.dead && this.isVisible(this.boss.x, this.boss.y, 300)) {
+      this.boss.draw(ctx);
+    }
+    for (const p of this.projectiles) {
+      if (this.isVisible(p.x, p.y, 120)) p.draw(ctx);
+    }
+    if (!this.player.dead || this.state === 'victory') this.player.draw(ctx, this);
+    this.particles.draw(ctx);
+    this.particles.drawTexts(ctx);
+
+    ctx.restore();
+
+    this.drawLighting(ctx);
+    if (this.state !== 'title') this.drawHud(ctx);
+    this.drawOverlays(ctx);
+  }
+
+  private drawLighting(ctx: CanvasRenderingContext2D): void {
+    // Vignette.
+    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.35, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.95);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    // Low-health pulse.
+    if (this.state === 'playing' && this.player.hp <= 2 && !this.player.dead) {
+      const pulse = 0.16 + Math.sin(this.time * 6) * 0.08;
+      ctx.fillStyle = `rgba(180,20,40,${Math.max(0, pulse).toFixed(3)})`;
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+
+    if (this.flashWhite > 0) {
+      ctx.fillStyle = `rgba(255,245,225,${(this.flashWhite * 0.8).toFixed(3)})`;
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+  }
+
+  private drawHud(ctx: CanvasRenderingContext2D): void {
+    // Hearts.
+    const hp = this.player.hp;
+    for (let i = 0; i < this.player.maxHp; i++) {
+      drawHeart(ctx, 34 + i * 26, 36, 1.15, i < hp);
+    }
+
+    // Score + gems.
+    // Gem icon + score.
+    ctx.save();
+    ctx.translate(31, 67);
+    ctx.fillStyle = PALETTE.gold;
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(6, -1);
+    ctx.lineTo(0, 8);
+    ctx.lineTo(-6, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#fff0b8';
+    ctx.beginPath();
+    ctx.moveTo(0, -8);
+    ctx.lineTo(3, -1);
+    ctx.lineTo(0, 2);
+    ctx.lineTo(-3, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    ctx.font = font(16);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(`${this.score}`, 45, 74);
+    ctx.fillStyle = PALETTE.gold;
+    ctx.fillText(`${this.score}`, 44, 73);
+    ctx.font = font(12, 600);
+    ctx.fillStyle = '#8b95bd';
+    ctx.fillText(`EDELSTEINE ${this.gems}/${this.totalGems}   TODE ${this.deaths}`, 24, 92);
+
+    // Progress bar of the whole level.
+    const barW = 260;
+    const barX = VIEW_W - barW - 24;
+    const progress = clamp(this.player.cx / (this.level.pixelWidth - 200), 0, 1);
+    ctx.fillStyle = 'rgba(10,12,22,0.7)';
+    ctx.fillRect(barX, 28, barW, 8);
+    ctx.fillStyle = 'rgba(140,170,230,0.85)';
+    ctx.fillRect(barX, 28, barW * progress, 8);
+    ctx.strokeStyle = 'rgba(150,170,225,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX + 0.5, 28.5, barW - 1, 7);
+    ctx.fillStyle = '#f2c14e';
+    ctx.fillRect(barX + barW * progress - 1, 25, 3, 14);
+    ctx.font = font(11, 600);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#8b95bd';
+    ctx.fillText(this.currentZone.toUpperCase(), VIEW_W - 24, 54);
+    ctx.textAlign = 'left';
+
+    // Zone banner.
+    if (this.zoneBanner.timer > 0) {
+      const a = clamp(this.zoneBanner.timer > 2.6 ? (3.2 - this.zoneBanner.timer) / 0.6 : this.zoneBanner.timer / 1.2, 0, 1);
+      ctx.globalAlpha = a;
+      drawTextCentered(ctx, this.zoneBanner.text, VIEW_W / 2, 130, 26, '#f4f7ff');
+      ctx.globalAlpha = a * 0.7;
+      ctx.fillStyle = 'rgba(200,215,255,0.6)';
+      ctx.fillRect(VIEW_W / 2 - 90, 142, 180, 1);
+      ctx.globalAlpha = 1;
+    }
+
+    // Boss bar.
+    if (this.boss && this.boss.engaged && !this.boss.dead) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `${this.boss.name}   ·   PHASE ${this.boss.phase}`,
+          hp: this.boss.hp,
+          maxHp: this.boss.maxHp,
+          ghost: this.bossGhostHp,
+          phase: this.boss.phase,
+        },
+        this.bossIntro,
+      );
+    }
+  }
+
+  private drawOverlays(ctx: CanvasRenderingContext2D): void {
+    switch (this.state) {
+      case 'title':
+        this.drawTitle(ctx);
+        break;
+      case 'paused':
+        ctx.fillStyle = 'rgba(4,6,12,0.72)';
+        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+        drawTextCentered(ctx, 'PAUSE', VIEW_W / 2, VIEW_H / 2 - 6, 46, '#f4f7ff');
+        drawTextCentered(ctx, 'P oder LEERTASTE zum Fortsetzen  ·  R für Neustart', VIEW_W / 2, VIEW_H / 2 + 30, 14, '#94a0c8', 600);
+        break;
+      case 'dead': {
+        const a = clamp(1.1 - this.deathTimer, 0, 1) * 0.78;
+        ctx.fillStyle = `rgba(40,4,10,${a.toFixed(3)})`;
+        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+        drawTextCentered(ctx, 'GEFALLEN', VIEW_W / 2, VIEW_H / 2 - 4, 52, '#ff6b78');
+        if (this.deathTimer <= 0) {
+          const blink = 0.55 + Math.sin(this.time * 5) * 0.45;
+          ctx.globalAlpha = blink;
+          drawTextCentered(ctx, 'LEERTASTE — zurück zum letzten Kontrollpunkt', VIEW_W / 2, VIEW_H / 2 + 34, 15, '#e8d7d7', 600);
+          ctx.globalAlpha = 1;
+        }
+        break;
+      }
+      case 'victory':
+        this.drawVictory(ctx);
+        break;
+      default:
+        break;
+    }
+  }
+
+  private drawTitle(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = 'rgba(4,6,14,0.68)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    glow(ctx, VIEW_W / 2, 170, 260, 'rgba(90,140,255,0.16)');
+
+    drawTextCentered(ctx, 'SHADOWBLADE', VIEW_W / 2, 178, 68, '#f4f7ff');
+    ctx.globalAlpha = 0.9;
+    drawTextCentered(ctx, 'Die Klinge von Nachtfall', VIEW_W / 2, 212, 18, '#8fb4ff', 600);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = 'rgba(150,170,225,0.35)';
+    ctx.fillRect(VIEW_W / 2 - 170, 232, 340, 1);
+
+    const rows: [string, string][] = [
+      ['← →  /  A D', 'Laufen'],
+      ['LEERTASTE / W', 'Springen · Doppelsprung'],
+      ['J  /  K', 'Schwert (3er-Kombo)'],
+      ['SHIFT  /  L', 'Ausweichrolle (unverwundbar)'],
+      ['↓ + Sprung', 'Durch Plattform fallen'],
+      ['P  /  R', 'Pause  ·  Neustart'],
+    ];
+    drawPanel(ctx, VIEW_W / 2 - 220, 252, 440, 168, 0.6);
+    ctx.font = font(13, 600);
+    rows.forEach(([key, desc], i) => {
+      const y = 278 + i * 25;
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#f2c14e';
+      ctx.fillText(key, VIEW_W / 2 - 20, y);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#b9c3e4';
+      ctx.fillText(desc, VIEW_W / 2 + 4, y);
+    });
+    ctx.textAlign = 'left';
+
+    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
+    ctx.globalAlpha = 0.35 + blink * 0.65;
+    drawTextCentered(ctx, 'LEERTASTE ZUM STARTEN', VIEW_W / 2, 470, 20, '#ffffff');
+    ctx.globalAlpha = 1;
+    drawTextCentered(ctx, 'Schlage dich durch 5 Zonen bis zum Thronsaal des Schattenritters.', VIEW_W / 2, 502, 12, '#6f7ba3', 600);
+  }
+
+  private drawVictory(ctx: CanvasRenderingContext2D): void {
+    ctx.fillStyle = 'rgba(6,8,16,0.78)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    glow(ctx, VIEW_W / 2, 150, 300, 'rgba(255,200,90,0.18)');
+    drawTextCentered(ctx, 'SIEG!', VIEW_W / 2, 168, 74, '#ffd166');
+    drawTextCentered(ctx, 'Morvain ist gefallen — Nachtfall ist frei.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
+
+    const minutes = Math.floor(this.playTime / 60);
+    const seconds = Math.floor(this.playTime % 60);
+    const rows: [string, string][] = [
+      ['Punkte', `${this.score}`],
+      ['Edelsteine', `${this.gems} / ${this.totalGems}`],
+      ['Zeit', `${minutes}:${seconds.toString().padStart(2, '0')}`],
+      ['Tode', `${this.deaths}`],
+    ];
+    drawPanel(ctx, VIEW_W / 2 - 180, 236, 360, 150, 0.66);
+    ctx.font = font(15, 600);
+    rows.forEach(([label, value], i) => {
+      const y = 268 + i * 32;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#939ec4';
+      ctx.fillText(label, VIEW_W / 2 - 150, y);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillText(value, VIEW_W / 2 + 150, y);
+    });
+    ctx.textAlign = 'left';
+    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
+    ctx.globalAlpha = 0.4 + blink * 0.6;
+    drawTextCentered(ctx, 'R — noch einmal', VIEW_W / 2, 440, 18, '#ffffff');
+    ctx.globalAlpha = 1;
+  }
+
+  /* ------------------------------------------------------------ debug aid */
+
+  /** Row index of the highest walkable floor in a column, if there is one. */
+  private floorRowAt(tx: number): number | null {
+    if (tx < 0 || tx >= this.level.width) return null;
+    for (let ty = this.level.height - 1; ty >= 2; ty--) {
+      if (
+        this.level.solidAt(tx, ty) &&
+        !this.level.solidAt(tx, ty - 1) &&
+        !this.level.solidAt(tx, ty - 2) &&
+        !this.level.hazardAt(tx, ty - 1)
+      ) {
+        return ty;
+      }
+    }
+    return null;
+  }
+
+  /** Used by the screenshot tool to inspect any part of the level. */
+  warpTo(tileX: number): void {
+    // Find a column with real footing - the requested one may be over a pit.
+    let column = tileX;
+    let floorY: number | null = null;
+    for (let offset = 0; offset <= 12 && floorY === null; offset++) {
+      for (const candidate of offset === 0 ? [tileX] : [tileX + offset, tileX - offset]) {
+        const found = this.floorRowAt(candidate);
+        if (found !== null) {
+          column = candidate;
+          floorY = found;
+          break;
+        }
+      }
+    }
+    const x = column * TILE;
+    const y = floorY !== null ? floorY * TILE - this.player.h - 2 : (this.level.height - 4) * TILE;
+    this.player.x = x;
+    this.player.y = y;
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.checkpointX = x;
+    this.checkpointY = y;
+    this.camera.snapTo(this.player.cx, this.player.cy);
+    for (const enemy of this.enemies) enemy.active = false;
+  }
+}

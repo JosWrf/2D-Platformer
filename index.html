@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <title>Shadowblade — 2D Platformer</title>
+    <style>
+      :root {
+        --bg: #06070d;
+        --edge: #1b1f31;
+        --ink: #cfd6f2;
+        --gold: #f2c14e;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background:
+          radial-gradient(1200px 700px at 50% 22%, #141a2e 0%, #07080f 60%, #04050a 100%);
+        color: var(--ink);
+        font-family: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
+        overflow: hidden;
+      }
+      #app {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+      }
+      #frame {
+        position: relative;
+        border: 2px solid var(--edge);
+        border-radius: 10px;
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+        overflow: hidden;
+        background: #05060c;
+        line-height: 0;
+      }
+      canvas {
+        display: block;
+        image-rendering: pixelated;
+        touch-action: none;
+      }
+      #legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        justify-content: center;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        color: #7c86ae;
+        max-width: 900px;
+        padding: 0 12px;
+      }
+      #legend b { color: var(--gold); font-weight: 600; }
+      @media (max-height: 620px) { #legend { display: none; } }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="frame"><canvas id="game" width="960" height="540"></canvas></div>
+      <div id="legend">
+        <span><b>&larr; &rarr; / A D</b> Laufen</span>
+        <span><b>Leertaste / W</b> Springen (2x)</span>
+        <span><b>J / K</b> Schwert</span>
+        <span><b>Shift / L</b> Ausweichrolle</span>
+        <span><b>P</b> Pause</span>
+        <span><b>R</b> Neustart</span>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
