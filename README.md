@@ -1,5 +1,9 @@
 # Shadowblade — Die Klinge von Nachtfall
 
+## ▶ [Jetzt spielen](https://joswrf.github.io/2D-Platformer/)
+
+Läuft direkt im Browser, ohne Installation: **joswrf.github.io/2D-Platformer**
+
 Ein 2D-Jump-'n'-Run in TypeScript: ein schwertschwingender Held kämpft sich
 durch ein großes, zusammenhängendes Level über fünf Zonen bis in den Thronsaal
 des Schattenritters Morvain.
@@ -7,9 +11,7 @@ des Schattenritters Morvain.
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
 auf ein `<canvas>` gezeichnet, Soundeffekte werden per WebAudio synthetisiert.
 
-**▶ [Im Browser spielen](https://joswrf.github.io/2D-Platformer/)**
-
-![Titelbild](screenshots/01-titel.png)
+[![Titelbild](screenshots/01-titel.png)](https://joswrf.github.io/2D-Platformer/)
 
 ## Starten
 
@@ -113,11 +115,12 @@ erreichbar ist — nützlich, sobald man am Level schraubt.
 
 ## Veröffentlichen
 
-`.github/workflows/pages.yml` baut das Spiel bei jedem Push auf `main` und
-veröffentlicht `dist/` auf GitHub Pages.
+[![GitHub Pages](https://github.com/JosWrf/2D-Platformer/actions/workflows/pages.yml/badge.svg)](https://github.com/JosWrf/2D-Platformer/actions/workflows/pages.yml)
 
-Einmalig muss die Pages-Site von Hand angelegt werden — das Token des
-Workflows darf das nicht: *Settings → Pages → Build and deployment →
-Source:* **GitHub Actions**. Danach genügt ein Push (oder ein Klick auf
-*Re-run* beim Workflow), und der aktuelle Stand liegt unter
-<https://joswrf.github.io/2D-Platformer/>.
+`.github/workflows/pages.yml` baut das Spiel bei jedem Push auf `main` und
+veröffentlicht `dist/` auf <https://joswrf.github.io/2D-Platformer/>. Es gibt
+nichts weiter zu tun: pushen genügt.
+
+Wer das Repo forkt, muss die Pages-Site einmal selbst anlegen — das Token des
+Workflows darf das nicht: *Settings → Pages → Build and deployment → Source:*
+**GitHub Actions**.
