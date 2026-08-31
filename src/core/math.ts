@@ -13,6 +13,11 @@ export function damp(a: number, b: number, lambda: number, dt: number): number {
   return lerp(a, b, 1 - Math.exp(-lambda * dt));
 }
 
+/** Ease-out with an adjustable exponent: 2 is a soft stop, 5 a hard whip. */
+export function easeOut(t: number, power = 3): number {
+  return 1 - Math.pow(1 - clamp(t, 0, 1), power);
+}
+
 export function approach(value: number, target: number, maxDelta: number): number {
   if (value < target) return Math.min(value + maxDelta, target);
   if (value > target) return Math.max(value - maxDelta, target);

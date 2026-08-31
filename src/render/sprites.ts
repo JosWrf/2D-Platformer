@@ -100,6 +100,67 @@ export function slashArc(
 }
 
 /**
+ * The swept trail of a blade: a crescent that starts as a thin wisp where the
+ * swing began, swells in the middle and runs out into a sharp point at the
+ * blade's current position. Drawn as a filled ribbon plus a white core, so it
+ * reads as one shape instead of a stroked line of constant width.
+ */
+export function slashCrescent(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  thickness: number,
+  color: string,
+  alpha: number,
+): void {
+  if (alpha <= 0.01 || Math.abs(endAngle - startAngle) < 0.02) return;
+  const steps = 22;
+
+  const ribbon = (widthScale: number, radiusScale: number): void => {
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const a = startAngle + (endAngle - startAngle) * t;
+      // Thin at the tail, widest just behind the head, a point at the tip.
+      const w = thickness * widthScale * 0.5 * Math.sin(Math.PI * Math.pow(t, 0.68)) ** 0.8;
+      const r = radius * radiusScale * (0.84 + 0.16 * t);
+      const px = cx + Math.cos(a) * (r + w);
+      const py = cy + Math.sin(a) * (r + w);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    for (let i = steps; i >= 0; i--) {
+      const t = i / steps;
+      const a = startAngle + (endAngle - startAngle) * t;
+      const w = thickness * widthScale * 0.5 * Math.sin(Math.PI * Math.pow(t, 0.68)) ** 0.8;
+      const r = radius * radiusScale * (0.84 + 0.16 * t);
+      ctx.lineTo(cx + Math.cos(a) * (r - w), cy + Math.sin(a) * (r - w));
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Soft outer glow.
+  ctx.globalAlpha = alpha * 0.4;
+  ctx.fillStyle = color;
+  ribbon(1.5, 1);
+  // The body of the slash.
+  ctx.globalAlpha = alpha * 0.85;
+  ribbon(1, 1);
+  // Hot white core, slightly ahead of the body so the leading edge burns.
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#ffffff';
+  ribbon(0.34, 1.01);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+/**
  * Flash a sprite white while it is taking damage. Uses a canvas filter so only
  * the sprite drawn inside the callback is affected.
  */

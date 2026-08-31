@@ -1,8 +1,8 @@
 import { audio } from '../core/audio';
 import { Input } from '../core/input';
-import { Rect, approach, clamp, sign } from '../core/math';
+import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
-import { glow, shadow, slashArc, withHitFlash } from '../render/sprites';
+import { glow, shadow, slashCrescent, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
 
@@ -28,6 +28,58 @@ const ATTACK_TOTAL = ATTACK_WINDUP + ATTACK_ACTIVE + ATTACK_RECOVER;
 
 export const PLAYER_MAX_HP = 6;
 
+/**
+ * One entry per combo step. Angles are in the hero's facing space: 0 points
+ * forward, positive angles point down, so a swing from a negative to a
+ * positive angle is an overhead cut.
+ */
+interface SwingShape {
+  /** Angle the blade is wound back to during the anticipation. */
+  wind: number;
+  /** Angle the sweep ends on. */
+  to: number;
+  /** Blade length measured from the hand. */
+  reach: number;
+  /** Width of the crescent trail. */
+  trail: number;
+  /** How much of the reach is shown while the blade is cocked. */
+  windReach: number;
+}
+
+const SWINGS: readonly SwingShape[] = [
+  // The low guard of the rising cut is drawn short so the blade stays clear of
+  // the ground and out of the hero's own silhouette.
+  { wind: -1.95, to: 0.85, reach: 33, trail: 12, windReach: 0.8 }, // overhead cut
+  { wind: 1.05, to: -1.45, reach: 33, trail: 11, windReach: 0.6 }, // rising cut back up
+  { wind: -2.5, to: 0.75, reach: 39, trail: 17, windReach: 0.72 }, // wide finisher
+];
+
+/** Where the blade rests between combos - up and slightly forward. */
+const CARRY_ANGLE = -1.05;
+
+/** Pose of the sword slung across the hero's back. */
+const SHEATH = { x: -2, y: -24, angle: 2.42, length: 22, scale: 0.72 };
+/** How long the blade takes to travel back to the shoulder after a combo. */
+const SHEATH_TIME = 0.16;
+
+type SwingPhase = 'windup' | 'active' | 'recover';
+
+interface SwingPose {
+  phase: SwingPhase;
+  /** Progress through the current phase, 0..1. */
+  t: number;
+  /** Blade angle in facing space. */
+  angle: number;
+  /** How far the hand is pushed forward, in pixels. */
+  lunge: number;
+  /** Body tilt, negative leans back into the wind-up. */
+  lean: number;
+  /** Blade held in close during the wind-up, fully extended through the sweep. */
+  reachScale: number;
+  /** How far the hand is raised while the blade is cocked. */
+  lift: number;
+}
+
 export class Player extends Body {
   facing: 1 | -1 = 1;
   hp = PLAYER_MAX_HP;
@@ -46,6 +98,13 @@ export class Player extends Body {
   attackCombo = 0;
   private attackQueued = false;
   private readonly hitThisSwing = new Set<object>();
+  /** Angle the blade starts the current swing from, so combos flow into each other. */
+  private swingEntry = CARRY_ANGLE;
+  private finisherDone = false;
+  /** Blade travelling back to the shoulder once a combo ends. */
+  private sheathTimer = 0;
+  private sheathPose: SwingPose | null = null;
+  private sheathReach = 0;
 
   invuln = 0;
   hurtTimer = 0;
@@ -90,6 +149,8 @@ export class Player extends Body {
     this.invuln = 1.4;
     this.hurtTimer = 0;
     this.attackTimer = 0;
+    this.attackCombo = 0;
+    this.sheathTimer = 0;
     this.dashTimer = 0;
     this.dashCooldown = 0;
     this.dead = false;
@@ -103,6 +164,7 @@ export class Player extends Body {
     this.invuln = Math.max(0, this.invuln - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    this.sheathTimer = Math.max(0, this.sheathTimer - dt);
 
     for (let i = this.trail.length - 1; i >= 0; i--) {
       this.trail[i].life -= dt * 3.2;
@@ -220,12 +282,22 @@ export class Player extends Body {
       const elapsed = ATTACK_TOTAL - this.attackTimer;
       if (elapsed >= ATTACK_WINDUP && elapsed <= ATTACK_WINDUP + ATTACK_ACTIVE) {
         this.applySwordHits(world);
+        this.emitSwingSparks(world, elapsed);
+        if (this.attackCombo === 3 && !this.finisherDone && elapsed > ATTACK_WINDUP + ATTACK_ACTIVE * 0.72) {
+          this.finisherDone = true;
+          this.finisherImpact(world);
+        }
       }
       if (this.attackTimer <= 0) {
         if (this.attackQueued) {
           this.attackQueued = false;
           this.startSwing();
         } else {
+          // Let the blade travel back to the shoulder instead of popping there.
+          const end = this.swingPose(ATTACK_TOTAL);
+          this.sheathPose = end;
+          this.sheathReach = this.bladeReach(end);
+          this.sheathTimer = SHEATH_TIME;
           this.attackCombo = 0;
         }
       }
@@ -266,10 +338,144 @@ export class Player extends Body {
   }
 
   private startSwing(): void {
+    // Chained swings pick up where the last one stopped instead of snapping.
+    this.swingEntry = this.attackCombo > 0 ? SWINGS[this.attackCombo - 1].to : CARRY_ANGLE;
     this.attackTimer = ATTACK_TOTAL;
     this.attackCombo = (this.attackCombo % 3) + 1;
+    this.finisherDone = false;
+    this.sheathTimer = 0;
     this.hitThisSwing.clear();
     audio.play('swing', this.attackCombo === 3 ? 0.8 : 1 + this.attackCombo * 0.08);
+  }
+
+  /* -------------------------------------------------------- swing motion */
+
+  /** Blade angle, hand offset and body tilt at a point in the current swing. */
+  private swingPose(elapsed: number): SwingPose {
+    const swing = SWINGS[Math.max(0, this.attackCombo - 1)];
+    const e = clamp(elapsed, 0, ATTACK_TOTAL);
+    if (e < ATTACK_WINDUP) {
+      const t = e / ATTACK_WINDUP;
+      const k = easeOut(t, 2);
+      return {
+        phase: 'windup',
+        t,
+        angle: lerp(this.swingEntry, swing.wind, k),
+        lunge: -3 * k,
+        lean: -0.1 * k,
+        // Cocked blades are held close to the body, not at full stretch.
+        reachScale: lerp(1, swing.windReach, k),
+        lift: 3 * k,
+      };
+    }
+    if (e < ATTACK_WINDUP + ATTACK_ACTIVE) {
+      const t = (e - ATTACK_WINDUP) / ATTACK_ACTIVE;
+      // A hard ease-out: most of the arc is covered in the first few frames.
+      const k = easeOut(t, 4);
+      return {
+        phase: 'active',
+        t,
+        angle: lerp(swing.wind, swing.to, k),
+        lunge: lerp(-3, 6, k),
+        lean: lerp(-0.1, 0.14, k),
+        reachScale: lerp(swing.windReach, 1, easeOut(t, 2)),
+        lift: lerp(3, 0, k),
+      };
+    }
+    const t = (e - ATTACK_WINDUP - ATTACK_ACTIVE) / ATTACK_RECOVER;
+    const k = easeOut(t, 2);
+    return {
+      phase: 'recover',
+      t,
+      // The blade drifts back as the hero catches the weight of the swing.
+      angle: swing.to - sign(swing.to - swing.wind) * 0.55 * k,
+      lunge: lerp(6, 0, k),
+      lean: lerp(0.14, 0, k),
+      reachScale: lerp(1, 0.86, k),
+      lift: 0,
+    };
+  }
+
+  /** Hand position in the hero's local space, feet at the origin. */
+  private handOffset(pose: SwingPose): { x: number; y: number } {
+    const a = pose.angle * 0.4;
+    return {
+      x: 2 + pose.lunge + Math.cos(a) * 7,
+      y: -19 - pose.lift + Math.sin(a) * 7,
+    };
+  }
+
+  private bladeReach(pose: SwingPose): number {
+    return SWINGS[Math.max(0, this.attackCombo - 1)].reach * pose.reachScale;
+  }
+
+  /** The same hand, in world space, with the body's tilt applied. */
+  private handWorld(pose: SwingPose): { x: number; y: number } {
+    const { x, y } = this.handOffset(pose);
+    const lean = pose.lean * this.facing;
+    const cos = Math.cos(lean);
+    const sin = Math.sin(lean);
+    const lx = x * this.facing;
+    return {
+      x: this.cx + lx * cos - y * sin,
+      y: this.bottom + lx * sin + y * cos,
+    };
+  }
+
+  private bladeTip(pose: SwingPose): { x: number; y: number } {
+    const hand = this.handWorld(pose);
+    const a = pose.angle * this.facing;
+    const reach = this.bladeReach(pose);
+    return { x: hand.x + Math.cos(a) * reach, y: hand.y + Math.sin(a) * reach };
+  }
+
+  /** Sparks thrown off the tip while the blade is moving fastest. */
+  private emitSwingSparks(world: World, elapsed: number): void {
+    const pose = this.swingPose(elapsed);
+    const swing = SWINGS[Math.max(0, this.attackCombo - 1)];
+    const tip = this.bladeTip(pose);
+    const sweep = sign(swing.to - swing.wind) * this.facing;
+    const tangent = pose.angle * this.facing + (sweep > 0 ? Math.PI / 2 : -Math.PI / 2);
+    const count = this.attackCombo === 3 ? 3 : 2;
+    for (let i = 0; i < count; i++) {
+      const a = tangent + rand(-0.35, 0.35);
+      const speed = rand(70, 170);
+      world.particles.spawn({
+        x: tip.x + rand(-3, 3),
+        y: tip.y + rand(-3, 3),
+        vx: Math.cos(a) * speed,
+        vy: Math.sin(a) * speed - 25,
+        color: i === 0 ? '#ffffff' : PALETTE.bladeGlow,
+        gravity: 120,
+        drag: 0.86,
+        size: rand(1.5, 3),
+        shape: 'spark',
+        life: rand(0.1, 0.24),
+      });
+    }
+  }
+
+  /** The third hit lands with a shockwave along the ground. */
+  private finisherImpact(world: World): void {
+    world.camera.addShake(2.5);
+    const x = this.cx + this.facing * 26;
+    if (this.onGround) {
+      world.particles.burst(x, this.bottom - 3, 12, 'rgba(210,235,255,0.75)', {
+        speed: 165,
+        gravity: 340,
+        size: 3,
+        angle: this.facing > 0 ? -0.45 : Math.PI + 0.45,
+        spread: 1.3,
+      });
+    } else {
+      world.particles.burst(x, this.cy, 10, PALETTE.bladeGlow, {
+        speed: 140,
+        gravity: 60,
+        shape: 'spark',
+        angle: this.facing > 0 ? 0 : Math.PI,
+        spread: 1.6,
+      });
+    }
   }
 
   /** World-space rectangle covered by the blade during the active window. */
@@ -371,19 +577,27 @@ export class Player extends Body {
     const blink = this.invuln > 0 && Math.floor(this.invuln * 18) % 2 === 0;
     if (blink && this.hurtTimer <= 0) ctx.globalAlpha = 0.45;
 
+    const pose = this.attackTimer > 0 ? this.swingPose(ATTACK_TOTAL - this.attackTimer) : null;
+
     ctx.save();
     ctx.translate(this.cx, this.bottom);
+    // Tilt into the swing before mirroring, so the lean follows the facing.
+    if (pose) ctx.rotate(pose.lean * this.facing);
     const sq = this.squash;
     ctx.scale(this.facing * (1 - sq * 0.35), 1 + sq * 0.45);
 
-    withHitFlash(ctx, this.flash, () => this.drawBody(ctx));
+    withHitFlash(ctx, this.flash, () => {
+      // Carried on the back when idle, so it never crosses the torso.
+      if (!pose) this.drawCarriedBlade(ctx);
+      this.drawBody(ctx, pose);
+    });
     ctx.restore();
     ctx.globalAlpha = 1;
 
-    this.drawSword(ctx);
+    if (pose) this.drawSwing(ctx, pose);
   }
 
-  private drawBody(ctx: CanvasRenderingContext2D): void {
+  private drawBody(ctx: CanvasRenderingContext2D, pose: SwingPose | null): void {
     const t = this.runCycle;
     const moving = Math.abs(this.vx) > 25 && this.onGround;
     const airborne = !this.onGround;
@@ -420,9 +634,25 @@ export class Player extends Body {
     ctx.fillStyle = '#cfd6f2';
     ctx.fillRect(-5, -21 + bob, 3, 12);
 
-    // Arms.
+    // Arms. While swinging, the sword arm reaches out to the hilt.
     ctx.fillStyle = '#3a5fb8';
-    ctx.fillRect(4, -20 + bob, 4, 8);
+    if (pose) {
+      const hand = this.handOffset(pose);
+      const shoulderX = 2;
+      const shoulderY = -19 + bob;
+      const dx = hand.x - shoulderX;
+      const dy = hand.y - shoulderY;
+      ctx.save();
+      ctx.translate(shoulderX, shoulderY);
+      ctx.rotate(Math.atan2(dy, dx));
+      ctx.fillRect(-1, -2, Math.hypot(dx, dy) + 2, 4);
+      ctx.restore();
+      // Glove at the hilt.
+      ctx.fillStyle = '#2a3f7a';
+      ctx.fillRect(hand.x - 2, hand.y - 2, 4, 4);
+    } else {
+      ctx.fillRect(4, -20 + bob, 4, 8);
+    }
 
     // Head with hood.
     const headY = -32 + bob;
@@ -445,82 +675,159 @@ export class Player extends Body {
     ctx.fillRect(1, headY + 5, 3, 2);
   }
 
-  private drawSword(ctx: CanvasRenderingContext2D): void {
-    const cx = this.cx;
-    const cy = this.cy - 2;
+  /** The blade, its trail and the after-images that sell the speed. */
+  private drawSwing(ctx: CanvasRenderingContext2D, pose: SwingPose): void {
     const dir = this.facing;
+    const combo = Math.max(1, this.attackCombo);
+    const swing = SWINGS[combo - 1];
+    const elapsed = ATTACK_TOTAL - this.attackTimer;
+    const hand = this.handWorld(pose);
 
-    if (this.attackTimer > 0) {
-      const elapsed = (ATTACK_TOTAL - this.attackTimer) / ATTACK_TOTAL;
-      const combo = this.attackCombo;
-      const reach = combo === 3 ? 40 : 34;
-      // Combo 1 sweeps down, combo 2 sweeps up, combo 3 is a wide spin.
-      const spans: [number, number][] = [
-        [-1.15, 0.95],
-        [1.0, -1.05],
-        [-1.5, 1.5],
-      ];
-      const [a0, a1] = spans[combo - 1];
-      const eased = elapsed < 0.25 ? (elapsed / 0.25) * 0.18 : 0.18 + ((elapsed - 0.25) / 0.75) * 0.82;
-      const angle = (a0 + (a1 - a0) * eased) * dir;
-      const alpha = elapsed < 0.15 ? elapsed / 0.15 : Math.max(0, 1 - (elapsed - 0.15) / 0.75);
+    const reach = this.bladeReach(pose);
 
-      const from = (a0 + (a1 - a0) * Math.max(0, eased - 0.32)) * dir;
-      slashArc(
+    const drawBladeAt = (at: SwingPose, alpha: number): void => {
+      const grip = this.handWorld(at);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(grip.x, grip.y);
+      ctx.rotate(at.angle * dir);
+      ctx.scale(dir, 1);
+      this.drawBlade(ctx, this.bladeReach(at));
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    };
+
+    if (pose.phase === 'active') {
+      // After-images of the blade itself.
+      for (const [lag, alpha] of [
+        [0.042, 0.1],
+        [0.022, 0.18],
+      ] as const) {
+        if (elapsed - lag <= ATTACK_WINDUP) continue;
+        drawBladeAt(this.swingPose(elapsed - lag), alpha);
+      }
+    }
+
+    if (pose.phase !== 'windup') {
+      // The crescent spans from where the blade was a few frames ago to now.
+      const tail = this.swingPose(Math.max(ATTACK_WINDUP, elapsed - 0.09)).angle;
+      const fade =
+        pose.phase === 'active'
+          ? Math.min(1, 0.35 + pose.t * 3)
+          : Math.max(0, 1 - easeOut(pose.t, 1.6));
+      slashCrescent(
         ctx,
-        cx,
-        cy,
-        reach,
-        dir > 0 ? Math.min(from, angle) : Math.min(from, angle),
-        dir > 0 ? Math.max(from, angle) : Math.max(from, angle),
-        combo === 3 ? 13 : 9,
+        hand.x,
+        hand.y,
+        reach * 0.98,
+        tail * dir,
+        pose.angle * dir,
+        swing.trail,
         PALETTE.bladeGlow,
-        alpha * 0.85,
+        0.9 * fade,
       );
 
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(angle);
-      ctx.scale(dir, 1);
-      this.drawBlade(ctx, reach + 6);
-      ctx.restore();
-
-      if (combo === 3 && elapsed > 0.2 && elapsed < 0.7) {
-        glow(ctx, cx + dir * 26, cy, 30, 'rgba(140,220,255,0.35)', alpha);
+      // A second, wider echo makes the finisher read as the heavy hit.
+      if (combo === 3) {
+        const echo = this.swingPose(Math.max(ATTACK_WINDUP, elapsed - 0.05)).angle;
+        slashCrescent(
+          ctx,
+          hand.x,
+          hand.y,
+          reach * 1.22,
+          echo * dir,
+          pose.angle * dir,
+          swing.trail * 0.55,
+          '#bfe9ff',
+          0.5 * fade,
+        );
       }
-    } else {
-      // Sheathed on the back.
-      ctx.save();
-      ctx.translate(cx - dir * 5, cy - 4);
-      ctx.rotate(dir * 2.5);
-      ctx.scale(dir, 1);
-      this.drawBlade(ctx, 30, 0.75);
-      ctx.restore();
+    }
+
+    drawBladeAt(pose, 1);
+
+    // The tip flares as the blade reaches full speed.
+    const tip = this.bladeTip(pose);
+    if (pose.phase === 'active') {
+      const heat = Math.sin(Math.PI * Math.min(1, pose.t * 1.15));
+      glow(ctx, tip.x, tip.y, combo === 3 ? 26 : 19, 'rgba(200,244,255,0.55)', heat);
+      glow(ctx, hand.x, hand.y, 14, 'rgba(150,220,255,0.35)', heat * 0.7);
     }
   }
 
+  /**
+   * Sword slung across the hero's back. Right after a combo it is still on its
+   * way there, swinging back over the shoulder along the shorter path.
+   */
+  private drawCarriedBlade(ctx: CanvasRenderingContext2D): void {
+    let x = SHEATH.x;
+    let y = SHEATH.y;
+    let angle = SHEATH.angle;
+    let length = SHEATH.length;
+    let scale = SHEATH.scale;
+
+    if (this.sheathTimer > 0 && this.sheathPose) {
+      const k = easeOut(1 - this.sheathTimer / SHEATH_TIME, 2);
+      const from = this.sheathPose;
+      const hand = this.handOffset(from);
+      // Going over the head can be the shorter way round after a rising cut.
+      const target =
+        Math.abs(SHEATH.angle - from.angle) <= Math.abs(SHEATH.angle - TAU - from.angle)
+          ? SHEATH.angle
+          : SHEATH.angle - TAU;
+      x = lerp(hand.x, SHEATH.x, k);
+      y = lerp(hand.y, SHEATH.y, k);
+      angle = lerp(from.angle, target, k);
+      length = lerp(this.sheathReach, SHEATH.length, k);
+      scale = lerp(1, SHEATH.scale, k);
+    }
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    this.drawBlade(ctx, length, scale);
+    ctx.restore();
+  }
+
+  /**
+   * The sword pointing along +x from the hand: wrapped grip, round pommel,
+   * gold cross guard and a tapered blade with a fuller down the middle.
+   */
   private drawBlade(ctx: CanvasRenderingContext2D, length: number, scale = 1): void {
-    const w = 4 * scale;
-    // Guard + grip.
+    const half = 2.2 * scale;
+    // Grip and pommel.
+    ctx.fillStyle = '#4b2f1c';
+    ctx.fillRect(-8 * scale, -1.5 * scale, 7 * scale, 3 * scale);
     ctx.fillStyle = '#6b4326';
-    ctx.fillRect(-9 * scale, -1.5 * scale, 8 * scale, 3 * scale);
+    ctx.fillRect(-7 * scale, -1.5 * scale, 1.4 * scale, 3 * scale);
+    ctx.fillRect(-4.4 * scale, -1.5 * scale, 1.4 * scale, 3 * scale);
     ctx.fillStyle = PALETTE.gold;
-    ctx.fillRect(-2 * scale, -4.5 * scale, 3 * scale, 9 * scale);
+    ctx.beginPath();
+    ctx.arc(-9 * scale, 0, 1.9 * scale, 0, TAU);
+    ctx.fill();
+    // Cross guard, with a lit edge on the blade side.
+    ctx.fillRect(-1.6 * scale, -4.8 * scale, 3.2 * scale, 9.6 * scale);
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.fillRect(0.4 * scale, -4.8 * scale, 1.2 * scale, 9.6 * scale);
     // Blade.
     const grad = ctx.createLinearGradient(0, 0, length, 0);
-    grad.addColorStop(0, '#9fb6d8');
-    grad.addColorStop(0.45, PALETTE.blade);
-    grad.addColorStop(1, '#ffffff');
+    grad.addColorStop(0, '#7f97ba');
+    grad.addColorStop(0.4, PALETTE.blade);
+    grad.addColorStop(0.88, '#ffffff');
+    grad.addColorStop(1, '#e8f8ff');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.moveTo(1 * scale, -w / 2);
-    ctx.lineTo(length - 6 * scale, -w / 2);
+    ctx.moveTo(1.6 * scale, -half);
+    ctx.lineTo(length - 9 * scale, -half * 0.8);
     ctx.lineTo(length, 0);
-    ctx.lineTo(length - 6 * scale, w / 2);
-    ctx.lineTo(1 * scale, w / 2);
+    ctx.lineTo(length - 9 * scale, half * 0.8);
+    ctx.lineTo(1.6 * scale, half);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillRect(2 * scale, -w / 2, length - 8 * scale, 1);
+    // Fuller and the highlight along the upper edge.
+    ctx.fillStyle = 'rgba(56,96,150,0.55)';
+    ctx.fillRect(3 * scale, -0.5 * scale, length - 12 * scale, 1 * scale);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillRect(3 * scale, -half + 0.3 * scale, length - 11 * scale, 0.9 * scale);
   }
 }
