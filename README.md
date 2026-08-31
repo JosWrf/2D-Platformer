@@ -7,6 +7,8 @@ des Schattenritters Morvain.
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
 auf ein `<canvas>` gezeichnet, Soundeffekte werden per WebAudio synthetisiert.
 
+**▶ [Im Browser spielen](https://joswrf.github.io/2D-Platformer/)**
+
 ![Titelbild](screenshots/01-titel.png)
 
 ## Starten
@@ -16,6 +18,10 @@ npm install
 npm run dev      # http://127.0.0.1:5173
 npm run build    # Typecheck + Produktions-Build nach dist/
 ```
+
+Der Build legt genau eine Datei ab: `dist/index.html`, rund 98 kB, mit dem
+gesamten Spiel darin. Sie braucht keinen Server — ein Doppelklick auf die
+Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Steuerung
 
@@ -104,3 +110,11 @@ npm run screenshots    # erzeugt die Bilder in screenshots/
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
 einem bewusst konservativen Sprungmodell, ob der Boss vom Startpunkt aus
 erreichbar ist — nützlich, sobald man am Level schraubt.
+
+## Veröffentlichen
+
+`.github/workflows/pages.yml` baut das Spiel bei jedem Push auf `main` und
+veröffentlicht `dist/` auf GitHub Pages. Damit der Workflow greift, muss in
+den Repo-Einstellungen unter *Pages* als *Source* **GitHub Actions** gewählt
+sein; danach liegt der aktuelle Stand unter
+<https://joswrf.github.io/2D-Platformer/>.
