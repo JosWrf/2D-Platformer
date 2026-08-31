@@ -114,7 +114,10 @@ erreichbar ist — nützlich, sobald man am Level schraubt.
 ## Veröffentlichen
 
 `.github/workflows/pages.yml` baut das Spiel bei jedem Push auf `main` und
-veröffentlicht `dist/` auf GitHub Pages. Damit der Workflow greift, muss in
-den Repo-Einstellungen unter *Pages* als *Source* **GitHub Actions** gewählt
-sein; danach liegt der aktuelle Stand unter
+veröffentlicht `dist/` auf GitHub Pages.
+
+Einmalig muss die Pages-Site von Hand angelegt werden — das Token des
+Workflows darf das nicht: *Settings → Pages → Build and deployment →
+Source:* **GitHub Actions**. Danach genügt ein Push (oder ein Klick auf
+*Re-run* beim Workflow), und der aktuelle Stand liegt unter
 <https://joswrf.github.io/2D-Platformer/>.
