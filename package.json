@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "verify:level": "node tools/verify-level.mjs",
+    "verify:arena": "node tools/verify-arena.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"
   },

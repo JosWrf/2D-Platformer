@@ -400,12 +400,8 @@ export class Game implements World {
       pickup.dead = this.collected.has(pickup.id);
     }
     if (this.boss) {
-      this.boss.hp = this.boss.maxHp;
+      this.boss.reset();
       this.bossGhostHp = this.boss.maxHp;
-      this.boss.engaged = false;
-      this.boss.state = 'dormant';
-      this.boss.dead = false;
-      this.boss.vulnerable = false;
       this.level.gateClosed = false;
     }
     this.state = 'playing';

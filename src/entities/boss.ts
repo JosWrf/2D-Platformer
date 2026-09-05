@@ -43,6 +43,8 @@ export class Boss extends Body {
   private auraPulse = 0;
   private deathTimer = 0;
   private lastAction = '';
+  private readonly spawnX: number;
+  private readonly spawnY: number;
 
   constructor(x: number, y: number) {
     super();
@@ -50,6 +52,34 @@ export class Boss extends Body {
     this.h = 92;
     this.x = x;
     this.y = y;
+    this.spawnX = x;
+    this.spawnY = y;
+  }
+
+  /**
+   * Back to the throne, exactly as the arena was first found. Without this the
+   * knight keeps whatever spot he was lured to, and waking up next to the gate
+   * slams it shut in the returning player's face.
+   */
+  reset(): void {
+    this.x = this.spawnX;
+    this.y = this.spawnY;
+    this.vx = 0;
+    this.vy = 0;
+    this.hp = this.maxHp;
+    this.facing = -1;
+    this.state = 'dormant';
+    this.engaged = false;
+    this.vulnerable = false;
+    this.dead = false;
+    this.flash = 0;
+    this.timer = 0;
+    this.deathTimer = 0;
+    this.damageSinceStagger = 0;
+    this.hitPlayerThisAction = false;
+    this.lastAction = '';
+    this.swordAngle = -0.6;
+    this.targetSwordAngle = -0.6;
   }
 
   get phase(): 1 | 2 | 3 {
@@ -116,7 +146,10 @@ export class Boss extends Body {
     if (this.state === 'dormant') {
       this.vy = Math.min(700, this.vy + 1800 * dt);
       this.moveAndCollide(world.level, dt);
-      if (Math.abs(player.cx - this.cx) < 460 && !player.dead) this.engage(world);
+      // Only wake once the player is actually inside the arena, or the gate
+      // slams shut in front of them.
+      const inArena = player.cx > world.level.arenaLeft;
+      if (inArena && Math.abs(player.cx - this.cx) < 460 && !player.dead) this.engage(world);
       return;
     }
 

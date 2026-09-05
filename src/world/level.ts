@@ -17,6 +17,8 @@ export class Level {
   readonly decorNoise: Float32Array;
   /** The boss arena gate only turns solid once the fight has begun. */
   gateClosed = false;
+  /** World x just right of the gate - everything beyond it is the arena. */
+  readonly arenaLeft: number;
 
   constructor() {
     let width = 0;
@@ -28,6 +30,7 @@ export class Level {
     this.decorNoise = new Float32Array(width * this.height);
 
     const rng = new Rng(0xc0ffee);
+    let gateTx = -1;
     let offsetX = 0;
     for (const chunk of LEVEL_CHUNKS) {
       for (let ty = 0; ty < this.height; ty++) {
@@ -38,6 +41,7 @@ export class Level {
           const tile = CHAR_TO_TILE[ch];
           if (tile !== undefined) {
             this.tiles[ty * width + tx] = tile;
+            if (tile === Tile.Gate) gateTx = Math.max(gateTx, tx);
           } else {
             const spawn = CHAR_TO_SPAWN[ch];
             if (spawn) this.spawns.push({ kind: spawn, tx, ty });
@@ -47,6 +51,7 @@ export class Level {
       offsetX += chunk.width;
     }
     for (let i = 0; i < this.decorNoise.length; i++) this.decorNoise[i] = rng.next();
+    this.arenaLeft = (gateTx + 1) * TILE;
   }
 
   tileAt(tx: number, ty: number): Tile {

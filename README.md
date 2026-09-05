@@ -105,6 +105,7 @@ Beide Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 
 ```bash
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
+npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -112,6 +113,10 @@ npm run screenshots    # erzeugt die Bilder in screenshots/
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
 einem bewusst konservativen Sprungmodell, ob der Boss vom Startpunkt aus
 erreichbar ist — nützlich, sobald man am Level schraubt.
+
+`verify:arena` spielt einen Softlock nach: den Schattenritter ans Fallgitter
+locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler
+wieder drin ist.
 
 ## Veröffentlichen
 
