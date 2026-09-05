@@ -424,9 +424,13 @@ export class Player extends Body {
 
   private bladeTip(pose: SwingPose): { x: number; y: number } {
     const hand = this.handWorld(pose);
-    const a = pose.angle * this.facing;
     const reach = this.bladeReach(pose);
-    return { x: hand.x + Math.cos(a) * reach, y: hand.y + Math.sin(a) * reach };
+    // Negating the angle would mirror across the horizontal axis; facing
+    // flips the world horizontally, so the sign belongs on x.
+    return {
+      x: hand.x + Math.cos(pose.angle) * reach * this.facing,
+      y: hand.y + Math.sin(pose.angle) * reach,
+    };
   }
 
   /** Sparks thrown off the tip while the blade is moving fastest. */
@@ -434,8 +438,8 @@ export class Player extends Body {
     const pose = this.swingPose(elapsed);
     const swing = SWINGS[Math.max(0, this.attackCombo - 1)];
     const tip = this.bladeTip(pose);
-    const sweep = sign(swing.to - swing.wind) * this.facing;
-    const tangent = pose.angle * this.facing + (sweep > 0 ? Math.PI / 2 : -Math.PI / 2);
+    const sweep = sign(swing.to - swing.wind);
+    const tangent = pose.angle + (sweep > 0 ? Math.PI / 2 : -Math.PI / 2);
     const count = this.attackCombo === 3 ? 3 : 2;
     for (let i = 0; i < count; i++) {
       const a = tangent + rand(-0.35, 0.35);
@@ -443,7 +447,7 @@ export class Player extends Body {
       world.particles.spawn({
         x: tip.x + rand(-3, 3),
         y: tip.y + rand(-3, 3),
-        vx: Math.cos(a) * speed,
+        vx: Math.cos(a) * speed * this.facing,
         vy: Math.sin(a) * speed - 25,
         color: i === 0 ? '#ffffff' : PALETTE.bladeGlow,
         gravity: 120,
@@ -605,7 +609,7 @@ export class Player extends Body {
     const legSwing = moving ? Math.sin(t * 2) * 5 : 0;
 
     // Cloak billowing behind the hero.
-    const cloakSway = clamp(-this.vx / 220, -1, 1) * 6 + Math.sin(t * 1.6) * 1.6;
+    const cloakSway = clamp((-this.vx * this.facing) / 220, -1, 1) * 6 + Math.sin(t * 1.6) * 1.6;
     ctx.fillStyle = PALETTE.playerCloakDark;
     ctx.beginPath();
     ctx.moveTo(-2, -26);
@@ -690,11 +694,31 @@ export class Player extends Body {
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(grip.x, grip.y);
-      ctx.rotate(at.angle * dir);
       ctx.scale(dir, 1);
+      ctx.rotate(at.angle);
       this.drawBlade(ctx, this.bladeReach(at));
       ctx.restore();
       ctx.globalAlpha = 1;
+    };
+
+    /**
+     * The crescent is drawn in facing space and mirrored by the scale, not by
+     * negating its angles - negated angles flip it across the wrong axis and
+     * the trail ends up on the wrong side of a left-facing hero.
+     */
+    const drawTrail = (
+      from: number,
+      to: number,
+      radius: number,
+      thickness: number,
+      color: string,
+      alpha: number,
+    ): void => {
+      ctx.save();
+      ctx.translate(hand.x, hand.y);
+      ctx.scale(dir, 1);
+      slashCrescent(ctx, 0, 0, radius, from, to, thickness, color, alpha);
+      ctx.restore();
     };
 
     if (pose.phase === 'active') {
@@ -715,32 +739,12 @@ export class Player extends Body {
         pose.phase === 'active'
           ? Math.min(1, 0.35 + pose.t * 3)
           : Math.max(0, 1 - easeOut(pose.t, 1.6));
-      slashCrescent(
-        ctx,
-        hand.x,
-        hand.y,
-        reach * 0.98,
-        tail * dir,
-        pose.angle * dir,
-        swing.trail,
-        PALETTE.bladeGlow,
-        0.9 * fade,
-      );
+      drawTrail(tail, pose.angle, reach * 0.98, swing.trail, PALETTE.bladeGlow, 0.9 * fade);
 
       // A second, wider echo makes the finisher read as the heavy hit.
       if (combo === 3) {
         const echo = this.swingPose(Math.max(ATTACK_WINDUP, elapsed - 0.05)).angle;
-        slashCrescent(
-          ctx,
-          hand.x,
-          hand.y,
-          reach * 1.22,
-          echo * dir,
-          pose.angle * dir,
-          swing.trail * 0.55,
-          '#bfe9ff',
-          0.5 * fade,
-        );
+        drawTrail(echo, pose.angle, reach * 1.22, swing.trail * 0.55, '#bfe9ff', 0.5 * fade);
       }
     }
 

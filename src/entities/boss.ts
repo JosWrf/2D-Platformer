@@ -36,7 +36,6 @@ export class Boss extends Body {
   anim = 0;
 
   private timer = 0;
-  private actionCooldown = 0;
   private damageSinceStagger = 0;
   private swordAngle = -0.6;
   private targetSwordAngle = -0.6;
@@ -152,7 +151,6 @@ export class Boss extends Body {
     }
 
     this.timer -= dt;
-    this.actionCooldown = Math.max(0, this.actionCooldown - dt);
     this.vy = Math.min(760, this.vy + 1800 * dt);
 
     switch (this.state) {
@@ -177,7 +175,7 @@ export class Boss extends Body {
         this.targetSwordAngle = -0.5 + Math.sin(this.anim * 6) * 0.12;
         if (this.timer <= 0 || dist < 78) {
           this.state = 'idle';
-          this.timer = this.phase === 3 ? 0.12 : 0.28;
+          this.timer = this.phase === 3 ? 0.3 : 0.42;
         }
         break;
       }
@@ -198,7 +196,7 @@ export class Boss extends Body {
         if (!this.hitPlayerThisAction) this.tryMeleeHit(world, this.slamRect(), 2);
         if (this.timer <= 0) {
           this.state = 'idle';
-          this.timer = this.phase === 3 ? 0.3 : 0.62;
+          this.timer = this.recovery(0.15);
         }
         break;
       }
@@ -234,7 +232,7 @@ export class Boss extends Body {
             world.particles.burst(this.facing > 0 ? this.x + this.w : this.x, this.cy, 18, '#c8b9a0', { speed: 220 });
           }
           this.state = 'idle';
-          this.timer = 0.5;
+          this.timer = this.recovery(this.touching.left || this.touching.right ? 0.25 : 0.1);
         }
         break;
       }
@@ -244,7 +242,7 @@ export class Boss extends Body {
         if (this.timer <= 0) {
           this.castOrbs(world);
           this.state = 'idle';
-          this.timer = 0.55;
+          this.timer = this.recovery();
         }
         break;
       }
@@ -254,7 +252,7 @@ export class Boss extends Body {
         if (this.timer <= 0) {
           this.summonMinions(world);
           this.state = 'idle';
-          this.timer = 0.7;
+          this.timer = this.recovery(0.1);
         }
         break;
       }
@@ -264,10 +262,10 @@ export class Boss extends Body {
         if (this.onGround && this.vy >= 0 && this.timer < 0.55) {
           this.doGroundPound(world);
           this.state = 'idle';
-          this.timer = 0.55;
+          this.timer = this.recovery(0.25);
         } else if (this.timer <= -1.6) {
           this.state = 'idle';
-          this.timer = 0.4;
+          this.timer = this.recovery();
         }
         break;
       }
@@ -289,7 +287,7 @@ export class Boss extends Body {
         }
         if (this.timer <= 0) {
           this.state = 'idle';
-          this.timer = 0.2;
+          this.timer = 0.45;
         }
         break;
       }
@@ -303,6 +301,16 @@ export class Boss extends Body {
     if ((this.state === 'dash' || this.state === 'leap') && !this.hitPlayerThisAction) {
       this.tryMeleeHit(world, this.rect, 2);
     }
+  }
+
+  /**
+   * Breathing room after an attack: the window the player can safely strike
+   * in. A full three-hit combo takes 0.9s, so anything shorter leaves them
+   * nothing to do but dodge.
+   */
+  private recovery(extra = 0): number {
+    const base = this.phase === 3 ? 0.8 : this.phase === 2 ? 0.9 : 1.05;
+    return base + extra;
   }
 
   private chooseAction(dist: number): void {
@@ -325,11 +333,11 @@ export class Boss extends Body {
         break;
       case 'slam':
         this.state = 'slamWindup';
-        this.timer = phase === 3 ? 0.42 : 0.62;
+        this.timer = phase === 3 ? 0.52 : 0.62;
         break;
       case 'dash':
         this.state = 'dashWindup';
-        this.timer = phase === 3 ? 0.34 : 0.5;
+        this.timer = phase === 3 ? 0.44 : 0.5;
         break;
       case 'cast':
         this.state = 'cast';
