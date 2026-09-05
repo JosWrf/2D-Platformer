@@ -5,6 +5,7 @@ export type Action =
   | 'down'
   | 'jump'
   | 'attack'
+  | 'parry'
   | 'dash'
   | 'pause'
   | 'restart'
@@ -23,6 +24,8 @@ const BINDINGS: Record<string, Action[]> = {
   KeyJ: ['attack'],
   KeyK: ['attack'],
   KeyX: ['attack'],
+  KeyE: ['parry'],
+  KeyI: ['parry'],
   ShiftLeft: ['dash'],
   ShiftRight: ['dash'],
   KeyL: ['dash'],

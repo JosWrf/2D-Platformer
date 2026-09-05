@@ -1,5 +1,8 @@
 type Sfx =
   | 'swing'
+  | 'charge'
+  | 'chargeRelease'
+  | 'parry'
   | 'hit'
   | 'jump'
   | 'dash'
@@ -28,6 +31,15 @@ const VOICES: Record<Sfx, Voice[]> = {
   hit: [
     { type: 'square', from: 420, to: 90, duration: 0.1, gain: 0.2 },
     { type: 'sawtooth', from: 180, to: 60, duration: 0.16, gain: 0.12 },
+  ],
+  charge: [{ type: 'triangle', from: 180, to: 760, duration: 0.42, gain: 0.09 }],
+  chargeRelease: [
+    { type: 'sawtooth', from: 620, to: 90, duration: 0.26, gain: 0.2, noise: true },
+    { type: 'square', from: 240, to: 60, duration: 0.22, gain: 0.14 },
+  ],
+  parry: [
+    { type: 'square', from: 1400, to: 2100, duration: 0.06, gain: 0.14 },
+    { type: 'triangle', from: 2400, to: 900, duration: 0.18, gain: 0.12, noise: true },
   ],
   jump: [{ type: 'square', from: 300, to: 620, duration: 0.12, gain: 0.13 }],
   dash: [{ type: 'sawtooth', from: 200, to: 700, duration: 0.16, gain: 0.1, noise: true }],

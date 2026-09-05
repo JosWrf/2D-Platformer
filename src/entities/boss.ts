@@ -9,6 +9,9 @@ import { Projectile } from './projectile';
 
 export const BOSS_MAX_HP = 64;
 
+/** How many summoned skeletons may stand in the arena at once. */
+const MAX_MINIONS = 2;
+
 type BossState =
   | 'dormant'
   | 'intro'
@@ -45,6 +48,8 @@ export class Boss extends Body {
   private lastAction = '';
   private readonly spawnX: number;
   private readonly spawnY: number;
+  /** Skeletons raised in this fight, so the arena never fills up with them. */
+  private readonly minions: Skeleton[] = [];
 
   constructor(x: number, y: number) {
     super();
@@ -80,6 +85,17 @@ export class Boss extends Body {
     this.lastAction = '';
     this.swordAngle = -0.6;
     this.targetSwordAngle = -0.6;
+    // The world rebuilds its enemy list on respawn, so the old references are
+    // gone - keeping them would block summoning for the rest of the run.
+    this.minions.length = 0;
+  }
+
+  /** Summoned skeletons still standing; drops the ones that have fallen. */
+  private livingMinions(): number {
+    for (let i = this.minions.length - 1; i >= 0; i--) {
+      if (this.minions[i].dead) this.minions.splice(i, 1);
+    }
+    return this.minions.length;
   }
 
   get phase(): 1 | 2 | 3 {
@@ -115,14 +131,24 @@ export class Boss extends Body {
       this.beginDeath(world);
       return;
     }
-    if (this.damageSinceStagger >= 14 && this.state !== 'stagger') {
-      this.damageSinceStagger = 0;
-      this.state = 'stagger';
-      this.timer = 1.35;
+    if (this.damageSinceStagger >= 14) {
+      this.stagger(world);
       this.vx = fromDir * 90;
-      world.camera.addShake(6);
-      world.particles.text(this.cx, this.y - 12, 'BENOMMEN!', '#ffd166');
     }
+  }
+
+  /**
+   * Thrown off balance - by a parry, or by taking enough punishment. This is
+   * the player's window: the knight stands open until he recovers.
+   */
+  stagger(world: World, duration = 1.35): void {
+    if (this.dead || this.state === 'stagger' || this.state === 'intro') return;
+    this.damageSinceStagger = 0;
+    this.state = 'stagger';
+    this.timer = duration;
+    this.vx = 0;
+    world.camera.addShake(6);
+    world.particles.text(this.cx, this.y - 12, 'BENOMMEN!', '#ffd166');
   }
 
   private beginDeath(world: World): void {
@@ -352,7 +378,7 @@ export class Boss extends Body {
     if (dist > 150) options.push('walk', 'dash');
     if (dist <= 150) options.push('slam', 'slam', 'dash');
     if (phase >= 2) options.push('cast');
-    if (phase >= 2 && dist > 110) options.push('summon');
+    if (phase >= 2 && dist > 110 && this.livingMinions() < MAX_MINIONS) options.push('summon');
     if (phase >= 3) options.push('leap', 'cast', 'slam');
     // Avoid repeating the same move twice in a row.
     const filtered = options.filter((o) => o !== this.lastAction);
@@ -475,11 +501,17 @@ export class Boss extends Body {
   }
 
   private summonMinions(world: World): void {
+    const room = MAX_MINIONS - this.livingMinions();
+    if (room <= 0) return;
+
     audio.play('bossRoar', 1.6);
-    for (const dir of [-1, 1]) {
+    // With only one slot left the knight raises it on the side he faces.
+    const dirs = room >= 2 ? [-1, 1] : [this.facing];
+    for (const dir of dirs) {
       const x = clamp(this.cx + dir * 150, 40, world.level.pixelWidth - 60);
       const skeleton = new Skeleton(x, this.bottom - 34);
       skeleton.active = true;
+      this.minions.push(skeleton);
       world.spawnEnemy(skeleton);
       world.particles.burst(x + 11, this.bottom - 8, 24, '#7a4fb5', { speed: 170, gravity: -120, shape: 'circle' });
     }

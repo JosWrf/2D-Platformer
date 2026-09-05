@@ -301,7 +301,10 @@ export class Game implements World {
       this.hitStopTimer -= dt;
       this.particles.update(dt * 0.25);
       this.camera.follow(this.player.cx, this.player.cy - 10, this.player.facing * 40, dt);
-      input.endFrame();
+      // No endFrame() here on purpose: the hero does not update during hit
+      // stop, so clearing the input would swallow every key pressed in those
+      // three to eight frames. They are kept and seen on the next real frame -
+      // otherwise a parry pressed at the moment of impact is simply lost.
       return;
     }
 
@@ -512,15 +515,18 @@ export class Game implements World {
       }
     }
 
-    // The hero carries his own light, and the blade flares when it swings.
+    // The hero carries his own light: it flares when the blade swings, and it
+    // swells while a heavy strike is being wound up.
     const swing = this.player.isAttacking ? 1 : 0;
+    const charge = Math.min(1, this.player.chargeTimer / 0.42) * (this.player.chargeReady ? 1 : 0.6);
+    const guard = this.player.parryTimer > 0 || this.player.parryFlash > 0.4 ? 0.5 : 0;
     add(
       this.player.cx,
       this.player.cy - 2,
-      172 + swing * 52,
+      172 + swing * 52 + charge * 40 + guard * 30,
       '168,214,255',
       0.94,
-      0.13 + swing * 0.1,
+      0.13 + swing * 0.1 + charge * 0.12 + guard * 0.08,
     );
 
     this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);

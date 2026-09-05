@@ -32,6 +32,8 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `←` `→` / `A` `D` | Laufen |
 | `Leertaste` / `W` | Springen (in der Luft nochmal für den Doppelsprung) |
 | `J` / `K` / `X` | Schwertschlag — dreiteilige Kombo, der dritte Schlag trifft doppelt |
+| `J` / `K` / `X` halten | Ladeschlag — nach kurzem Aufladen ein schwerer Hieb mit dreifachem Schaden |
+| `E` / `I` | Parade — fängt einen Schlag ab, wenn sie im richtigen Moment kommt |
 | `Shift` / `L` | Ausweichrolle, während der Rolle unverwundbar |
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen |
 | `P` / `Esc` | Pause |
@@ -64,7 +66,13 @@ Kontrollpunkte sichern den Fortschritt, Edelsteine geben Punkte, Herzen heilen.
 * **Phase 3** — schneller, kürzere Vorwarnzeiten, Sprungangriff mit Deckeneinsturz
 
 Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
-kurz benommen und ist offen für eine volle Kombo.
+kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
+überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
+
+Die Vorwarnung ist auch die Einladung zur Parade: Wer im richtigen Moment `E`
+drückt, fängt den Schlag ab, statt ihn zu kassieren — der Ritter taumelt und
+steht offen. Geschosse fliegen dabei zurück. Die Parade wirkt nur nach vorn und
+nur gegen Angriffe; Stacheln und Lava lassen sich nicht wegparieren.
 
 | | |
 | --- | --- |
@@ -106,6 +114,7 @@ Beide Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 ```bash
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
+npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -117,6 +126,10 @@ erreichbar ist — nützlich, sobald man am Level schraubt.
 `verify:arena` spielt einen Softlock nach: den Schattenritter ans Fallgitter
 locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler
 wieder drin ist.
+
+`verify:combat` prüft Parade und Ladeschlag am Boss. Die Parade hängt an einem
+Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
+verloren, fühlt sich das nicht schwer an, sondern kaputt.
 
 ## Veröffentlichen
 

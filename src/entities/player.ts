@@ -52,7 +52,18 @@ const SWINGS: readonly SwingShape[] = [
   { wind: -1.95, to: 0.85, reach: 33, trail: 12, windReach: 0.8 }, // overhead cut
   { wind: 1.05, to: -1.45, reach: 33, trail: 11, windReach: 0.6 }, // rising cut back up
   { wind: -2.5, to: 0.75, reach: 39, trail: 17, windReach: 0.72 }, // wide finisher
+  { wind: -2.75, to: 0.9, reach: 48, trail: 26, windReach: 0.66 }, // charged strike
 ];
+
+/** Index of the charged swing inside SWINGS. */
+const CHARGED_SWING = 3;
+
+/** How long the attack key has to be held before the blade is ready. */
+const CHARGE_TIME = 0.42;
+/** The window in which an incoming blow can be turned aside. */
+const PARRY_WINDOW = 0.18;
+/** Dead time after a parry, so it cannot simply be held down. */
+const PARRY_RECOVERY = 0.38;
 
 /** Where the blade rests between combos - up and slightly forward. */
 const CARRY_ANGLE = -1.05;
@@ -96,6 +107,14 @@ export class Player extends Body {
 
   attackTimer = 0;
   attackCombo = 0;
+  /** True while the running swing is the heavy charged one. */
+  charged = false;
+  chargeTimer = 0;
+  chargeReady = false;
+  parryTimer = 0;
+  private parryCooldown = 0;
+  /** Decays after a successful parry, drives the flash ring. */
+  parryFlash = 0;
   private attackQueued = false;
   private readonly hitThisSwing = new Set<object>();
   /** Angle the blade starts the current swing from, so combos flow into each other. */
@@ -150,6 +169,11 @@ export class Player extends Body {
     this.hurtTimer = 0;
     this.attackTimer = 0;
     this.attackCombo = 0;
+    this.charged = false;
+    this.chargeTimer = 0;
+    this.chargeReady = false;
+    this.parryTimer = 0;
+    this.parryCooldown = 0;
     this.sheathTimer = 0;
     this.dashTimer = 0;
     this.dashCooldown = 0;
@@ -165,6 +189,9 @@ export class Player extends Body {
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.sheathTimer = Math.max(0, this.sheathTimer - dt);
+    this.parryTimer = Math.max(0, this.parryTimer - dt);
+    this.parryCooldown = Math.max(0, this.parryCooldown - dt);
+    this.parryFlash = Math.max(0, this.parryFlash - dt * 3.5);
 
     for (let i = this.trail.length - 1; i >= 0; i--) {
       this.trail[i].life -= dt * 3.2;
@@ -271,6 +298,17 @@ export class Player extends Body {
       }
     }
 
+    /* ----------------------------------------------------------- parry */
+    if (!stunned && !this.isDashing && input.pressed('parry') && this.parryCooldown <= 0) {
+      this.parryTimer = PARRY_WINDOW;
+      this.parryCooldown = PARRY_WINDOW + PARRY_RECOVERY;
+      this.chargeTimer = 0;
+      this.chargeReady = false;
+      audio.play('parry', 1.35);
+      if (this.onGround) this.vx *= 0.4;
+    }
+    if (this.parryTimer > 0) this.parryProjectiles(world);
+
     /* ---------------------------------------------------------- attack */
     if (!stunned && input.pressed('attack')) {
       if (this.attackTimer <= 0) this.startSwing();
@@ -305,6 +343,51 @@ export class Player extends Body {
       if (this.onGround && !this.isDashing) this.vx *= 0.86;
     }
 
+    /* ---------------------------------------------------------- charge */
+    // Holding the attack key between swings winds up a heavy strike. A tap is
+    // still just a swing, so the combo keeps working the way it did.
+    const canCharge = !stunned && !this.isDashing && this.attackTimer <= 0 && this.parryTimer <= 0;
+    if (canCharge && input.isDown('attack')) {
+      const before = this.chargeTimer;
+      this.chargeTimer += dt;
+      if (before < CHARGE_TIME && this.chargeTimer >= CHARGE_TIME) {
+        this.chargeReady = true;
+        audio.play('charge');
+        world.particles.burst(this.cx, this.cy, 14, 'rgba(180,225,255,0.9)', {
+          speed: 120,
+          gravity: -40,
+          shape: 'spark',
+        });
+      }
+      if (this.chargeReady && Math.random() < 0.5) {
+        // Sparks drawn inwards to the blade, so the wind-up reads as gathering.
+        const a = rand(0, TAU);
+        const r = rand(26, 46);
+        world.particles.spawn({
+          x: this.cx + Math.cos(a) * r,
+          y: this.cy + Math.sin(a) * r,
+          vx: -Math.cos(a) * r * 2.6,
+          vy: -Math.sin(a) * r * 2.6,
+          color: 'rgba(190,232,255,0.9)',
+          gravity: 0,
+          drag: 0.9,
+          size: rand(1.4, 2.6),
+          shape: 'spark',
+          life: 0.24,
+        });
+      }
+      if (this.onGround) this.vx = approach(this.vx, 0, FRICTION * 0.8 * dt);
+    } else if (!input.isDown('attack')) {
+      if (this.chargeReady && canCharge) {
+        this.startSwing(true);
+        this.vx += this.facing * 130;
+        world.hitStop(0.05);
+        world.camera.addShake(3);
+      }
+      this.chargeTimer = 0;
+      this.chargeReady = false;
+    }
+
     /* --------------------------------------------------------- physics */
     this.ignorePlatforms = input.isDown('down') && input.isDown('jump');
     const wasFalling = this.vy;
@@ -337,22 +420,79 @@ export class Player extends Body {
     if (this.hp <= 0) this.dead = true;
   }
 
-  private startSwing(): void {
+  private startSwing(charged = false): void {
     // Chained swings pick up where the last one stopped instead of snapping.
-    this.swingEntry = this.attackCombo > 0 ? SWINGS[this.attackCombo - 1].to : CARRY_ANGLE;
+    this.swingEntry = this.attackCombo > 0 ? this.swingShape.to : CARRY_ANGLE;
+    this.charged = charged;
     this.attackTimer = ATTACK_TOTAL;
-    this.attackCombo = (this.attackCombo % 3) + 1;
-    this.finisherDone = false;
+    // The heavy strike stands outside the combo and opens a fresh one.
+    this.attackCombo = charged ? 3 : (this.attackCombo % 3) + 1;
+    this.finisherDone = charged;
     this.sheathTimer = 0;
     this.hitThisSwing.clear();
-    audio.play('swing', this.attackCombo === 3 ? 0.8 : 1 + this.attackCombo * 0.08);
+    if (charged) audio.play('chargeRelease');
+    else audio.play('swing', this.attackCombo === 3 ? 0.8 : 1 + this.attackCombo * 0.08);
+  }
+
+  /** Blows turned aside during the parry window fly back at their owner. */
+  private parryProjectiles(world: World): void {
+    const box = {
+      x: this.facing > 0 ? this.x - 4 : this.x - 30,
+      y: this.y - 6,
+      w: this.w + 34,
+      h: this.h + 12,
+    };
+    for (const p of world.projectiles) {
+      if (p.dead || p.friendly || !p.overlaps(box)) continue;
+      p.deflect(this.facing);
+      this.onParrySuccess(world, -this.facing);
+    }
+  }
+
+  /**
+   * A parry costs nothing but timing, so it has to pay: the blow is void, the
+   * hero gets a breath of safety, and whoever swung it is thrown off balance.
+   */
+  private onParrySuccess(world: World, fromDir: number): void {
+    this.parryTimer = 0;
+    this.parryFlash = 1;
+    this.invuln = Math.max(this.invuln, 0.3);
+    audio.play('parry');
+    audio.play('hit', 1.5);
+    world.hitStop(0.13);
+    world.camera.addShake(6);
+    world.particles.text(this.cx, this.y - 14, 'PARIERT!', '#bfe9ff');
+    world.particles.burst(this.cx + this.facing * 16, this.cy, 18, '#dff3ff', {
+      speed: 210,
+      gravity: 120,
+      shape: 'spark',
+      angle: fromDir > 0 ? 0 : Math.PI,
+      spread: 1.5,
+    });
+
+    // Whoever was in reach pays for it: the knight staggers, lesser foes are
+    // thrown back.
+    const boss = world.boss;
+    if (boss && !boss.dead && boss.engaged && Math.abs(boss.cx - this.cx) < 120) {
+      boss.stagger(world);
+    }
+    for (const enemy of world.enemies) {
+      if (enemy.dead) continue;
+      if (Math.abs(enemy.cx - this.cx) > 60 || Math.abs(enemy.cy - this.cy) > 50) continue;
+      enemy.hurt(1, this.facing, world);
+    }
   }
 
   /* -------------------------------------------------------- swing motion */
 
+  /** The shape the running swing follows: one of the combo cuts, or the heavy one. */
+  private get swingShape(): SwingShape {
+    return SWINGS[this.charged ? CHARGED_SWING : Math.max(0, this.attackCombo - 1)];
+  }
+
   /** Blade angle, hand offset and body tilt at a point in the current swing. */
   private swingPose(elapsed: number): SwingPose {
-    const swing = SWINGS[Math.max(0, this.attackCombo - 1)];
+    const swing = this.swingShape;
     const e = clamp(elapsed, 0, ATTACK_TOTAL);
     if (e < ATTACK_WINDUP) {
       const t = e / ATTACK_WINDUP;
@@ -406,7 +546,7 @@ export class Player extends Body {
   }
 
   private bladeReach(pose: SwingPose): number {
-    return SWINGS[Math.max(0, this.attackCombo - 1)].reach * pose.reachScale;
+    return this.swingShape.reach * pose.reachScale;
   }
 
   /** The same hand, in world space, with the body's tilt applied. */
@@ -436,11 +576,11 @@ export class Player extends Body {
   /** Sparks thrown off the tip while the blade is moving fastest. */
   private emitSwingSparks(world: World, elapsed: number): void {
     const pose = this.swingPose(elapsed);
-    const swing = SWINGS[Math.max(0, this.attackCombo - 1)];
+    const swing = this.swingShape;
     const tip = this.bladeTip(pose);
     const sweep = sign(swing.to - swing.wind);
     const tangent = pose.angle + (sweep > 0 ? Math.PI / 2 : -Math.PI / 2);
-    const count = this.attackCombo === 3 ? 3 : 2;
+    const count = this.charged ? 4 : this.attackCombo === 3 ? 3 : 2;
     for (let i = 0; i < count; i++) {
       const a = tangent + rand(-0.35, 0.35);
       const speed = rand(70, 170);
@@ -484,8 +624,8 @@ export class Player extends Body {
 
   /** World-space rectangle covered by the blade during the active window. */
   swordRect(): Rect {
-    const reach = this.attackCombo === 3 ? 46 : 40;
-    const height = this.attackCombo === 3 ? 40 : 32;
+    const reach = this.charged ? 58 : this.attackCombo === 3 ? 46 : 40;
+    const height = this.charged ? 52 : this.attackCombo === 3 ? 40 : 32;
     return {
       x: this.facing > 0 ? this.x + this.w - 4 : this.x - reach + 4,
       y: this.cy - height / 2 - 2,
@@ -496,7 +636,7 @@ export class Player extends Body {
 
   private applySwordHits(world: World): void {
     const box = this.swordRect();
-    const damage = this.attackCombo === 3 ? 2 : 1;
+    const damage = this.charged ? 3 : this.attackCombo === 3 ? 2 : 1;
     for (const enemy of world.enemies) {
       if (enemy.dead || this.hitThisSwing.has(enemy)) continue;
       if (!enemy.overlaps(box)) continue;
@@ -536,6 +676,12 @@ export class Player extends Body {
 
   hurt(amount: number, fromDir: number, world: World, ignoreIFrames = false): void {
     if (this.dead) return;
+    // Parries turn aside blows, not spikes and lava - those come with
+    // ignoreIFrames and cannot be answered with a sword.
+    if (!ignoreIFrames && this.parryTimer > 0 && this.facing === -Math.sign(fromDir || -this.facing)) {
+      this.onParrySuccess(world, fromDir);
+      return;
+    }
     if (!ignoreIFrames && this.isInvulnerable) return;
     if (ignoreIFrames && this.invuln > 0) return;
     this.hp -= amount;
@@ -599,6 +745,56 @@ export class Player extends Body {
     ctx.globalAlpha = 1;
 
     if (pose) this.drawSwing(ctx, pose);
+    this.drawGuard(ctx);
+  }
+
+  /**
+   * The two things the player has to read off the hero at a glance: how far the
+   * heavy strike is wound up, and whether the parry window is open right now.
+   */
+  private drawGuard(ctx: CanvasRenderingContext2D): void {
+    const cx = this.cx;
+    const cy = this.cy - 2;
+
+    if (this.chargeTimer > 0) {
+      const t = Math.min(1, this.chargeTimer / CHARGE_TIME);
+      // A ring drawing inwards while winding up, a steady halo once ready.
+      const radius = this.chargeReady ? 26 + Math.sin(this.runCycle * 8) * 2 : 46 - t * 20;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = this.chargeReady ? 'rgba(200,240,255,0.85)' : `rgba(150,205,255,${(0.2 + t * 0.4).toFixed(2)})`;
+      ctx.lineWidth = this.chargeReady ? 2 : 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+      if (this.chargeReady) glow(ctx, cx, cy, 34, 'rgba(160,220,255,0.4)', 0.8);
+    }
+
+    if (this.parryTimer > 0) {
+      // A guard arc on the side the hero is facing.
+      const t = this.parryTimer / PARRY_WINDOW;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(210,244,255,${(0.35 + t * 0.5).toFixed(2)})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 22, this.facing > 0 ? -1.05 : Math.PI - 1.05, this.facing > 0 ? 1.05 : Math.PI + 1.05);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.parryFlash > 0) {
+      const r = 20 + (1 - this.parryFlash) * 46;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(220,246,255,${(this.parryFlash * 0.8).toFixed(2)})`;
+      ctx.lineWidth = 3 * this.parryFlash + 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   private drawBody(ctx: CanvasRenderingContext2D, pose: SwingPose | null): void {
@@ -683,7 +879,7 @@ export class Player extends Body {
   private drawSwing(ctx: CanvasRenderingContext2D, pose: SwingPose): void {
     const dir = this.facing;
     const combo = Math.max(1, this.attackCombo);
-    const swing = SWINGS[combo - 1];
+    const swing = this.swingShape;
     const elapsed = ATTACK_TOTAL - this.attackTimer;
     const hand = this.handWorld(pose);
 
