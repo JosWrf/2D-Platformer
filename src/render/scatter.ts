@@ -137,8 +137,8 @@ export class Scatter {
         y: prop.y - 6,
         radius: glow.radius * (0.8 + prop.seed * 0.4),
         rgb: glow.rgb,
-        strength: 0.7,
-        tint: 0.36,
+        strength: 0.5,
+        tint: 0.26,
       });
     }
   }
@@ -207,15 +207,15 @@ export class Scatter {
         ctx.fillStyle = '#1d3a33';
         ctx.fillRect(-1, -h, 2, h);
         const g = ctx.createRadialGradient(0, -h, 0, 0, -h, r * 3.4);
-        g.addColorStop(0, `rgba(128,236,190,${(0.5 * pulse).toFixed(3)})`);
+        g.addColorStop(0, `rgba(128,236,190,${(0.17 * pulse).toFixed(3)})`);
         g.addColorStop(1, 'rgba(128,236,190,0)');
         ctx.fillStyle = g;
         ctx.fillRect(-r * 3.4, -h - r * 3.4, r * 6.8, r * 6.8);
-        ctx.fillStyle = '#7ff0c0';
+        ctx.fillStyle = '#3f9a74';
         ctx.beginPath();
-        ctx.ellipse(0, -h, r, r * 0.75, 0, Math.PI, 0);
+        ctx.ellipse(0, -h, r * 1.25, r * 0.5, 0, Math.PI, 0);
         ctx.fill();
-        ctx.fillStyle = '#d8fff0';
+        ctx.fillStyle = '#6bbd99';
         ctx.fillRect(-r * 0.4, -h - r * 0.5, r * 0.5, 1.5);
         break;
       }
@@ -254,14 +254,14 @@ export class Scatter {
       }
       case 'shard': {
         const h = 7 + s * 9;
-        ctx.fillStyle = 'rgba(99,230,255,0.75)';
+        ctx.fillStyle = 'rgba(72,168,196,0.7)';
         ctx.beginPath();
         ctx.moveTo(-2.5, 0);
         ctx.lineTo(0, -h);
         ctx.lineTo(2.5, 0);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = 'rgba(216,250,255,0.8)';
+        ctx.fillStyle = 'rgba(150,196,214,0.7)';
         ctx.fillRect(-0.6, -h + 2, 1.2, h - 3);
         break;
       }
@@ -279,14 +279,14 @@ export class Scatter {
       }
       case 'candle': {
         const flicker = 0.8 + Math.sin(time * 8 + s * 11) * 0.2;
-        ctx.fillStyle = '#d8cfc0';
+        ctx.fillStyle = '#9c948a';
         ctx.fillRect(-1.5, -8, 3, 8);
         const g = ctx.createRadialGradient(0, -10, 0, 0, -10, 12);
-        g.addColorStop(0, `rgba(255,190,110,${(0.55 * flicker).toFixed(3)})`);
+        g.addColorStop(0, `rgba(255,190,110,${(0.22 * flicker).toFixed(3)})`);
         g.addColorStop(1, 'rgba(255,190,110,0)');
         ctx.fillStyle = g;
         ctx.fillRect(-12, -22, 24, 24);
-        ctx.fillStyle = '#ffd08a';
+        ctx.fillStyle = '#c08f58';
         ctx.beginPath();
         ctx.ellipse(0, -10, 1.6, 2.6 * flicker, 0, 0, Math.PI * 2);
         ctx.fill();

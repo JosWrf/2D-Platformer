@@ -503,7 +503,9 @@ export class Game implements World {
           add(enemy.cx, enemy.cy, 62, '124,224,122', 0.7, 0.3);
           break;
         case 'bat':
-          add(enemy.cx, enemy.cy, 70, '176,140,235', 0.75, 0.32);
+          // Dark purple on near-black: without a light of its own the bat is
+          // the least readable thing in the game.
+          add(enemy.cx, enemy.cy, 88, '176,140,235', 0.92, 0.4);
           break;
         default:
           add(enemy.cx, enemy.cy, 76, '206,214,235', 0.7, 0.26);
@@ -639,7 +641,10 @@ export class Game implements World {
 
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.34;
+    // Weight chosen against a measurement: the brightest decoration in a scene
+    // must stay below the dimmest enemy, or the eye goes to the mushroom
+    // instead of the bat about to bite.
+    ctx.globalAlpha = 0.68;
     ctx.drawImage(this.castLayer, 0, 0);
     ctx.restore();
   }

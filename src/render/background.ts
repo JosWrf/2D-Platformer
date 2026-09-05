@@ -162,8 +162,10 @@ export class Background {
     const spacing = 152;
     const scroll = camera.x * 0.34;
     const baseY = viewH * 1.02 - camera.y * 0.2;
-    const near = mixHex(hillColor, '#000000', 0.3);
-    const dark = mixHex(hillColor, '#000000', 0.55);
+    // Etwas heller als die Hügel dahinter, nicht dunkler: gegen einen fast
+    // schwarzen Himmel verschwindet eine noch dunklere Silhouette einfach.
+    const near = mixHex(hillColor, '#ffffff', 0.06);
+    const dark = mixHex(hillColor, '#000000', 0.25);
 
     const first = Math.floor(scroll / spacing) - 1;
     for (let i = first; i * spacing - scroll < viewW + spacing; i++) {

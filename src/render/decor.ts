@@ -101,7 +101,9 @@ export class Decor {
     } else {
       const pulse = 0.75 + Math.sin(this.anim * 2 + this.seed * 8) * 0.25;
       const flip = this.mount === 'hanging' ? -1 : 1;
-      glow(ctx, this.x + 16, this.y + 16 * flip, 46 * pulse, 'rgba(99,230,255,0.22)');
+      // Dimmed for the lit scene: a landmark, not the brightest thing on
+      // screen. Anything that outshines an enemy pulls the eye off the fight.
+      glow(ctx, this.x + 16, this.y + 16 * flip, 46 * pulse, 'rgba(99,230,255,0.13)');
       ctx.save();
       if (flip < 0) {
         ctx.translate(0, this.y * 2 + 30);
@@ -123,7 +125,7 @@ export class Decor {
         ctx.closePath();
         ctx.fill();
         ctx.fillStyle = PALETTE.crystal;
-        ctx.globalAlpha = 0.75;
+        ctx.globalAlpha = 0.5;
         ctx.beginPath();
         ctx.moveTo(this.x + cx, this.y + base - height);
         ctx.lineTo(this.x + cx + 2, this.y + base - height * 0.35);
