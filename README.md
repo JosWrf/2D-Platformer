@@ -32,7 +32,7 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `←` `→` / `A` `D` | Laufen |
 | `Leertaste` / `W` | Springen (in der Luft nochmal für den Doppelsprung) |
 | `J` / `K` / `X` | Schwertschlag — dreiteilige Kombo, der dritte Schlag trifft doppelt |
-| `J` / `K` / `X` halten | Ladeschlag — nach kurzem Aufladen ein schwerer Hieb mit dreifachem Schaden |
+| `J` / `K` / `X` halten | Ladeschlag — nach kurzem Aufladen ein schwerer Hieb mit dreifachem Schaden; Laufen, Springen und Rollen gehen dabei weiter |
 | `E` / `I` | Parade — fängt einen Schlag ab, wenn sie im richtigen Moment kommt |
 | `Shift` / `L` | Ausweichrolle, während der Rolle unverwundbar |
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen |

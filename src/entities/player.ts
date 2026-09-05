@@ -346,6 +346,9 @@ export class Player extends Body {
     /* ---------------------------------------------------------- charge */
     // Holding the attack key between swings winds up a heavy strike. A tap is
     // still just a swing, so the combo keeps working the way it did.
+    //
+    // Winding up does not root the hero: he runs, jumps and rolls with the
+    // blade charged. Bracing him in place only made the game feel stuck.
     const canCharge = !stunned && !this.isDashing && this.attackTimer <= 0 && this.parryTimer <= 0;
     if (canCharge && input.isDown('attack')) {
       const before = this.chargeTimer;
@@ -376,7 +379,6 @@ export class Player extends Body {
           life: 0.24,
         });
       }
-      if (this.onGround) this.vx = approach(this.vx, 0, FRICTION * 0.8 * dt);
     } else if (!input.isDown('attack')) {
       if (this.chargeReady && canCharge) {
         this.startSwing(true);
