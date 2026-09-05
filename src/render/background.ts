@@ -1,49 +1,13 @@
 import { Camera } from '../core/camera';
-import { Rng } from '../core/math';
-import { PALETTE, Zone, mixHex, zoneBlend } from './palette';
+import { Zone, mixHex, zoneBlend } from './palette';
 
-interface Star {
-  x: number;
-  y: number;
-  size: number;
-  twinkle: number;
-}
-
-interface Mote {
-  x: number;
-  y: number;
-  speed: number;
-  size: number;
-  phase: number;
-}
-
-/** Procedural parallax backdrop: sky, stars, moon, two hill layers and motes. */
+/** Procedural parallax backdrop: near-black sky, two hill layers and motes. */
 export class Background {
-  private readonly stars: Star[] = [];
-  private readonly motes: Mote[] = [];
 
   constructor(
     private readonly viewW: number,
     private readonly viewH: number,
   ) {
-    const rng = new Rng(4242);
-    for (let i = 0; i < 130; i++) {
-      this.stars.push({
-        x: rng.range(0, viewW * 2),
-        y: rng.range(0, viewH * 0.7),
-        size: rng.range(0.6, 1.9),
-        twinkle: rng.range(0, Math.PI * 2),
-      });
-    }
-    for (let i = 0; i < 46; i++) {
-      this.motes.push({
-        x: rng.range(0, viewW),
-        y: rng.range(0, viewH),
-        speed: rng.range(4, 18),
-        size: rng.range(1, 2.6),
-        phase: rng.range(0, Math.PI * 2),
-      });
-    }
   }
 
   private static hills(
@@ -197,45 +161,6 @@ export class Background {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, viewW, viewH);
 
-    // Stars (very slow parallax).
-    const starScroll = (camera.x * 0.04) % (viewW * 2);
-    for (const s of this.stars) {
-      let sx = s.x - starScroll;
-      if (sx < 0) sx += viewW * 2;
-      if (sx > viewW) continue;
-      // Faint: the drifting spores carry the sparkle now, stars only hint depth.
-      const a = 0.14 + Math.sin(time * 2 + s.twinkle) * 0.1;
-      ctx.globalAlpha = Math.max(0, a);
-      ctx.fillStyle = '#dfe7ff';
-      ctx.fillRect(sx, s.y - camera.y * 0.03, s.size, s.size);
-    }
-    ctx.globalAlpha = 1;
-
-    // Moon.
-    const moonX = viewW * 0.78 - camera.x * 0.05;
-    const moonY = viewH * 0.2 - camera.y * 0.04;
-    if (moonX > -80 && moonX < viewW + 80) {
-      const g = ctx.createRadialGradient(moonX, moonY, 6, moonX, moonY, 90);
-      g.addColorStop(0, 'rgba(246,240,216,0.14)');
-      g.addColorStop(1, 'rgba(246,240,216,0)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, 90, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 0.32;
-      ctx.fillStyle = PALETTE.moon;
-      ctx.beginPath();
-      ctx.arc(moonX, moonY, 22, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = 'rgba(200,196,175,0.5)';
-      ctx.beginPath();
-      ctx.arc(moonX - 8, moonY - 6, 5, 0, Math.PI * 2);
-      ctx.arc(moonX + 9, moonY + 4, 7, 0, Math.PI * 2);
-      ctx.arc(moonX + 2, moonY + 12, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     Background.hills(ctx, hillFar, camera.x * 0.12, viewH * 0.74 - camera.y * 0.06, 46, 1, 1.7, viewW, viewH);
     Background.hills(ctx, hillNear, camera.x * 0.28, viewH * 0.88 - camera.y * 0.12, 62, 1.4, 4.1, viewW, viewH);
 
@@ -251,17 +176,5 @@ export class Background {
     ctx.fillStyle = t > 0 ? to.ambient : zone.ambient;
     ctx.fillRect(0, 0, viewW, viewH);
 
-    // Drifting motes.
-    for (const m of this.motes) {
-      const mx = (m.x - camera.x * 0.5 - time * m.speed) % viewW;
-      const x = mx < 0 ? mx + viewW : mx;
-      const y = (m.y + Math.sin(time * 0.7 + m.phase) * 14 - camera.y * 0.35) % viewH;
-      ctx.globalAlpha = 0.14 + Math.sin(time + m.phase) * 0.08;
-      ctx.fillStyle = '#cfe3ff';
-      ctx.beginPath();
-      ctx.arc(x, y < 0 ? y + viewH : y, m.size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
   }
 }

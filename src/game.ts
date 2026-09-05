@@ -13,6 +13,7 @@ import { Background } from './render/background';
 import { Decor } from './render/decor';
 import { Spores } from './render/atmosphere';
 import { LightPass, type Light } from './render/lighting';
+import { drawEdgeLight } from './render/rims';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
@@ -476,10 +477,23 @@ export class Game implements World {
       const rgb = p.kind === 'orb' ? '210,110,255' : p.kind === 'shockwave' ? '255,140,90' : '200,180,160';
       add(p.cx, p.cy, p.kind === 'bone' ? 40 : 84, rgb, 0.8, 0.34);
     }
+    // Every enemy carries some light. A threat the player cannot see is not a
+    // difficulty, it is a bug.
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
-      if (enemy.kind === 'mage') add(enemy.cx, enemy.cy, 96, '200,90,223', 0.75, 0.36);
-      else if (enemy.kind === 'slime') add(enemy.cx, enemy.cy, 54, '124,224,122', 0.5, 0.24);
+      switch (enemy.kind) {
+        case 'mage':
+          add(enemy.cx, enemy.cy, 104, '200,90,223', 0.85, 0.36);
+          break;
+        case 'slime':
+          add(enemy.cx, enemy.cy, 62, '124,224,122', 0.7, 0.3);
+          break;
+        case 'bat':
+          add(enemy.cx, enemy.cy, 70, '176,140,235', 0.75, 0.32);
+          break;
+        default:
+          add(enemy.cx, enemy.cy, 76, '206,214,235', 0.7, 0.26);
+      }
     }
 
     // The hero carries his own light, and the blade flares when it swings.
@@ -487,17 +501,35 @@ export class Game implements World {
     add(
       this.player.cx,
       this.player.cy - 2,
-      168 + swing * 52,
-      '150,205,255',
+      176 + swing * 52,
+      '168,214,255',
       1,
-      0.18 + swing * 0.14,
+      0.22 + swing * 0.14,
     );
 
     const boss = this.boss;
     if (boss && !boss.dead && boss.engaged) {
-      add(boss.cx, boss.cy - 10, 230, '255,74,58', 0.85, 0.3);
+      add(boss.cx, boss.cy - 10, 210, '255,74,58', 0.8, 0.16);
     }
     return lights;
+  }
+
+  /**
+   * Draws the cast a second time, additively and faintly, on top of the
+   * darkness. That gives every character a share of its own colour back, so a
+   * bat in an unlit corner still reads as a bat instead of a dark smudge.
+   */
+  private drawCastLight(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.translate(-this.camera.renderX, -this.camera.renderY);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.42;
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(ctx, this);
+    }
+    ctx.globalAlpha = 0.5;
+    if (!this.player.dead || this.state === 'victory') this.player.draw(ctx, this);
+    ctx.restore();
   }
 
   /* --------------------------------------------------------------- render */
@@ -542,8 +574,15 @@ export class Game implements World {
     const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * blend.t;
     const tint = mixHex(blend.from.darkTint, blend.to.darkTint, blend.t);
     this.lightPass.draw(ctx, this.camera, this.collectLights(), darkness, tint);
+
+    // Readability first: ledges, pit walls, then the characters themselves keep
+    // a share of their own colour on top of the darkness.
+    const sporeRgb = blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb;
+    drawEdgeLight(ctx, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb);
+    this.drawCastLight(ctx);
+
     // Spores sit in front of the darkness, so they glow through it.
-    this.spores.draw(ctx, this.camera, this.time, blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb);
+    this.spores.draw(ctx, this.camera, this.time, sporeRgb);
 
     this.drawLighting(ctx);
     if (this.state !== 'title') this.drawHud(ctx);

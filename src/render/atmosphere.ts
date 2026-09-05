@@ -54,14 +54,16 @@ export class Spores {
       const halo = s.size * 7;
 
       const g = ctx.createRadialGradient(x, y, 0, x, y, halo);
-      g.addColorStop(0, `rgba(${rgb},${(0.5 * pulse).toFixed(3)})`);
+      g.addColorStop(0, `rgba(${rgb},${(0.34 * pulse).toFixed(3)})`);
       g.addColorStop(0.4, `rgba(${rgb},${(0.14 * pulse).toFixed(3)})`);
       g.addColorStop(1, `rgba(${rgb},0)`);
       ctx.fillStyle = g;
       ctx.fillRect(x - halo, y - halo, halo * 2, halo * 2);
 
-      ctx.globalAlpha = 0.55 + pulse * 0.45;
-      ctx.fillStyle = '#fff6d8';
+      // Capped well below the hero's own brightness: decoration must never
+      // outshine the things that can kill you.
+      ctx.globalAlpha = 0.3 + pulse * 0.3;
+      ctx.fillStyle = '#ffe6b4';
       ctx.beginPath();
       ctx.arc(x, y, s.size * 0.85, 0, Math.PI * 2);
       ctx.fill();
