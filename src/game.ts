@@ -48,6 +48,8 @@ export class Game implements World {
   readonly background = new Background(VIEW_W, VIEW_H);
   private readonly lightPass = new LightPass(VIEW_W, VIEW_H);
   private readonly spores = new Spores(VIEW_W, VIEW_H);
+  private readonly castLayer = Game.makeLayer();
+  private readonly castCtx = this.castLayer.getContext('2d') as CanvasRenderingContext2D;
 
   player: Player;
   boss: Boss | null = null;
@@ -85,6 +87,14 @@ export class Game implements World {
     this.camera.worldBounds = { w: this.level.pixelWidth, h: this.level.pixelHeight };
     this.camera.snapTo(this.player.cx, this.player.cy);
     this.currentZone = zoneAt(this.player.cx).label;
+  }
+
+  /** Offscreen layer at view resolution, used for compositing whole passes. */
+  private static makeLayer(): HTMLCanvasElement {
+    const canvas = document.createElement('canvas');
+    canvas.width = VIEW_W;
+    canvas.height = VIEW_H;
+    return canvas;
   }
 
   private buildFromSpawns(): void {
@@ -501,10 +511,10 @@ export class Game implements World {
     add(
       this.player.cx,
       this.player.cy - 2,
-      176 + swing * 52,
+      172 + swing * 52,
       '168,214,255',
-      1,
-      0.22 + swing * 0.14,
+      0.94,
+      0.13 + swing * 0.1,
     );
 
     const boss = this.boss;
@@ -515,20 +525,37 @@ export class Game implements World {
   }
 
   /**
-   * Draws the cast a second time, additively and faintly, on top of the
-   * darkness. That gives every character a share of its own colour back, so a
-   * bat in an unlit corner still reads as a bat instead of a dark smudge.
+   * Draws the enemies a second time, additively and faintly, on top of the
+   * darkness, so a bat in an unlit corner still reads as a bat.
+   *
+   * This goes through an offscreen layer on purpose. The entities reset
+   * globalAlpha inside their own draw calls (blink, trails, flashes), which
+   * silently ignores any alpha set here and stacks them at full strength -
+   * that is what bleached the hero white. Compositing the finished layer once
+   * keeps the intended weight.
+   *
+   * The hero is deliberately not in here: he already carries the brightest
+   * light in the game, and drawing him twice only costs him his colours.
    */
   private drawCastLight(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.translate(-this.camera.renderX, -this.camera.renderY);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.42;
+    const layer = this.castCtx;
+    let any = false;
+    layer.clearRect(0, 0, VIEW_W, VIEW_H);
+    layer.save();
+    layer.translate(-this.camera.renderX, -this.camera.renderY);
     for (const enemy of this.enemies) {
-      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(ctx, this);
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) {
+        enemy.draw(layer, this);
+        any = true;
+      }
     }
-    ctx.globalAlpha = 0.5;
-    if (!this.player.dead || this.state === 'victory') this.player.draw(ctx, this);
+    layer.restore();
+    if (!any) return;
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.34;
+    ctx.drawImage(this.castLayer, 0, 0);
     ctx.restore();
   }
 
