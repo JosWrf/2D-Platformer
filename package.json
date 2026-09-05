@@ -12,6 +12,7 @@
     "verify:level": "node tools/verify-level.mjs",
     "verify:arena": "node tools/verify-arena.mjs",
     "verify:combat": "node tools/verify-combat.mjs",
+    "verify:ending": "node tools/verify-ending.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"
   },

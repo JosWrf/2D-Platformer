@@ -26,6 +26,13 @@ import { TILE, Tile } from './world/tiles';
 
 const TILE_LAVA_TOP = Tile.LavaTop;
 
+/**
+ * Handed to the hero while the gate is closing around him. The run is decided
+ * at that point, and a held key must not be able to walk him off the ledge
+ * behind the portal and turn a finished run into a death.
+ */
+const NO_INPUT = new Input();
+
 export const VIEW_W = 960;
 export const VIEW_H = 540;
 
@@ -234,6 +241,9 @@ export class Game implements World {
     if (this.victoryTimer > 0 || this.state !== 'playing') return;
     this.victoryTimer = 1.6;
     this.flashWhite = 1;
+    // Stop him where the gate caught him; from here on he is a passenger.
+    this.player.vx = 0;
+    this.player.vy = 0;
     audio.play('victory');
   }
 
@@ -328,7 +338,7 @@ export class Game implements World {
       return;
     }
 
-    this.player.update(dt, input, this);
+    this.player.update(dt, this.victoryTimer > 0 ? NO_INPUT : input, this);
 
     for (const platform of this.platforms) {
       if (!this.isVisible(platform.x, platform.y, 260)) continue;

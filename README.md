@@ -116,12 +116,13 @@ Kacheln breit, Plattformen höchstens drei Reihen über der Fläche darunter.
 
 ## Werkzeuge
 
-Beide Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
+Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 
 ```bash
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
+npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -138,6 +139,11 @@ wieder drin ist.
 `verify:combat` prüft Parade und Ladeschlag am Boss. Die Parade hängt an einem
 Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
 verloren, fühlt sich das nicht schwer an, sondern kaputt.
+
+`verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
+durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft
+weiter. Beides muss im Sieg enden. Der Riss stand vorher nur im statischen
+Modell von `verify:level`, das keine Sprungbögen kennt.
 
 ## Veröffentlichen
 
