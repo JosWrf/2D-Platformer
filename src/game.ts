@@ -600,12 +600,13 @@ export class Game implements World {
     const blend = zoneBlend(this.player.cx);
     const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * blend.t;
     const tint = mixHex(blend.from.darkTint, blend.to.darkTint, blend.t);
-    this.lightPass.draw(ctx, this.camera, this.collectLights(), darkness, tint);
+    const lights = this.collectLights();
+    this.lightPass.draw(ctx, this.camera, lights, darkness, tint);
 
     // Readability first: ledges, pit walls, then the characters themselves keep
     // a share of their own colour on top of the darkness.
     const sporeRgb = blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb;
-    drawEdgeLight(ctx, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb);
+    drawEdgeLight(ctx, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb, lights);
     this.drawCastLight(ctx);
 
     // Spores sit in front of the darkness, so they glow through it.
