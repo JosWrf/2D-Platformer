@@ -77,7 +77,11 @@ export class Scatter {
         // Hanging from a ceiling.
         if (level.tileAt(tx, ty + 1) === Tile.Empty && rng.next() < 0.2) {
           const kind: PropKind =
-            zone === 'caverns' ? 'stalactite' : zone === 'castle' ? 'chain' : 'vine';
+            zone === 'caverns' || zone === 'rift'
+              ? 'stalactite'
+              : zone === 'castle'
+                ? 'chain'
+                : 'vine';
           this.push({
             kind,
             x: tx * TILE + rng.range(6, TILE - 6),
@@ -117,6 +121,11 @@ export class Scatter {
         if (roll < 0.14) return 'rubble';
         if (roll < 0.22) return 'bones';
         if (roll < 0.27) return 'candle';
+        return null;
+      case 'rift':
+        if (roll < 0.2) return 'shard';
+        if (roll < 0.3) return 'rubble';
+        if (roll < 0.34) return 'bones';
         return null;
       default:
         return null;

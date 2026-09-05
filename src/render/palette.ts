@@ -54,7 +54,7 @@ export const PALETTE = {
   bossAura: 'rgba(255,60,60,0.35)',
 } as const;
 
-export type ZoneName = 'forest' | 'ruins' | 'caverns' | 'castle' | 'throne';
+export type ZoneName = 'forest' | 'ruins' | 'caverns' | 'castle' | 'throne' | 'rift';
 
 export interface Zone {
   name: ZoneName;
@@ -146,6 +146,20 @@ export const ZONES: Zone[] = [
     darkness: 0.82,
     darkTint: '#0b0207',
     interior: true,
+  },
+  {
+    name: 'rift',
+    start: 18240,
+    sporeRgb: '206,178,255',
+    darkness: 0.86,
+    darkTint: '#08040f',
+    skyTop: '#080312',
+    skyBottom: '#160a26',
+    hillFar: '#1d1030',
+    hillNear: '#130a20',
+    ambient: 'rgba(150,90,255,0.07)',
+    label: 'Der Riss',
+    interior: false,
   },
 ];
 

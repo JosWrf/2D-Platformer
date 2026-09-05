@@ -9,10 +9,12 @@ export const enum Tile {
   LavaTop = 5,
   Lava = 6,
   Gate = 7,
+  /** Seals the way past the throne until the knight has fallen. */
+  Seal = 8,
 }
 
 export function isSolid(tile: Tile): boolean {
-  return tile === Tile.Solid || tile === Tile.Earth || tile === Tile.Gate;
+  return tile === Tile.Solid || tile === Tile.Earth || tile === Tile.Gate || tile === Tile.Seal;
 }
 
 export function isPlatform(tile: Tile): boolean {
@@ -36,7 +38,8 @@ export type SpawnKind =
   | 'torch'
   | 'crystal'
   | 'moverH'
-  | 'moverV';
+  | 'moverV'
+  | 'portal';
 
 export interface Spawn {
   kind: SpawnKind;
@@ -55,6 +58,7 @@ export const CHAR_TO_TILE: Record<string, Tile> = {
   L: Tile.LavaTop,
   l: Tile.Lava,
   G: Tile.Gate,
+  S: Tile.Seal,
 };
 
 export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
@@ -71,4 +75,5 @@ export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
   X: 'crystal',
   M: 'moverH',
   V: 'moverV',
+  O: 'portal',
 };

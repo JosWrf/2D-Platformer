@@ -5,8 +5,8 @@
 Läuft direkt im Browser, ohne Installation: **joswrf.github.io/2D-Platformer**
 
 Ein 2D-Jump-'n'-Run in TypeScript: ein schwertschwingender Held kämpft sich
-durch ein großes, zusammenhängendes Level über fünf Zonen bis in den Thronsaal
-des Schattenritters Morvain.
+durch ein großes, zusammenhängendes Level über sechs Zonen bis in den Thronsaal
+des Schattenritters Morvain — und darüber hinaus.
 
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
 auf ein `<canvas>` gezeichnet, Soundeffekte werden per WebAudio synthetisiert.
@@ -41,15 +41,20 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Das Level
 
-Ein durchgehendes Level aus 570 Kacheln (18 240 px) in fünf Zonen:
+Ein durchgehendes Level aus 690 Kacheln (22 080 px) in sechs Zonen:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
 3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
 4. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
 5. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
+6. **Der Riss** — was hinter dem Thron aufbricht: Bruchstücke über dem Abgrund,
+   wandernde Plattformen, dunkle Magier
 
 Kontrollpunkte sichern den Fortschritt, Edelsteine geben Punkte, Herzen heilen.
+
+Der Fall des Ritters ist nicht das Ende: Er bricht das Siegel hinter dem Thron
+auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses.
 
 | | |
 | --- | --- |
@@ -77,7 +82,8 @@ nur gegen Angriffe; Stacheln und Lava lassen sich nicht wegparieren.
 | | |
 | --- | --- |
 | ![Boss erscheint](screenshots/11-boss-erscheint.png) | ![Phase 2](screenshots/13-bosskampf-phase-2.png) |
-| ![Phase 3](screenshots/14-bosskampf-phase-3.png) | ![Sieg](screenshots/15-sieg.png) |
+| ![Phase 3](screenshots/14-bosskampf-phase-3.png) | ![Der Riss](screenshots/16-der-riss.png) |
+| ![Das Tor](screenshots/17-das-tor.png) | ![Sieg](screenshots/18-sieg.png) |
 
 ## Aufbau des Codes
 
@@ -99,6 +105,7 @@ horizontal aneinandergehängt:
 ```
 .  leer          #  Stein        =  Erde         -  Holzplattform
 ^  Stacheln      L/l Lava        G  Fallgitter   P  Startpunkt
+S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
@@ -120,8 +127,9 @@ npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
 
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
-einem bewusst konservativen Sprungmodell, ob der Boss vom Startpunkt aus
-erreichbar ist — nützlich, sobald man am Level schraubt.
+einem bewusst konservativen Sprungmodell, ob Boss **und** Tor vom Startpunkt
+aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet auch
+begehbare Stellen, die von nirgendwo aus zu erreichen sind.
 
 `verify:arena` spielt einen Softlock nach: den Schattenritter ans Fallgitter
 locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler

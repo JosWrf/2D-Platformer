@@ -7,6 +7,7 @@ import { Enemy, EnemyKind, createEnemy } from './entities/enemy';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
 import { Player } from './entities/player';
+import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
@@ -55,6 +56,9 @@ export class Game implements World {
 
   player: Player;
   boss: Boss | null = null;
+  portal: Portal | null = null;
+  /** Stays true once the knight has fallen, across deaths in the rift. */
+  bossDefeated = false;
 
   state: GameState = 'title';
   time = 0;
@@ -113,6 +117,9 @@ export class Game implements World {
           break;
         case 'boss':
           this.boss = new Boss(x - 16, y - 60);
+          break;
+        case 'portal':
+          this.portal = new Portal(x - 6, y + TILE - 62);
           break;
         case 'gem':
           this.pickups.push(new Pickup('gem', x + 8, y + 8));
@@ -211,8 +218,21 @@ export class Game implements World {
   }
 
   onBossDefeated(): void {
+    // The knight's fall is not the end any more: it breaks the seal behind the
+    // throne and opens the road into the rift.
     this.level.gateClosed = false;
-    this.victoryTimer = 1.8;
+    this.level.exitSealed = false;
+    this.bossDefeated = true;
+    this.flashWhite = 1;
+    this.zoneBanner = { text: 'DAS SIEGEL BRICHT', timer: 3.4 };
+    audio.play('victory');
+    this.camera.addShake(10);
+  }
+
+  /** Reaching the gate home is what actually finishes the run. */
+  onPortalReached(): void {
+    if (this.victoryTimer > 0 || this.state !== 'playing') return;
+    this.victoryTimer = 1.6;
     this.flashWhite = 1;
     audio.play('victory');
   }
@@ -371,6 +391,11 @@ export class Game implements World {
       }
     }
 
+    if (this.portal) {
+      this.portal.update(dt);
+      if (!this.player.dead && this.portal.overlaps(this.player.rect)) this.onPortalReached();
+    }
+
     for (const cp of this.checkpoints) {
       if (!this.isVisible(cp.x, cp.y, 200)) continue;
       if (cp.update(dt, this)) {
@@ -423,10 +448,17 @@ export class Game implements World {
     for (const pickup of this.pickups) {
       pickup.dead = this.collected.has(pickup.id);
     }
-    if (this.boss) {
+    if (this.boss && !this.bossDefeated) {
       this.boss.reset();
       this.bossGhostHp = this.boss.maxHp;
       this.level.gateClosed = false;
+    } else if (this.boss) {
+      // Dying in the rift must not raise the knight again, nor drop the seal
+      // behind the player - that would shut the way forward for good.
+      this.boss.dead = true;
+      this.boss.engaged = false;
+      this.level.gateClosed = false;
+      this.level.exitSealed = false;
     }
     this.state = 'playing';
     this.camera.snapTo(this.player.cx, this.player.cy);
@@ -445,6 +477,8 @@ export class Game implements World {
     for (const cp of this.checkpoints) cp.activated = false;
     for (const pickup of this.pickups) pickup.dead = false;
     this.victoryTimer = 0;
+    this.bossDefeated = false;
+    this.level.exitSealed = true;
     this.respawnAtCheckpoint();
   }
 
@@ -530,6 +564,7 @@ export class Game implements World {
     );
 
     this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);
+    if (this.portal) add(this.portal.cx, this.portal.cy, 190, '186,132,255', 0.9, 0.34);
 
     const boss = this.boss;
     if (boss && !boss.dead && boss.engaged) {
@@ -673,6 +708,7 @@ export class Game implements World {
     for (const cp of this.checkpoints) {
       if (this.isVisible(cp.x, cp.y, 120)) cp.draw(ctx);
     }
+    if (this.portal && this.isVisible(this.portal.x, this.portal.y, 200)) this.portal.draw(ctx);
     for (const platform of this.platforms) {
       if (this.isVisible(platform.x, platform.y, 200)) platform.draw(ctx);
     }

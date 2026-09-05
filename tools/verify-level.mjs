@@ -38,6 +38,9 @@ const report = await page.evaluate(() => {
   const g = window.game;
   const L = g.level;
   const TILE = 32;
+  // The seal behind the throne opens when the knight falls; for a static
+  // reachability check it has to be treated as open, like the arena gate.
+  L.exitSealed = false;
   const W = L.width;
   const H = L.height;
 
@@ -138,6 +141,8 @@ const report = await page.evaluate(() => {
 
   const boss = L.spawns.find((s) => s.kind === 'boss');
   const bossReachable = maxX >= boss.tx - 2;
+  const portal = L.spawns.find((s) => s.kind === 'portal');
+  const portalReachable = portal ? maxX >= portal.tx - 2 : false;
 
   return {
     width: W,
@@ -145,6 +150,8 @@ const report = await page.evaluate(() => {
     furthestReachableTile: maxX,
     bossTile: boss.tx,
     bossReachable,
+    portalTile: portal ? portal.tx : null,
+    portalReachable,
     unreachableRanges: ranges.slice(0, 20),
   };
 });
@@ -152,4 +159,6 @@ const report = await page.evaluate(() => {
 console.log(JSON.stringify(report, null, 2));
 await browser.close();
 server.close();
-process.exit(report.bossReachable ? 0 : 1);
+if (!report.bossReachable) console.error('FAIL: the boss cannot be reached from the spawn.');
+if (!report.portalReachable) console.error('FAIL: the gate home cannot be reached.');
+process.exit(report.bossReachable && report.portalReachable ? 0 : 1);

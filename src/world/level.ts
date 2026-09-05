@@ -19,6 +19,8 @@ export class Level {
   gateClosed = false;
   /** World x just right of the gate - everything beyond it is the arena. */
   readonly arenaLeft: number;
+  /** The way out of the throne room stays shut until the knight falls. */
+  exitSealed = true;
 
   constructor() {
     let width = 0;
@@ -70,6 +72,7 @@ export class Level {
   solidAt(tx: number, ty: number): boolean {
     const t = this.tileAt(tx, ty);
     if (t === Tile.Gate) return this.gateClosed;
+    if (t === Tile.Seal) return this.exitSealed;
     return isSolid(t);
   }
 

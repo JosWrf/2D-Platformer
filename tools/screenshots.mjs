@@ -218,7 +218,7 @@ results.phase3 = await fightRound(60 * 90, 'phase3');
 results.phase3attack = await fightRound(60 * 20, 'attack', 150);
 await shot('14-bosskampf-phase-3');
 
-/* 15 — victory ----------------------------------------------------------- */
+/* 15 — the seal breaks, the rift opens ------------------------------------ */
 results.finish = await fightRound(60 * 120);
 await page.evaluate(() => {
   const g = window.game;
@@ -227,8 +227,33 @@ await page.evaluate(() => {
     g.boss.hurt(g.boss.hp, 1, g);
   }
 });
-await step(60 * 7);
-await shot('15-sieg');
+await step(60 * 5);
+results.sealOpen = await page.evaluate(() => !window.game.level.exitSealed);
+
+/* 16 — the rift ----------------------------------------------------------- */
+await open('?x=585');
+await step(40);
+await step(40, { right: true });
+await release('right');
+await step(10);
+await shot('16-der-riss');
+
+/* 17 — the gate home ------------------------------------------------------ */
+await open('?x=676');
+await step(40);
+await step(46, { right: true });
+await release('right');
+await step(10);
+await shot('17-das-tor');
+
+/* 18 — victory ------------------------------------------------------------ */
+await page.evaluate(() => {
+  const g = window.game;
+  g.player.x = g.portal.cx - 8;
+  g.player.y = g.portal.y + 10;
+});
+await step(60 * 5);
+await shot('18-sieg');
 results.finalState = await page.evaluate(() => window.game.state);
 
 console.log(JSON.stringify(results, null, 2));

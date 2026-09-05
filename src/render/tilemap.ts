@@ -52,6 +52,15 @@ function colorsForZone(x: number): ZoneTileColors {
         edge: '#3a262c',
         stoneLedges: true,
       };
+    case 'rift':
+      return {
+        body: '#2b2140',
+        bodyDark: '#180f28',
+        top: '#5a3d8a',
+        topLight: '#8a63c4',
+        edge: '#3c2760',
+        stoneLedges: true,
+      };
     default:
       return {
         body: '#3a2028',
@@ -98,6 +107,9 @@ export function drawTilemap(
           break;
         case Tile.Gate:
           if (level.gateClosed) drawGate(ctx, px, py, time, ty);
+          break;
+        case Tile.Seal:
+          if (level.exitSealed) drawSeal(ctx, px, py, time, ty);
           break;
         case Tile.Platform:
           drawPlatform(ctx, px, py, colors, noise);
@@ -214,6 +226,30 @@ function drawBlock(
 }
 
 /** The portcullis that seals the boss arena once the fight begins. */
+/** The warded stone behind the throne: runes that hold until the knight falls. */
+function drawSeal(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
+  ctx.fillStyle = '#150c1e';
+  ctx.fillRect(px, py, TILE, TILE);
+  ctx.fillStyle = '#2a1c38';
+  ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+
+  const pulse = 0.55 + Math.sin(time * 2 + ty * 0.9) * 0.45;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(190,130,255,${(0.3 + pulse * 0.45).toFixed(2)})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(px + TILE / 2, py + TILE / 2, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px + 6, py + TILE / 2);
+  ctx.lineTo(px + TILE - 6, py + TILE / 2);
+  ctx.moveTo(px + TILE / 2, py + 6);
+  ctx.lineTo(px + TILE / 2, py + TILE - 6);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
   ctx.fillStyle = '#0d0a10';
   ctx.fillRect(px, py, TILE, TILE);
