@@ -1,4 +1,5 @@
 import { Camera } from '../core/camera';
+import { Rng } from '../core/math';
 import { Zone, mixHex, zoneBlend } from './palette';
 
 /** Procedural parallax backdrop: near-black sky, two hill layers and motes. */
@@ -145,6 +146,87 @@ export class Background {
     ctx.fillRect(0, 0, viewW, viewH);
   }
 
+  /**
+   * Silhouettes between the hills and the play field: trees, broken columns,
+   * rock spires. Without them the middle of the screen is empty black and the
+   * level reads as a strip of tiles floating in the void.
+   */
+  private drawSkyline(
+    ctx: CanvasRenderingContext2D,
+    camera: Camera,
+    time: number,
+    zone: Zone,
+    hillColor: string,
+  ): void {
+    const { viewW, viewH } = this;
+    const spacing = 152;
+    const scroll = camera.x * 0.34;
+    const baseY = viewH * 1.02 - camera.y * 0.2;
+    const near = mixHex(hillColor, '#000000', 0.3);
+    const dark = mixHex(hillColor, '#000000', 0.55);
+
+    const first = Math.floor(scroll / spacing) - 1;
+    for (let i = first; i * spacing - scroll < viewW + spacing; i++) {
+      const x = i * spacing - scroll;
+      const rng = new Rng(i * 7717 + 13);
+      if (rng.next() > 0.82) continue;
+      const scale = rng.range(0.7, 1.35);
+      const sway = Math.sin(time * 0.5 + i) * 1.6;
+
+      switch (zone.name) {
+        case 'forest': {
+          // Trunk, then a few overlapping crowns.
+          const h = 210 * scale;
+          ctx.fillStyle = dark;
+          ctx.fillRect(x - 5 * scale, baseY - h, 10 * scale, h);
+          ctx.fillStyle = near;
+          for (let c = 0; c < 4; c++) {
+            const cx = x + rng.range(-44, 44) * scale + sway;
+            const cy = baseY - h - rng.range(-20, 40) * scale;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rng.range(34, 60) * scale, rng.range(24, 42) * scale, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        }
+        case 'ruins': {
+          const h = rng.range(120, 235) * scale;
+          ctx.fillStyle = dark;
+          ctx.fillRect(x - 11 * scale, baseY - h, 22 * scale, h);
+          ctx.fillStyle = near;
+          ctx.fillRect(x - 16 * scale, baseY - h - 9 * scale, 32 * scale, 9 * scale);
+          // Broken top edge.
+          ctx.fillStyle = dark;
+          ctx.fillRect(x - 16 * scale, baseY - h - 9 * scale, 9 * scale, 4 * scale);
+          break;
+        }
+        case 'caverns': {
+          const h = rng.range(110, 240) * scale;
+          ctx.fillStyle = dark;
+          ctx.beginPath();
+          ctx.moveTo(x - 26 * scale, baseY);
+          ctx.lineTo(x + rng.range(-8, 8), baseY - h);
+          ctx.lineTo(x + 26 * scale, baseY);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
+        case 'castle': {
+          const h = rng.range(130, 250) * scale;
+          ctx.fillStyle = dark;
+          ctx.fillRect(x - 20 * scale, baseY - h, 40 * scale, h);
+          ctx.fillStyle = near;
+          for (let c = 0; c < 4; c++) {
+            ctx.fillRect(x - 20 * scale + c * 11 * scale, baseY - h - 7 * scale, 7 * scale, 7 * scale);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
     const { viewW, viewH } = this;
     const focusX = camera.x + viewW / 2;
@@ -163,6 +245,7 @@ export class Background {
 
     Background.hills(ctx, hillFar, camera.x * 0.12, viewH * 0.74 - camera.y * 0.06, 46, 1, 1.7, viewW, viewH);
     Background.hills(ctx, hillNear, camera.x * 0.28, viewH * 0.88 - camera.y * 0.12, 62, 1.4, 4.1, viewW, viewH);
+    this.drawSkyline(ctx, camera, time, t > 0.5 ? to : from, hillNear);
 
     // Interior zones (caves, throne hall) replace the sky with walls.
     const interiorAmount = (from.interior ? 1 - t : 0) + (to.interior ? t : 0);

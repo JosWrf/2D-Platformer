@@ -14,6 +14,7 @@ import { Decor } from './render/decor';
 import { Spores } from './render/atmosphere';
 import { LightPass, type Light } from './render/lighting';
 import { drawEdgeLight } from './render/rims';
+import { Scatter } from './render/scatter';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
@@ -48,6 +49,7 @@ export class Game implements World {
   readonly background = new Background(VIEW_W, VIEW_H);
   private readonly lightPass = new LightPass(VIEW_W, VIEW_H);
   private readonly spores = new Spores(VIEW_W, VIEW_H);
+  private readonly scatter = new Scatter(this.level);
   private readonly castLayer = Game.makeLayer();
   private readonly castCtx = this.castLayer.getContext('2d') as CanvasRenderingContext2D;
 
@@ -75,6 +77,7 @@ export class Game implements World {
   private checkpointX: number;
   private checkpointY: number;
   private flashWhite = 0;
+  private ambientTimer = 0;
 
   constructor() {
     const start = this.level.spawns.find((s) => s.kind === 'player');
@@ -283,6 +286,7 @@ export class Game implements World {
     }
 
     this.playTime += dt;
+    this.spawnAmbient(dt);
 
     if (this.victoryTimer > 0) {
       this.victoryTimer -= dt;
@@ -517,11 +521,92 @@ export class Game implements World {
       0.13 + swing * 0.1,
     );
 
+    this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);
+
     const boss = this.boss;
     if (boss && !boss.dead && boss.engaged) {
       add(boss.cx, boss.cy - 10, 210, '255,74,58', 0.8, 0.16);
     }
     return lights;
+  }
+
+  /**
+   * Weather, of a sort: each zone drips, drifts or glows in its own way. It is
+   * the cheapest way to make a place feel inhabited rather than painted, and it
+   * runs entirely through the existing particle system.
+   */
+  private spawnAmbient(dt: number): void {
+    this.ambientTimer -= dt;
+    if (this.ambientTimer > 0) return;
+    this.ambientTimer = rand(0.08, 0.2);
+
+    const zone = zoneAt(this.player.cx).name;
+    const x = this.camera.x + rand(-40, VIEW_W + 40);
+    const y = this.camera.y + rand(-40, VIEW_H);
+
+    switch (zone) {
+      case 'forest':
+        // Leaves, tumbling more than falling.
+        this.particles.spawn({
+          x,
+          y: this.camera.y - 20,
+          vx: rand(-26, 8),
+          vy: rand(14, 34),
+          color: Math.random() < 0.5 ? 'rgba(86,150,78,0.7)' : 'rgba(146,120,58,0.65)',
+          gravity: 5,
+          drag: 0.995,
+          size: rand(2, 3.5),
+          life: rand(3.5, 6),
+        });
+        break;
+      case 'ruins':
+        this.particles.spawn({
+          x,
+          y,
+          vx: rand(-8, 8),
+          vy: rand(-14, -4),
+          color: 'rgba(186,168,214,0.4)',
+          gravity: -3,
+          size: rand(1, 2.2),
+          life: rand(2.5, 4.5),
+          shape: 'circle',
+        });
+        break;
+      case 'caverns': {
+        // Water finding its way down through the rock.
+        const dropY = this.camera.y + rand(-30, 60);
+        this.particles.spawn({
+          x,
+          y: dropY,
+          vx: 0,
+          vy: 60,
+          color: 'rgba(150,220,255,0.75)',
+          gravity: 520,
+          drag: 1,
+          size: rand(1.4, 2.4),
+          life: rand(0.9, 1.5),
+          shape: 'circle',
+        });
+        break;
+      }
+      case 'castle':
+        // Embers climbing out of the braziers.
+        this.particles.spawn({
+          x,
+          y: this.camera.y + VIEW_H + 10,
+          vx: rand(-12, 12),
+          vy: rand(-40, -18),
+          color: Math.random() < 0.6 ? 'rgba(255,150,70,0.7)' : 'rgba(255,90,50,0.6)',
+          gravity: -8,
+          drag: 0.99,
+          size: rand(1.2, 2.6),
+          life: rand(2.5, 4.5),
+          shape: 'circle',
+        });
+        break;
+      default:
+        break;
+    }
   }
 
   /**
@@ -569,6 +654,7 @@ export class Game implements World {
     ctx.translate(-this.camera.renderX, -this.camera.renderY);
 
     drawTilemap(ctx, this.level, this.camera, this.time);
+    this.scatter.draw(ctx, this.camera, VIEW_W, this.time);
 
     for (const d of this.decor) {
       if (this.isVisible(d.x, d.y, 120)) d.draw(ctx);
