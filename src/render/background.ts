@@ -203,8 +203,9 @@ export class Background {
       let sx = s.x - starScroll;
       if (sx < 0) sx += viewW * 2;
       if (sx > viewW) continue;
-      const a = 0.35 + Math.sin(time * 2 + s.twinkle) * 0.3;
-      ctx.globalAlpha = Math.max(0, a) * 0.9;
+      // Faint: the drifting spores carry the sparkle now, stars only hint depth.
+      const a = 0.14 + Math.sin(time * 2 + s.twinkle) * 0.1;
+      ctx.globalAlpha = Math.max(0, a);
       ctx.fillStyle = '#dfe7ff';
       ctx.fillRect(sx, s.y - camera.y * 0.03, s.size, s.size);
     }
@@ -215,16 +216,18 @@ export class Background {
     const moonY = viewH * 0.2 - camera.y * 0.04;
     if (moonX > -80 && moonX < viewW + 80) {
       const g = ctx.createRadialGradient(moonX, moonY, 6, moonX, moonY, 90);
-      g.addColorStop(0, 'rgba(246,240,216,0.35)');
+      g.addColorStop(0, 'rgba(246,240,216,0.14)');
       g.addColorStop(1, 'rgba(246,240,216,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(moonX, moonY, 90, 0, Math.PI * 2);
       ctx.fill();
+      ctx.globalAlpha = 0.32;
       ctx.fillStyle = PALETTE.moon;
       ctx.beginPath();
-      ctx.arc(moonX, moonY, 26, 0, Math.PI * 2);
+      ctx.arc(moonX, moonY, 22, 0, Math.PI * 2);
       ctx.fill();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = 'rgba(200,196,175,0.5)';
       ctx.beginPath();
       ctx.arc(moonX - 8, moonY - 6, 5, 0, Math.PI * 2);

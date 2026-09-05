@@ -11,13 +11,17 @@ import { Projectile } from './entities/projectile';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
 import { Decor } from './render/decor';
-import { PALETTE, zoneAt } from './render/palette';
+import { Spores } from './render/atmosphere';
+import { LightPass, type Light } from './render/lighting';
+import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
 import { drawBossBar, drawHeart, drawPanel, drawTextCentered, font } from './ui/hud';
 import type { World } from './world/context';
 import { Level } from './world/level';
-import { TILE } from './world/tiles';
+import { TILE, Tile } from './world/tiles';
+
+const TILE_LAVA_TOP = Tile.LavaTop;
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
@@ -41,6 +45,8 @@ export class Game implements World {
   readonly platforms: MovingPlatform[] = [];
   readonly decor: Decor[] = [];
   readonly background = new Background(VIEW_W, VIEW_H);
+  private readonly lightPass = new LightPass(VIEW_W, VIEW_H);
+  private readonly spores = new Spores(VIEW_W, VIEW_H);
 
   player: Player;
   boss: Boss | null = null;
@@ -424,6 +430,76 @@ export class Game implements World {
     this.respawnAtCheckpoint();
   }
 
+  /**
+   * Everything that glows, in world space. The lighting pass burns these out of
+   * the darkness, so anything the player must see - hazards, pickups, the
+   * knight - has to be in here.
+   */
+  private collectLights(): Light[] {
+    const lights: Light[] = [];
+    const add = (x: number, y: number, radius: number, rgb: string, strength: number, tint = 0.22): void => {
+      if (!this.isVisible(x, y, radius)) return;
+      lights.push({ x, y, radius, rgb, strength, tint });
+    };
+
+    for (const d of this.decor) {
+      if (d.kind === 'torch') {
+        const flicker = 0.92 + Math.sin(this.time * 7 + d.x) * 0.08;
+        add(d.x + 8, d.y + 2, 190 * flicker, '255,168,84', 1, 0.34);
+      } else {
+        add(d.x + 8, d.y - 6, 120, '99,230,255', 0.85, 0.4);
+      }
+    }
+
+    // Lava lights the cave from below; sampling every other column is plenty.
+    const t0 = Math.floor(this.camera.x / TILE) - 1;
+    const t1 = Math.ceil((this.camera.x + VIEW_W) / TILE) + 1;
+    const r0 = Math.floor(this.camera.y / TILE) - 1;
+    const r1 = Math.ceil((this.camera.y + VIEW_H) / TILE) + 1;
+    for (let tx = t0; tx <= t1; tx += 2) {
+      for (let ty = r0; ty <= r1; ty++) {
+        if (this.level.tileAt(tx, ty) === TILE_LAVA_TOP) {
+          add(tx * TILE + TILE, ty * TILE + 6, 150, '255,122,60', 0.95, 0.42);
+        }
+      }
+    }
+
+    for (const pickup of this.pickups) {
+      if (pickup.dead) continue;
+      const glowRgb = pickup.kind === 'gem' ? '242,193,78' : '255,87,115';
+      add(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, 46, glowRgb, 0.9, 0.42);
+    }
+    for (const cp of this.checkpoints) {
+      add(cp.x + 12, cp.y + 20, cp.activated ? 150 : 70, cp.activated ? '255,214,110' : '110,140,190', 0.8, 0.32);
+    }
+    for (const p of this.projectiles) {
+      const rgb = p.kind === 'orb' ? '210,110,255' : p.kind === 'shockwave' ? '255,140,90' : '200,180,160';
+      add(p.cx, p.cy, p.kind === 'bone' ? 40 : 84, rgb, 0.8, 0.34);
+    }
+    for (const enemy of this.enemies) {
+      if (enemy.dead) continue;
+      if (enemy.kind === 'mage') add(enemy.cx, enemy.cy, 96, '200,90,223', 0.75, 0.36);
+      else if (enemy.kind === 'slime') add(enemy.cx, enemy.cy, 54, '124,224,122', 0.5, 0.24);
+    }
+
+    // The hero carries his own light, and the blade flares when it swings.
+    const swing = this.player.isAttacking ? 1 : 0;
+    add(
+      this.player.cx,
+      this.player.cy - 2,
+      168 + swing * 52,
+      '150,205,255',
+      1,
+      0.18 + swing * 0.14,
+    );
+
+    const boss = this.boss;
+    if (boss && !boss.dead && boss.engaged) {
+      add(boss.cx, boss.cy - 10, 230, '255,74,58', 0.85, 0.3);
+    }
+    return lights;
+  }
+
   /* --------------------------------------------------------------- render */
 
   render(ctx: CanvasRenderingContext2D): void {
@@ -461,6 +537,13 @@ export class Game implements World {
     this.particles.drawTexts(ctx);
 
     ctx.restore();
+
+    const blend = zoneBlend(this.player.cx);
+    const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * blend.t;
+    const tint = mixHex(blend.from.darkTint, blend.to.darkTint, blend.t);
+    this.lightPass.draw(ctx, this.camera, this.collectLights(), darkness, tint);
+    // Spores sit in front of the darkness, so they glow through it.
+    this.spores.draw(ctx, this.camera, this.time, blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb);
 
     this.drawLighting(ctx);
     if (this.state !== 'title') this.drawHud(ctx);

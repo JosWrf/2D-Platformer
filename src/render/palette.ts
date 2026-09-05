@@ -10,13 +10,13 @@ export const PALETTE = {
   stoneLight: '#3b4569',
   stoneEdge: '#556084',
 
-  grass: '#3fa14a',
-  grassLight: '#63c96b',
-  grassDark: '#1f6a35',
+  grass: '#46b84f',
+  grassLight: '#7ee07a',
+  grassDark: '#1c7a38',
 
-  dirt: '#4a3324',
-  dirtDark: '#33231a',
-  dirtLight: '#65462f',
+  dirt: '#542c26',
+  dirtDark: '#331a19',
+  dirtLight: '#74392f',
 
   wood: '#6b4326',
   woodLight: '#8a5a34',
@@ -68,6 +68,12 @@ export interface Zone {
   label: string;
   /** Interior zones swap the sky backdrop for a hall/cave wall. */
   interior: boolean;
+  /** How black the zone falls away from its light sources, 0..1. */
+  darkness: number;
+  /** Colour of that darkness, so each zone sinks into its own kind of black. */
+  darkTint: string;
+  /** Colour of the spores drifting through the zone, as "r,g,b". */
+  sporeRgb: string;
 }
 
 export const ZONES: Zone[] = [
@@ -80,6 +86,9 @@ export const ZONES: Zone[] = [
     hillNear: '#16232f',
     ambient: 'rgba(90,160,190,0.05)',
     label: 'Nebelwald',
+    sporeRgb: '255,206,116',
+    darkness: 0.72,
+    darkTint: '#050a10',
     interior: false,
   },
   {
@@ -91,6 +100,9 @@ export const ZONES: Zone[] = [
     hillNear: '#1d1830',
     ambient: 'rgba(150,110,200,0.06)',
     label: 'Versunkene Ruinen',
+    sporeRgb: '206,168,255',
+    darkness: 0.76,
+    darkTint: '#080512',
     interior: false,
   },
   {
@@ -102,6 +114,9 @@ export const ZONES: Zone[] = [
     hillNear: '#0a1a25',
     ambient: 'rgba(80,220,255,0.07)',
     label: 'Kristallhöhlen',
+    sporeRgb: '138,236,255',
+    darkness: 0.88,
+    darkTint: '#01060c',
     interior: true,
   },
   {
@@ -113,6 +128,9 @@ export const ZONES: Zone[] = [
     hillNear: '#1d0f17',
     ambient: 'rgba(255,110,80,0.06)',
     label: 'Burg Nachtfall',
+    sporeRgb: '255,172,112',
+    darkness: 0.78,
+    darkTint: '#0c0509',
     interior: false,
   },
   {
@@ -124,6 +142,9 @@ export const ZONES: Zone[] = [
     hillNear: '#20080f',
     ambient: 'rgba(255,60,60,0.09)',
     label: 'Thronsaal des Schattenritters',
+    sporeRgb: '255,124,104',
+    darkness: 0.82,
+    darkTint: '#0b0207',
     interior: true,
   },
 ];
