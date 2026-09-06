@@ -85,6 +85,21 @@ function colorsForZone(x: number): ZoneTileColors {
         ledgeEdge: '#6a4aa0',
         calm,
       };
+    case 'crystalworld':
+      return {
+        body: '#1b3450',
+        bodyDark: '#0c1a2c',
+        // Cyan carries far more luminance than the violet of the rift at the
+        // same nominal brightness, so these are measured down twice as far:
+        // the floor came out brighter than the hero standing on it.
+        top: '#1e5069',
+        topLight: '#2f7290',
+        edge: '#173f57',
+        stoneLedges: true,
+        ledge: '#204a68',
+        ledgeEdge: '#4d90b4',
+        calm,
+      };
     default:
       return {
         body: '#3a2028',

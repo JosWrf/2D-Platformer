@@ -6,7 +6,7 @@ import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
 
-export type EnemyKind = 'slime' | 'bat' | 'skeleton' | 'mage' | 'warden';
+export type EnemyKind = 'slime' | 'bat' | 'skeleton' | 'mage' | 'warden' | 'prismarch';
 
 export abstract class Enemy extends Body {
   hp = 2;
@@ -854,6 +854,301 @@ export class Warden extends Enemy {
   }
 }
 
+/* --------------------------------------------------------------- prismarch */
+
+/** Damage it shrugs off mid-move. Higher than the warden's: it is the last word. */
+const PRISM_POISE = 7;
+
+/**
+ * Prismarch, the heart of the crystal - the bonus boss behind the world, and
+ * the only thing in the game the player has to earn a fight with.
+ *
+ * Built on the warden's lesson rather than the knight's code: a move once begun
+ * is seen through, and every one of them is announced before it lands. What
+ * makes this one the harder fight is not shorter warnings but more of them at
+ * once - in its second half it answers with two things instead of one.
+ */
+export class Prismarch extends Enemy {
+  private state:
+    | 'wait'
+    | 'stalk'
+    | 'fanWind'
+    | 'rainWind'
+    | 'rain'
+    | 'chargeWind'
+    | 'charge'
+    | 'recover' = 'wait';
+  private timer = 0;
+  private core = 0;
+  private poise = PRISM_POISE;
+  private rainLeft = 0;
+  private rainTimer = 0;
+  private hitThisMove = false;
+  private lastMove = '';
+  engaged = false;
+
+  constructor(x: number, y: number) {
+    super('prismarch', x, y);
+    this.w = 58;
+    this.h = 74;
+    this.hp = this.maxHp = 70;
+    this.scoreValue = 3000;
+    this.aggroRange = 460;
+    this.contactDamage = 1;
+  }
+
+  /** Second half of the fight: shorter pauses, and the rain comes in twos. */
+  get phase(): 1 | 2 {
+    return this.hp <= this.maxHp / 2 ? 2 : 1;
+  }
+
+  protected override deathColor(): string {
+    return '#8fe8ff';
+  }
+
+  override hurt(amount: number, fromDir: number, world: World): void {
+    if (this.dead) return;
+    this.hp -= amount;
+    this.flash = 1;
+    this.poise -= amount;
+    if (this.hp <= 0) {
+      this.die(world);
+      return;
+    }
+    audio.play('bossHit');
+    if (this.poise <= 0) {
+      this.poise = PRISM_POISE;
+      this.stun = 0.55;
+      this.vx = fromDir * 120;
+      world.particles.burst(this.cx, this.cy, 20, '#bff2ff', { speed: 220, shape: 'spark' });
+    }
+  }
+
+  protected override die(world: World): void {
+    super.die(world);
+    world.particles.burst(this.cx, this.cy, 70, '#8fe8ff', { speed: 320, gravity: 200, size: 5 });
+    world.onCrystalBossDefeated();
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    this.core = Math.max(0, this.core - dt * 2);
+
+    if (!this.engaged) {
+      if (dist < this.aggroRange && !player.dead) {
+        this.engaged = true;
+        this.state = 'recover';
+        this.timer = 1.2;
+        world.camera.addShake(6);
+      }
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.stun > 0) {
+      if (this.state !== 'recover') {
+        this.state = 'recover';
+        this.timer = 0.8;
+      }
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.state !== 'charge') this.facing = dx > 0 ? 1 : -1;
+    this.timer -= dt;
+    const quick = this.phase === 2 ? 0.78 : 1;
+
+    switch (this.state) {
+      case 'wait':
+      case 'recover':
+        this.vx = approach(this.vx, 0, 800 * dt);
+        if (this.timer <= 0) {
+          this.state = 'stalk';
+          this.timer = rand(0.45, 0.8) * quick;
+        }
+        break;
+
+      case 'stalk': {
+        const want = dist > 150 ? sign(dx) * 62 : dist < 80 ? -sign(dx) * 62 : 0;
+        this.vx = approach(this.vx, want, 520 * dt);
+        if (this.timer <= 0) {
+          this.hitThisMove = false;
+          this.core = 1;
+          // Never the same move twice running: the fight has to keep asking a
+          // different question, or it is one pattern learnt and then repeated.
+          const options = dist < 150 ? ['chargeWind', 'rainWind'] : ['fanWind', 'rainWind', 'chargeWind'];
+          const pick = options.filter((o) => o !== this.lastMove);
+          const move = pick[Math.floor(Math.random() * pick.length)] ?? options[0];
+          this.lastMove = move;
+          this.state = move as typeof this.state;
+          this.timer = move === 'rainWind' ? 0.6 * quick : 0.55 * quick;
+          audio.play('shoot', 0.6);
+        }
+        break;
+      }
+
+      case 'fanWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          const spread = this.phase === 2 ? 5 : 3;
+          for (let i = 0; i < spread; i++) {
+            const a = ((i - (spread - 1) / 2) / spread) * 1.5;
+            const dy = player.cy - this.cy;
+            const len = Math.hypot(dx, dy) || 1;
+            const vx = ((dx / len) * Math.cos(a) - (dy / len) * Math.sin(a)) * 215;
+            const vy = ((dx / len) * Math.sin(a) + (dy / len) * Math.cos(a)) * 215;
+            world.spawnProjectile(new Projectile('orb', this.cx - 7, this.cy - 16, vx, vy));
+          }
+          audio.play('shoot');
+          this.state = 'recover';
+          this.timer = 1.25 * quick;
+        }
+        break;
+
+      case 'rainWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          this.state = 'rain';
+          this.rainLeft = this.phase === 2 ? 8 : 5;
+          this.rainTimer = 0;
+          this.timer = 3;
+        }
+        break;
+
+      case 'rain':
+        // Shards dropped from the ceiling, one every fifth of a second, each
+        // aimed a little ahead of where the hero is standing. Running works;
+        // standing still does not.
+        this.vx = approach(this.vx, 0, 700 * dt);
+        this.rainTimer -= dt;
+        if (this.rainTimer <= 0 && this.rainLeft > 0) {
+          this.rainTimer = 0.22;
+          this.rainLeft--;
+          const at = player.cx + player.vx * 0.28 + rand(-40, 40);
+          const shard = new Projectile('rock', at - 10, world.camera.renderY - 30, 0, 190);
+          world.spawnProjectile(shard);
+        }
+        if (this.rainLeft <= 0 && this.timer <= 2.2) {
+          this.state = 'recover';
+          this.timer = 1.15 * quick;
+        }
+        break;
+
+      case 'chargeWind':
+        this.vx = approach(this.vx, -this.facing * 50, 800 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          this.state = 'charge';
+          this.timer = 0.5;
+          this.vx = this.facing * 390;
+          world.camera.addShake(4);
+        }
+        break;
+
+      case 'charge':
+        if (this.timer <= 0 || this.touching.left || this.touching.right) {
+          this.state = 'recover';
+          this.timer = 1.3 * quick;
+        }
+        break;
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+
+    if (this.state === 'charge' && !this.hitThisMove && !player.dead && !player.isInvulnerable && this.overlaps(player.rect)) {
+      this.hitThisMove = true;
+      player.hurt(2, sign(player.cx - this.cx) || 1, world);
+    }
+  }
+
+  override touchPlayer(world: World): void {
+    if (this.state === 'charge') return;
+    super.touchPlayer(world);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.6);
+      ctx.scale(this.facing, 1);
+      const lean = this.state === 'chargeWind' ? -0.14 : this.state === 'charge' ? 0.18 : 0;
+      ctx.rotate(lean);
+      const heat = 0.4 + this.core * 0.6;
+
+      // A ring of shards turning slowly around the body.
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 6; i++) {
+        const a = this.anim * 0.5 + (i / 6) * Math.PI * 2;
+        const rx = Math.cos(a) * (30 + this.core * 8);
+        const ry = -this.h * 0.55 + Math.sin(a) * 15;
+        ctx.globalAlpha = 0.25 + Math.cos(a) * 0.15 + this.core * 0.2;
+        ctx.fillStyle = '#8fe8ff';
+        ctx.beginPath();
+        ctx.moveTo(rx, ry - 9);
+        ctx.lineTo(rx + 5, ry);
+        ctx.lineTo(rx, ry + 9);
+        ctx.lineTo(rx - 5, ry);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Body: a standing prism.
+      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
+      g.addColorStop(0, '#2f5f88');
+      g.addColorStop(0.55, '#1d3a5e');
+      g.addColorStop(1, '#0f1c34');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(0, -this.h - 6);
+      ctx.lineTo(20, -this.h + 22);
+      ctx.lineTo(16, -8);
+      ctx.lineTo(-16, -8);
+      ctx.lineTo(-20, -this.h + 22);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(160,225,255,0.18)';
+      ctx.beginPath();
+      ctx.moveTo(0, -this.h - 6);
+      ctx.lineTo(20, -this.h + 22);
+      ctx.lineTo(0, -14);
+      ctx.closePath();
+      ctx.fill();
+
+      // The heart, which is also the tell.
+      const cy = -this.h * 0.52;
+      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 44 * heat);
+      halo.addColorStop(0, `rgba(150,235,255,${(0.55 * heat).toFixed(2)})`);
+      halo.addColorStop(1, 'rgba(150,235,255,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(-44, cy - 44, 88, 88);
+      ctx.fillStyle = `rgba(226,250,255,${(0.65 + heat * 0.35).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(0, cy - 15);
+      ctx.lineTo(11, cy);
+      ctx.lineTo(0, cy + 15);
+      ctx.lineTo(-11, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      // Feet, so it stands rather than floats.
+      ctx.fillStyle = '#12233d';
+      ctx.fillRect(-15, -9, 12, 9);
+      ctx.fillRect(3, -9, 12, 9);
+      ctx.restore();
+    });
+  }
+}
+
 export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
   switch (kind) {
     case 'slime':
@@ -866,5 +1161,7 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new DarkMage(x, y);
     case 'warden':
       return new Warden(x, y);
+    case 'prismarch':
+      return new Prismarch(x, y);
   }
 }

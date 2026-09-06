@@ -122,12 +122,28 @@ const report = await page.evaluate(() => {
     }
   }
 
+  /*
+   * The crystal hall is the one place that must NOT be walkable to: it is the
+   * reward for every gem in the world, and a player who can simply stroll in
+   * has been robbed of the errand. So everything from it onwards is left out of
+   * the reachability report, and the opposite is asserted instead.
+   */
+  const bonus = L.spawns.find((s) => s.kind === 'prismarch');
+  let bonusFrom = W;
+  if (bonus) {
+    let tx = bonus.tx;
+    while (tx > 0 && [18, 19, 20, 21].some((ty) => L.solidAt(tx - 1, ty))) tx--;
+    bonusFrom = tx;
+  }
+  const bonusHallSealed = !nodes.some((n, i) => seen[i] && n.tx >= bonusFrom);
+
   // Platform tiles nobody can stand on. The column check below hides these:
   // a platform floating out of reach sits over solid floor, and the floor
   // node makes the whole column count as reached.
   const strandedPlatforms = [];
   nodes.forEach((n, i) => {
     if (seen[i]) return;
+    if (n.tx >= bonusFrom) return;
     if (!L.platformAt(n.tx, n.ty + 1)) return;
     const last = strandedPlatforms[strandedPlatforms.length - 1];
     if (last && n.tx <= last[1] + 1 && n.ty === last[2]) last[1] = Math.max(last[1], n.tx);
@@ -138,6 +154,7 @@ const report = await page.evaluate(() => {
   const reachableCols = new Set();
   const allCols = new Set();
   nodes.forEach((n, i) => {
+    if (n.tx >= bonusFrom) return;
     allCols.add(n.tx);
     if (seen[i]) reachableCols.add(n.tx);
   });
@@ -159,6 +176,8 @@ const report = await page.evaluate(() => {
   return {
     width: W,
     nodes: nodes.length,
+    bonusHallFromTile: bonusFrom,
+    bonusHallSealed,
     strandedPlatforms,
     furthestReachableTile: maxX,
     bossTile: boss.tx,
@@ -174,7 +193,14 @@ await browser.close();
 server.close();
 if (!report.bossReachable) console.error('FAIL: the boss cannot be reached from the spawn.');
 if (!report.portalReachable) console.error('FAIL: the gate home cannot be reached.');
+if (!report.bonusHallSealed) {
+  console.error('FAIL: the crystal hall can be walked into. It is meant to be reached only by teleport.');
+}
 if (report.strandedPlatforms.length) {
   console.error(`FAIL: ${report.strandedPlatforms.length} platform(s) hang out of reach - [fromTile, toTile, row].`);
 }
-process.exit(report.bossReachable && report.portalReachable && !report.strandedPlatforms.length ? 0 : 1);
+process.exit(
+  report.bossReachable && report.portalReachable && report.bonusHallSealed && !report.strandedPlatforms.length
+    ? 0
+    : 1,
+);

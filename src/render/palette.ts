@@ -54,7 +54,7 @@ export const PALETTE = {
   bossAura: 'rgba(255,60,60,0.35)',
 } as const;
 
-export type ZoneName = 'forest' | 'ruins' | 'caverns' | 'castle' | 'throne' | 'rift';
+export type ZoneName = 'forest' | 'ruins' | 'caverns' | 'castle' | 'throne' | 'rift' | 'crystalworld';
 
 export interface Zone {
   name: ZoneName;
@@ -171,6 +171,25 @@ export const ZONES: Zone[] = [
     hillNear: '#130a20',
     ambient: 'rgba(150,90,255,0.07)',
     label: 'Der Riss',
+    interior: false,
+    calm: true,
+  },
+  {
+    name: 'crystalworld',
+    // Behind the rift, reached only by teleport. Nothing walks in here.
+    start: 26048,
+    // This colour is also the rim light along every ledge. Cyan carries a lot
+    // of luminance, so it is pulled down until the floor stops outshining the
+    // hero walking on it.
+    sporeRgb: '126,188,226',
+    darkness: 0.8,
+    darkTint: '#02080f',
+    skyTop: '#02060f',
+    skyBottom: '#071626',
+    hillFar: '#123048',
+    hillNear: '#0b1e30',
+    ambient: 'rgba(80,190,235,0.07)',
+    label: 'Der Kristallhort',
     interior: false,
     calm: true,
   },

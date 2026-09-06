@@ -79,7 +79,7 @@ export class Scatter {
         // Hanging from a ceiling.
         if (level.tileAt(tx, ty + 1) === Tile.Empty && rng.next() < 0.2) {
           const kind: PropKind =
-            zone === 'caverns' || zone === 'rift'
+            zone === 'caverns' || zone === 'rift' || zone === 'crystalworld'
               ? 'stalactite'
               : zone === 'castle'
                 ? 'chain'
@@ -123,6 +123,11 @@ export class Scatter {
         if (roll < 0.14) return 'rubble';
         if (roll < 0.22) return 'bones';
         if (roll < 0.27) return 'candle';
+        return null;
+      case 'crystalworld':
+        if (roll < 0.34) return 'shard';
+        if (roll < 0.46) return 'stalagmite';
+        if (roll < 0.54) return 'rubble';
         return null;
       case 'rift':
         // As densely dressed as the forest floor: the rift used to be bare

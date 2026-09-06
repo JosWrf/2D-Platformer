@@ -3,7 +3,7 @@ import { Camera } from './core/camera';
 import { Input } from './core/input';
 import { clamp, rand } from './core/math';
 import { Boss } from './entities/boss';
-import { Enemy, EnemyKind, Warden, createEnemy } from './entities/enemy';
+import { Enemy, EnemyKind, Prismarch, Warden, createEnemy } from './entities/enemy';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
 import { Player } from './entities/player';
@@ -64,6 +64,17 @@ export class Game implements World {
   player: Player;
   boss: Boss | null = null;
   portal: Portal | null = null;
+  /**
+   * Lines waiting on screen. While this is set the world is frozen: the point
+   * of a dialogue is that it is read, and a hero who can still walk during it
+   * is a hero who walks off the ledge while you read.
+   */
+  dialogue: { speaker: string; lines: string[]; index: number; after: () => void } | null = null;
+  /** True once the crystal hall has been opened, so it is offered only once. */
+  private bonusOffered = false;
+  /** True while the hero is behind the world, fighting the Prismarch. */
+  inCrystalWorld = false;
+  private trueEnding = false;
   /** Stays true once the knight has fallen, across deaths in the rift. */
   bossDefeated = false;
 
@@ -126,6 +137,7 @@ export class Game implements World {
         case 'skeleton':
         case 'mage':
         case 'warden':
+        case 'prismarch':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -242,6 +254,61 @@ export class Game implements World {
     this.camera.addShake(10);
   }
 
+  /**
+   * The Prismarch falls. That is the end of the longer road, so it ends the run
+   * outright rather than sending the hero back through the gate.
+   */
+  onCrystalBossDefeated(): void {
+    if (this.victoryTimer > 0 || this.state !== 'playing') return;
+    this.trueEnding = true;
+    this.score += 5000;
+    this.flashWhite = 1;
+    this.zoneBanner = { text: 'DAS HERZ ZERSPRINGT', timer: 3.4 };
+    this.camera.addShake(10);
+    audio.play('victory');
+    this.victoryTimer = 2.4;
+    this.player.vx = 0;
+    this.player.vy = 0;
+  }
+
+  /**
+   * Every gem in the world, and the way behind it opens. The dialogue comes
+   * first and the teleport only once it has been read - being pulled out of the
+   * level mid-jump with no word of explanation reads as a bug, not a reward.
+   */
+  private offerCrystalWorld(): void {
+    if (this.bonusOffered || this.inCrystalWorld) return;
+    this.bonusOffered = true;
+    this.dialogue = {
+      speaker: 'EINE STIMME AUS DEM STEIN',
+      lines: [
+        'Alle Splitter dieser Welt liegen in deiner Hand.',
+        'Zusammen sind sie ein Schlüssel — und was sie öffnen,',
+        'war nie dafür gedacht, geöffnet zu werden.',
+        'Hinter der Welt wartet das Herz des Kristalls.',
+        'Es weiß bereits, dass du kommst.',
+      ],
+      index: 0,
+      after: () => this.enterCrystalWorld(),
+    };
+  }
+
+  /** Puts the hero down at the near end of the crystal hall. */
+  private enterCrystalWorld(): void {
+    const spawn = this.level.spawns.find((s) => s.kind === 'prismarch');
+    if (!spawn) return;
+    const hallLeft = (spawn.tx - 30) * TILE;
+    this.inCrystalWorld = true;
+    this.player.respawn(hallLeft, 17 * TILE);
+    this.checkpointX = hallLeft;
+    this.checkpointY = 17 * TILE;
+    this.camera.snapTo(this.player.cx, this.player.cy);
+    this.currentZone = zoneAt(this.player.cx).label;
+    this.zoneBanner = { text: 'DER KRISTALLHORT', timer: 3.4 };
+    this.flashWhite = 1;
+    audio.play('victory');
+  }
+
   /** Reaching the gate home is what actually finishes the run. */
   onPortalReached(): void {
     if (this.victoryTimer > 0 || this.state !== 'playing') return;
@@ -279,6 +346,21 @@ export class Game implements World {
     // purpose: someone who cannot look at it must be able to switch it off
     // from wherever they are, including the title screen and the pause menu.
     if (input.pressed('calm')) this.setMotion(this.camera.motion > 0 ? 0 : 1);
+
+    // A dialogue holds everything else: no enemies, no gravity, no clock.
+    if (this.dialogue) {
+      this.particles.update(dt * 0.3);
+      if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
+        this.dialogue.index++;
+        if (this.dialogue.index >= this.dialogue.lines.length) {
+          const done = this.dialogue.after;
+          this.dialogue = null;
+          done();
+        }
+      }
+      input.endFrame();
+      return;
+    }
     this.flashWhite = Math.max(0, this.flashWhite - dt * 1.6);
 
     if (this.state === 'title') {
@@ -350,6 +432,7 @@ export class Game implements World {
       if (this.victoryTimer <= 0) {
         this.state = 'victory';
         this.score += Math.max(0, 3000 - Math.floor(this.playTime) * 5);
+        this.camera.shake = 0;
       }
     }
 
@@ -424,7 +507,10 @@ export class Game implements World {
       pickup.update(dt, this);
       if (pickup.dead) {
         this.collected.add(pickup.id);
-        if (pickup.kind === 'gem') this.gems++;
+        if (pickup.kind === 'gem') {
+          this.gems++;
+          if (this.gems >= this.totalGems) this.offerCrystalWorld();
+        }
       }
     }
 
@@ -515,6 +601,10 @@ export class Game implements World {
     for (const pickup of this.pickups) pickup.dead = false;
     this.victoryTimer = 0;
     this.bossDefeated = false;
+    this.bonusOffered = false;
+    this.inCrystalWorld = false;
+    this.trueEnding = false;
+    this.dialogue = null;
     this.level.exitSealed = true;
     this.respawnAtCheckpoint();
   }
@@ -899,6 +989,24 @@ export class Game implements World {
 
     // The warden gets the same bar, half the width: it is a mini-boss, and a
     // fight with a health bar is a fight the player knows to take seriously.
+    const prism = this.enemies.find((e): e is Prismarch => e instanceof Prismarch && e.engaged && !e.dead);
+    if (prism) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `PRISMARCH   ·   HERZ DES KRISTALLS   ·   PHASE ${prism.phase}`,
+          hp: prism.hp,
+          maxHp: prism.maxHp,
+          ghost: prism.hp,
+          phase: prism.phase,
+        },
+        0,
+      );
+      return;
+    }
+
     const warden = this.enemies.find((e): e is Warden => e instanceof Warden && e.engaged && !e.dead);
     if (warden && !(this.boss && this.boss.engaged && !this.boss.dead)) {
       drawBossBar(
@@ -911,7 +1019,57 @@ export class Game implements World {
     }
   }
 
+  /**
+   * The dialogue box. One line at a time, because five lines dumped at once are
+   * five lines skipped - and this is the only place in the game that says out
+   * loud what is about to happen to the player.
+   */
+  private drawDialogue(ctx: CanvasRenderingContext2D): void {
+    const d = this.dialogue;
+    if (!d) return;
+    ctx.fillStyle = 'rgba(4,8,18,0.62)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+    const w = 620;
+    const h = 132;
+    const x = (VIEW_W - w) / 2;
+    const y = VIEW_H - h - 74;
+    glow(ctx, VIEW_W / 2, y + h / 2, 300, 'rgba(140,230,255,0.12)');
+    drawPanel(ctx, x, y, w, h, 0.86);
+
+    drawTextCentered(ctx, d.speaker, VIEW_W / 2, y + 32, 13, '#8fe8ff', 700);
+    ctx.fillStyle = 'rgba(143,232,255,0.28)';
+    ctx.fillRect(x + 40, y + 44, w - 80, 1);
+
+    // The line being read, with the one before it still faintly there, so the
+    // sentence keeps its shape while it is spoken.
+    const prev = d.lines[d.index - 1];
+    if (prev) {
+      ctx.globalAlpha = 0.35;
+      drawTextCentered(ctx, prev, VIEW_W / 2, y + 74, 15, '#aeb8dc', 600);
+      ctx.globalAlpha = 1;
+    }
+    drawTextCentered(ctx, d.lines[d.index] ?? '', VIEW_W / 2, y + 100, 17, '#f4f7ff', 600);
+
+    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
+    ctx.globalAlpha = 0.35 + blink * 0.55;
+    drawTextCentered(
+      ctx,
+      `LEERTASTE — weiter   (${d.index + 1}/${d.lines.length})`,
+      VIEW_W / 2,
+      y + h + 26,
+      13,
+      '#ffffff',
+      600,
+    );
+    ctx.globalAlpha = 1;
+  }
+
   private drawOverlays(ctx: CanvasRenderingContext2D): void {
+    if (this.dialogue) {
+      this.drawDialogue(ctx);
+      return;
+    }
     switch (this.state) {
       case 'title':
         this.drawTitle(ctx);
@@ -987,9 +1145,15 @@ export class Game implements World {
   private drawVictory(ctx: CanvasRenderingContext2D): void {
     ctx.fillStyle = 'rgba(6,8,16,0.78)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    glow(ctx, VIEW_W / 2, 150, 300, 'rgba(255,200,90,0.18)');
-    drawTextCentered(ctx, 'SIEG!', VIEW_W / 2, 168, 74, '#ffd166');
-    drawTextCentered(ctx, 'Morvain ist gefallen — Nachtfall ist frei.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
+    if (this.trueEnding) {
+      glow(ctx, VIEW_W / 2, 150, 300, 'rgba(140,230,255,0.2)');
+      drawTextCentered(ctx, 'DAS WAHRE ENDE', VIEW_W / 2, 168, 60, '#8fe8ff');
+      drawTextCentered(ctx, 'Das Herz des Kristalls ist zersprungen.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
+    } else {
+      glow(ctx, VIEW_W / 2, 150, 300, 'rgba(255,200,90,0.18)');
+      drawTextCentered(ctx, 'SIEG!', VIEW_W / 2, 168, 74, '#ffd166');
+      drawTextCentered(ctx, 'Morvain ist gefallen — Nachtfall ist frei.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
+    }
 
     const minutes = Math.floor(this.playTime / 60);
     const seconds = Math.floor(this.playTime % 60);
@@ -1011,6 +1175,17 @@ export class Game implements World {
       ctx.fillText(value, VIEW_W / 2 + 150, y);
     });
     ctx.textAlign = 'left';
+    if (!this.trueEnding) {
+      drawTextCentered(
+        ctx,
+        'Alle Edelsteine — und hinter der Welt wartet noch etwas.',
+        VIEW_W / 2,
+        408,
+        14,
+        '#7f8cb4',
+        600,
+      );
+    }
     const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
     ctx.globalAlpha = 0.4 + blink * 0.6;
     drawTextCentered(ctx, 'R — noch einmal', VIEW_W / 2, 440, 18, '#ffffff');

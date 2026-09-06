@@ -42,7 +42,8 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Das Level
 
-Ein durchgehendes Level aus 814 Kacheln (26 048 px) in sechs Zonen:
+Ein durchgehendes Level aus 814 Kacheln (26 048 px) in sechs Zonen, plus eine
+siebte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
@@ -52,6 +53,9 @@ Ein durchgehendes Level aus 814 Kacheln (26 048 px) in sechs Zonen:
 6. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
    über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, am Ende
    das Tor nach Hause
+7. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 138 Edelsteine
+   eingesammelt sind. Acht leere Spalten trennen ihn vom Riss; kein Sprung
+   überbrückt die, das ist Absicht.
 
 Kontrollpunkte sichern den Fortschritt, Edelsteine geben Punkte, Herzen heilen —
 bei vollem Leben bleiben sie liegen, statt sich an nichts zu verbrauchen.
@@ -87,6 +91,22 @@ statt Stimmung zu machen.
 Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
 kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
+
+### Der Bonusboss: Prismarch, Herz des Kristalls
+
+Wer alle 138 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
+Stein meldet sich, fünf Zeilen lang, und wer sie zu Ende gelesen hat, steht im
+Kristallhort. Solange der Dialog liegt, steht die Welt still — sonst liest man
+und läuft dabei von der Kante.
+
+70 Trefferpunkte, zwei Phasen, drei Züge nach Entfernung: aus der Nähe ein
+Sturmangriff quer durch die Halle, auf mittlere Distanz Splitter, die von der
+Decke fallen und dorthin zielen, wo man gleich sein wird, von weitem ein Fächer
+aus drei Splittern — in der zweiten Phase fünf, und alle Pausen um ein Fünftel
+kürzer. Denselben Zug zweimal hintereinander macht er nie.
+
+Fällt er, endet der Lauf mit dem anderen Ende. Das Tor im Riss bleibt der Weg
+für alle, die nicht alles einsammeln.
 
 ### Der Miniboss: Splitterwächter
 
@@ -134,7 +154,7 @@ S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
-W  Splitterwächter (Miniboss)
+W  Splitterwächter (Miniboss)   K  Prismarch (Bonusboss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
@@ -150,6 +170,7 @@ npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossaren
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
+npm run verify:bonus   # öffnet der letzte Edelstein den Weg zum Prismarchen?
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
@@ -161,7 +182,8 @@ aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet auch
 begehbare Stellen, die von nirgendwo aus zu erreichen sind, und getrennt davon
 Plattformen, auf die niemand kommt: die reine Spaltenprüfung übersieht sie, weil
 eine unerreichbare Plattform über festem Boden hängt und die Spalte dadurch als
-erreichbar zählt.
+erreichbar zählt. Für den Kristallhort gilt die Prüfung andersherum — er *muss*
+unerreichbar sein, sonst wäre der Erwerb umsonst.
 
 `verify:arena` spielt einen Softlock nach: den Schattenritter ans Fallgitter
 locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler
@@ -179,6 +201,12 @@ Modell von `verify:level`, das keine Sprungbögen kennt.
 `verify:warden` stellt den Splitterwächter auf drei Entfernungen und prüft, dass
 er jeweils den passenden Zug wählt — und dass er gegen jemanden, der nur die
 Angriffstaste hält, überhaupt zum Zug kommt.
+
+`verify:bonus` fährt den ganzen Bonusweg ab: den letzten Edelstein wirklich
+aufsammeln, den Dialog lesen (und prüfen, dass die Welt dabei steht), im Hort
+landen, den Prismarchen auf zwei Entfernungen zu seinen Zügen bringen und ihn
+erlegen. Es ist der einzige Inhalt, an dem niemand aus Versehen vorbeikommt —
+also auch der, der am leichtesten unbemerkt kaputtgeht.
 
 `verify:motion` misst, wie weit das Bild bei einem Treffer je Einzelbild springt
 und wie oft es dabei die Richtung wechselt. Bildwackeln war einmal ein neuer

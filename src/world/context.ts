@@ -22,4 +22,5 @@ export interface World {
   spawnProjectile(projectile: Projectile): void;
   onBossDefeated(): void;
   onBossEngaged(): void;
+  onCrystalBossDefeated(): void;
 }

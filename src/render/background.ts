@@ -251,6 +251,29 @@ export class Background {
           ctx.fill();
           break;
         }
+        case 'crystalworld': {
+          // Crystal columns growing out of the floor of the world, and one
+          // hanging point-down above them.
+          const h = rng.range(150, 300) * scale;
+          const w = rng.range(14, 30) * scale;
+          ctx.fillStyle = dark;
+          ctx.beginPath();
+          ctx.moveTo(x, baseY - h);
+          ctx.lineTo(x + w, baseY - h * 0.62);
+          ctx.lineTo(x + w * 0.7, baseY);
+          ctx.lineTo(x - w * 0.7, baseY);
+          ctx.lineTo(x - w, baseY - h * 0.62);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = near;
+          ctx.beginPath();
+          ctx.moveTo(x, baseY - h);
+          ctx.lineTo(x + w, baseY - h * 0.62);
+          ctx.lineTo(x, baseY - h * 0.3);
+          ctx.closePath();
+          ctx.fill();
+          break;
+        }
         default:
           break;
       }
