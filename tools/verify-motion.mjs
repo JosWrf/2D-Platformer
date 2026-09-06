@@ -10,6 +10,10 @@
  *  - a shake is a swing, not noise: consecutive frames move the same way, so
  *    the number of direction reversals stays low and the jump per frame small;
  *  - B turns it off completely, for anyone who still cannot take it;
+ *  - a long stream of small shakes stays one swing. The knight's death threw
+ *    ten of them a second for a second and a half, and each one re-aimed the
+ *    screen: the strobe was back exactly where the fight ends and the rift
+ *    begins, which is where it was reported;
  *  - the background of a calm zone holds still while the hero runs. The spore
  *    field used to slide across the sky at half the camera speed, drawn at
  *    fractional pixels, so fifty bright dots were re-blended every frame
@@ -32,6 +36,10 @@ const MAX_JUMP = 5;
 const MAX_REVERSALS = 22;
 /** What may still move in the sky of a calm zone, in mean luminance steps. */
 const MAX_SKY_RESIDUE = 0.15;
+/** Direction reversals per second across the knight's death and the seal. */
+const MAX_DEATH_REVERSALS = 4;
+/** And how many of those 360 frames may be shaking at all. */
+const MAX_DEATH_SHAKING = 120;
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const server = createServer(async (req, res) => {
@@ -57,6 +65,7 @@ await page.evaluate(() => window.loop.stop());
 const result = await page.evaluate(() => {
   const g = window.game;
   const input = window.input;
+  const p = g.player;
   const ctx = document.querySelector('canvas').getContext('2d');
   const tick = (actions = {}) => {
     for (const [a, v] of Object.entries({ left: false, right: false, calm: false, ...actions })) {
@@ -150,6 +159,64 @@ const result = await page.evaluate(() => {
     return +(total / rounds).toFixed(3);
   };
 
+  /**
+   * The knight's death and the seal breaking, which is the stretch the player
+   * watches without being able to look away.
+   */
+  const deathSequence = () => {
+    g.state = 'playing';
+    // Back to the door of the throne room; the tool starts past it.
+    p.x = 540 * 32;
+    p.y = 16 * 32;
+    p.vx = 0;
+    p.vy = 0;
+    p.hp = p.maxHp;
+    p.dead = false;
+    g.camera.snapTo(p.cx, p.cy);
+    if (g.boss) {
+      g.boss.reset();
+      g.boss.dead = false;
+      g.boss.hp = g.boss.maxHp;
+    }
+    g.bossDefeated = false;
+    for (let i = 0; i < 400 && !(g.boss && g.boss.engaged); i++) tick({ right: true });
+    const boss = g.boss;
+    if (!boss || !boss.engaged) return null;
+    p.invuln = 99999;
+    boss.hp = 1;
+    boss.vulnerable = true;
+    boss.state = 'idle';
+    boss.hurt(99, 1, g);
+    const xs = [];
+    const ys = [];
+    let shaking = 0;
+    for (let f = 0; f < 60 * 6; f++) {
+      p.invuln = 99999;
+      tick({ right: f > 200 });
+      xs.push(g.camera.renderX);
+      ys.push(g.camera.renderY);
+      if (g.camera.shake > 0.05) shaking++;
+    }
+    let reversals = 0;
+    let lastX = 0;
+    let lastY = 0;
+    for (let i = 1; i < xs.length; i++) {
+      const dx = xs[i] - xs[i - 1];
+      const dy = ys[i] - ys[i - 1];
+      if (dy !== 0) {
+        if (lastY !== 0 && Math.sign(dy) !== Math.sign(lastY)) reversals++;
+        lastY = Math.sign(dy);
+      }
+      if (dx !== 0) {
+        if (lastX !== 0 && Math.sign(dx) !== Math.sign(lastX)) reversals++;
+        lastX = Math.sign(dx);
+      }
+    }
+    return { reversalsPerSecond: +(reversals / 6).toFixed(1), framesShaking: shaking };
+  };
+
+  const death = deathSequence();
+
   // Back on the flat ground of the warden's arena, which is a calm zone.
   g.player.x = 700 * 32;
   g.player.y = 17 * 32;
@@ -167,12 +234,16 @@ const result = await page.evaluate(() => {
       offSetting === 0 &&
       quiet.maxJump === 0 &&
       onAgain === 1 &&
-      sky <= 0.15,
+      sky <= 0.15 &&
+      !!death &&
+      death.reversalsPerSecond <= 4 &&
+      death.framesShaking <= 120,
     shaking,
     quiet,
     toggledOff: offSetting === 0,
     toggledBackOn: onAgain === 1,
     calmZoneSkyResidue: sky,
+    knightsDeath: death,
   };
 });
 
@@ -183,9 +254,13 @@ server.close();
 if (!result.ok) {
   console.error(
     `FAIL: shake must throw the picture at most ${MAX_JUMP} px per frame and reverse at most ` +
-      `${MAX_REVERSALS} times a second, B must switch it off, and the sky of a calm zone must ` +
-      `stay under ${MAX_SKY_RESIDUE} once the scroll is taken out.`,
+      `${MAX_REVERSALS} times a second, B must switch it off, the sky of a calm zone must ` +
+      `stay under ${MAX_SKY_RESIDUE} once the scroll is taken out, and the knight's death must ` +
+      `reverse at most ${MAX_DEATH_REVERSALS} times a second over at most ${MAX_DEATH_SHAKING} frames.`,
   );
   process.exit(1);
 }
-console.log('OK: the screen swings and settles instead of strobing, the sky of a calm zone holds still, and B turns it off.');
+console.log(
+  'OK: the screen swings and settles instead of strobing, the knight can fall without it, ' +
+    'the sky of a calm zone holds still, and B turns it off.',
+);

@@ -45,6 +45,8 @@ export class Boss extends Body {
   private hitPlayerThisAction = false;
   private auraPulse = 0;
   private deathTimer = 0;
+  /** Paces the rumble while he collapses. */
+  private rumbleTimer = 0;
   private lastAction = '';
   private readonly spawnX: number;
   private readonly spawnY: number;
@@ -191,7 +193,15 @@ export class Boss extends Body {
           size: 4,
         });
       }
-      if (this.deathTimer <= 1.6 && Math.random() < 0.16) world.camera.addShake(4);
+      // A rumble on a beat while he goes down, not a per-frame lottery. The
+      // lottery fired about ten times a second, and every one of them was a
+      // fresh impact - a second and a half of the screen being thrown around
+      // right as the fight ends.
+      this.rumbleTimer -= dt;
+      if (this.deathTimer <= 1.6 && this.rumbleTimer <= 0) {
+        this.rumbleTimer = 0.45;
+        world.camera.addShake(2);
+      }
       if (this.deathTimer <= 0 && !this.dead) {
         this.dead = true;
         world.camera.addShake(14);

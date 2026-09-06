@@ -78,14 +78,26 @@ export class Camera {
 
   addShake(amount: number): void {
     if (this.motion <= 0) return;
-    const next = Math.min(MAX_SHAKE, this.shake + amount * SHAKE_SCALE);
-    // A fresh impact restarts the swing, so it begins at the centre and throws
-    // outwards rather than snapping to wherever the last one happened to be.
-    if (next > this.shake + 0.5 || this.shake <= 0.05) {
+    const scaled = amount * SHAKE_SCALE;
+
+    /*
+     * A new direction only for a blow that actually starts something: either
+     * nothing is swinging, or this one is clearly bigger than what is.
+     *
+     * This is the part that was missed the first time. One impact swinging in
+     * one direction is fine, but the knight's death throws ten small shakes a
+     * second for a second and a half, and re-aiming on each of them put the
+     * screen somewhere new ten times a second - the strobe was back, exactly
+     * where the player is watching the fight end and walking into the rift.
+     * A stream of small hits now rides the swing that is already going.
+     */
+    if (this.shake <= 0.05 || scaled > this.shake * 1.5) {
       this.shakeTime = 0;
       this.shakeAngle = Math.random() * Math.PI * 2;
     }
-    this.shake = next;
+    // Diminishing returns, so a stream cannot pump the screen up to the cap and
+    // hold it there: the fuller it already is, the less each hit adds.
+    this.shake = Math.min(MAX_SHAKE, this.shake + scaled * (1 - this.shake / MAX_SHAKE));
   }
 
   get renderX(): number {

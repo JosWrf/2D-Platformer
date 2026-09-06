@@ -150,7 +150,7 @@ npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossaren
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
-npm run verify:motion  # schwingt das Bild bei Treffern, und steht der Himmel still?
+npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -194,8 +194,16 @@ Das waren zwei Drittel der Restbewegung dort oben — der Hintergrund, der bebte
 In ruhigen Zonen hängt das Feld jetzt am Bildschirm und atmet nur noch; die
 Punkte sitzen auf ganzen Pixeln. Erlaubt sind 0,15, gemessen werden 0,077.
 
-Und `B` schaltet beides ganz ab — das Bildwackeln und die ziehenden Sporen, in
-jeder Zone.
+Und sie prüft die Stelle, an der es am meisten wehtat: den Sturz des Ritters und
+den Siegelbruch. Der Todeskampf warf eine Zufallserschütterung auf jedem sechsten
+Bild — zehn je Sekunde, anderthalb Sekunden lang —, und jede davon richtete das
+Bild neu aus. Ein Aufschlag darf das, ein Strom von Nachschlägen nicht: er reitet
+jetzt auf der laufenden Schwingung mit, und das Grollen kommt im Takt statt per
+Los. Über sechs Sekunden gemessen: 203 zitternde Bilder und 8,8 Richtungswechsel
+je Sekunde vorher, 56 und 2,2 jetzt.
+
+Und `B` schaltet alles davon ganz ab — das Bildwackeln und die ziehenden Sporen,
+in jeder Zone.
 
 ## Veröffentlichen
 
