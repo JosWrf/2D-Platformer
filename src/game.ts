@@ -101,6 +101,11 @@ export class Game implements World {
     this.camera.worldBounds = { w: this.level.pixelWidth, h: this.level.pixelHeight };
     this.camera.snapTo(this.player.cx, this.player.cy);
     this.currentZone = zoneAt(this.player.cx).label;
+    try {
+      if (localStorage.getItem('shadowblade.motion') === '0') this.camera.motion = 0;
+    } catch {
+      // See setMotion: no storage is not an error here.
+    }
   }
 
   /** Offscreen layer at view resolution, used for compositing whole passes. */
@@ -248,11 +253,32 @@ export class Game implements World {
     audio.play('victory');
   }
 
+  /**
+   * Screen shake is the one effect that can make a game unplayable rather than
+   * merely worse, so the switch is remembered across sessions.
+   */
+  setMotion(value: number): void {
+    this.camera.motion = value;
+    this.camera.shake = 0;
+    this.zoneBanner = { text: value > 0 ? 'BILDWACKELN AN' : 'BILDWACKELN AUS', timer: 2.2 };
+    try {
+      localStorage.setItem('shadowblade.motion', String(value));
+    } catch {
+      // Private browsing, or storage turned off. The setting just will not
+      // survive a reload; that is no reason to break the game.
+    }
+  }
+
   /* --------------------------------------------------------------- update */
 
   update(dt: number, input: Input): void {
     this.time += dt;
     this.titlePulse += dt;
+
+    // Screen shake off and on. It sits outside every other state check on
+    // purpose: someone who cannot look at it must be able to switch it off
+    // from wherever they are, including the title screen and the pause menu.
+    if (input.pressed('calm')) this.setMotion(this.camera.motion > 0 ? 0 : 1);
     this.flashWhite = Math.max(0, this.flashWhite - dt * 1.6);
 
     if (this.state === 'title') {

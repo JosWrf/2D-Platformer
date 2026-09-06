@@ -38,6 +38,7 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen |
 | `P` / `Esc` | Pause |
 | `R` | Neustart |
+| `B` | Bildwackeln aus/an |
 
 ## Das Level
 
@@ -58,6 +59,9 @@ bei vollem Leben bleiben sie liegen, statt sich an nichts zu verbrauchen.
 Der Fall des Ritters ist nicht das Ende: Er bricht das Siegel hinter dem Thron
 auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses — und dazwischen
 steht der Splitterwächter.
+
+Wen das Bildwackeln bei Treffern stört, schaltet es mit `B` ab — jederzeit, auch
+im Titelbild und in der Pause. Die Einstellung bleibt über Sitzungen erhalten.
 
 Der Riss hält im Übrigen still: kein wehender Bewuchs, keine treibenden
 Silhouetten, kaum pulsende Kristalle. Vor einem fast schwarzen Grund ist jedes
@@ -144,6 +148,7 @@ npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossaren
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
+npm run verify:motion  # schwingt das Bild bei Treffern, statt zu strobieren?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -172,6 +177,12 @@ Modell von `verify:level`, das keine Sprungbögen kennt.
 `verify:warden` stellt den Splitterwächter auf drei Entfernungen und prüft, dass
 er jeweils den passenden Zug wählt — und dass er gegen jemanden, der nur die
 Angriffstaste hält, überhaupt zum Zug kommt.
+
+`verify:motion` misst, wie weit das Bild bei einem Treffer je Einzelbild springt
+und wie oft es dabei die Richtung wechselt. Bildwackeln war einmal ein neuer
+Zufallsversatz pro Bild — 18 px Sprung und 69 Richtungswechsel je Sekunde, also
+kein Aufschlag, sondern ein Stroboskop. Erlaubt sind jetzt 5 px und 22 Wechsel;
+gemessen werden 2 px und 14. Und `B` schaltet es ganz ab.
 
 ## Veröffentlichen
 

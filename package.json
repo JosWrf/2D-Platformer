@@ -14,6 +14,7 @@
     "verify:combat": "node tools/verify-combat.mjs",
     "verify:ending": "node tools/verify-ending.mjs",
     "verify:warden": "node tools/verify-warden.mjs",
+    "verify:motion": "node tools/verify-motion.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"
   },
