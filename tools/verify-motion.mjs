@@ -1,5 +1,6 @@
 /**
- * How violently the screen can move, and whether it can be switched off.
+ * How much the picture moves when it should not, and whether that can be
+ * switched off.
  *
  * Screen shake used to be a fresh random offset every frame. That is not an
  * impact, it is a strobe: the picture jumped up to ten pixels in a new
@@ -8,7 +9,12 @@
  *
  *  - a shake is a swing, not noise: consecutive frames move the same way, so
  *    the number of direction reversals stays low and the jump per frame small;
- *  - B turns it off completely, for anyone who still cannot take it.
+ *  - B turns it off completely, for anyone who still cannot take it;
+ *  - the background of a calm zone holds still while the hero runs. The spore
+ *    field used to slide across the sky at half the camera speed, drawn at
+ *    fractional pixels, so fifty bright dots were re-blended every frame
+ *    against a near-black sky. Measured, that was two thirds of all the
+ *    movement up there, and it was reported as the background trembling.
  *
  * Usage: node tools/verify-motion.mjs
  */
@@ -24,6 +30,8 @@ const DIST = path.join(ROOT, 'dist');
 const MAX_JUMP = 5;
 /** Direction reversals per second of shaking, averaged over the burst. */
 const MAX_REVERSALS = 22;
+/** What may still move in the sky of a calm zone, in mean luminance steps. */
+const MAX_SKY_RESIDUE = 0.15;
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 const server = createServer(async (req, res) => {
@@ -108,6 +116,49 @@ const result = await page.evaluate(() => {
   tick();
   const onAgain = g.camera.motion;
 
+  /**
+   * What is left moving in the sky once the scroll itself is taken out: the
+   * frames are shifted against each other by the best horizontal offset first,
+   * so a background that merely travels past costs nothing.
+   */
+  const backgroundResidue = () => {
+    const cv = document.querySelector('canvas');
+    const lum = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    const y0 = 120;
+    const y1 = 320;
+    for (let i = 0; i < 40; i++) tick({ right: true });
+    let total = 0;
+    const rounds = 20;
+    for (let s = 0; s < rounds; s++) {
+      const a = ctx.getImageData(0, y0, cv.width, y1 - y0).data;
+      tick({ right: true });
+      const b = ctx.getImageData(0, y0, cv.width, y1 - y0).data;
+      let best = Infinity;
+      for (let shift = 0; shift <= 6; shift++) {
+        let sum = 0;
+        let n = 0;
+        for (let y = 0; y < y1 - y0; y += 2) {
+          for (let x = 8; x < cv.width - 8 - shift; x += 2) {
+            sum += Math.abs(lum(a, (y * cv.width + x) * 4) - lum(b, (y * cv.width + x + shift) * 4));
+            n++;
+          }
+        }
+        best = Math.min(best, sum / n);
+      }
+      total += best;
+    }
+    return +(total / rounds).toFixed(3);
+  };
+
+  // Back on the flat ground of the warden's arena, which is a calm zone.
+  g.player.x = 700 * 32;
+  g.player.y = 17 * 32;
+  g.player.vx = 0;
+  g.player.vy = 0;
+  g.camera.snapTo(g.player.cx, g.player.cy);
+  for (const e of g.enemies) e.dead = true;
+  const sky = backgroundResidue();
+
   return {
     ok:
       shaking.maxJump > 0 &&
@@ -115,11 +166,13 @@ const result = await page.evaluate(() => {
       shaking.reversalsPerSecond <= 22 &&
       offSetting === 0 &&
       quiet.maxJump === 0 &&
-      onAgain === 1,
+      onAgain === 1 &&
+      sky <= 0.15,
     shaking,
     quiet,
     toggledOff: offSetting === 0,
     toggledBackOn: onAgain === 1,
+    calmZoneSkyResidue: sky,
   };
 });
 
@@ -130,8 +183,9 @@ server.close();
 if (!result.ok) {
   console.error(
     `FAIL: shake must throw the picture at most ${MAX_JUMP} px per frame and reverse at most ` +
-      `${MAX_REVERSALS} times a second, and B must switch it off.`,
+      `${MAX_REVERSALS} times a second, B must switch it off, and the sky of a calm zone must ` +
+      `stay under ${MAX_SKY_RESIDUE} once the scroll is taken out.`,
   );
   process.exit(1);
 }
-console.log('OK: the screen swings and settles instead of strobing, and B turns it off.');
+console.log('OK: the screen swings and settles instead of strobing, the sky of a calm zone holds still, and B turns it off.');

@@ -780,7 +780,11 @@ export class Game implements World {
     this.drawCastLight(ctx);
 
     // Spores sit in front of the darkness, so they glow through it.
-    this.spores.draw(ctx, this.camera, this.time, sporeRgb, blend.t > 0.5 ? blend.to.calm : blend.from.calm);
+    // B quiets the spore field everywhere, not just in the zones that are calm
+    // by design: it is the one switch for players who cannot look at movement,
+    // and a drifting field of bright dots is movement.
+    const calm = (blend.t > 0.5 ? blend.to.calm : blend.from.calm) || this.camera.motion <= 0;
+    this.spores.draw(ctx, this.camera, this.time, sporeRgb, calm);
 
     this.drawLighting(ctx);
     if (this.state !== 'title') this.drawHud(ctx);

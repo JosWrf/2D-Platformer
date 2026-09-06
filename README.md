@@ -61,10 +61,12 @@ auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses — und dazwis
 steht der Splitterwächter.
 
 Wen das Bildwackeln bei Treffern stört, schaltet es mit `B` ab — jederzeit, auch
-im Titelbild und in der Pause. Die Einstellung bleibt über Sitzungen erhalten.
+im Titelbild und in der Pause. Das beruhigt zugleich das Sporenfeld in allen
+Zonen. Die Einstellung bleibt über Sitzungen erhalten.
 
 Der Riss hält im Übrigen still: kein wehender Bewuchs, keine treibenden
-Silhouetten, kaum pulsende Kristalle. Vor einem fast schwarzen Grund ist jedes
+Silhouetten, kaum pulsende Kristalle, und ein Sporenfeld, das am Bildschirm
+hängt statt darüberzuziehen. Vor einem fast schwarzen Grund ist jedes
 bewegte Glanzlicht ein Flackern, und ein Bildschirm voll davon ermüdet die Augen,
 statt Stimmung zu machen.
 
@@ -148,7 +150,7 @@ npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossaren
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
-npm run verify:motion  # schwingt das Bild bei Treffern, statt zu strobieren?
+npm run verify:motion  # schwingt das Bild bei Treffern, und steht der Himmel still?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -182,7 +184,18 @@ Angriffstaste hält, überhaupt zum Zug kommt.
 und wie oft es dabei die Richtung wechselt. Bildwackeln war einmal ein neuer
 Zufallsversatz pro Bild — 18 px Sprung und 69 Richtungswechsel je Sekunde, also
 kein Aufschlag, sondern ein Stroboskop. Erlaubt sind jetzt 5 px und 22 Wechsel;
-gemessen werden 2 px und 14. Und `B` schaltet es ganz ab.
+gemessen werden 2 px und 14.
+
+Dieselbe Prüfung misst außerdem, was sich im Himmel einer ruhigen Zone noch
+bewegt, nachdem das reine Vorbeiziehen herausgerechnet ist. Das Sporenfeld zog
+mit halbem Kameratempo über den Himmel, auf gebrochenen Pixelpositionen: fünfzig
+helle Punkte, die vor fast schwarzem Grund in jedem Bild neu gemischt wurden.
+Das waren zwei Drittel der Restbewegung dort oben — der Hintergrund, der bebte.
+In ruhigen Zonen hängt das Feld jetzt am Bildschirm und atmet nur noch; die
+Punkte sitzen auf ganzen Pixeln. Erlaubt sind 0,15, gemessen werden 0,077.
+
+Und `B` schaltet beides ganz ab — das Bildwackeln und die ziehenden Sporen, in
+jeder Zone.
 
 ## Veröffentlichen
 
