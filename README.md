@@ -41,20 +41,28 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Das Level
 
-Ein durchgehendes Level aus 690 Kacheln (22 080 px) in sechs Zonen:
+Ein durchgehendes Level aus 814 Kacheln (26 048 px) in sechs Zonen:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
 3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
 4. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
 5. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
-6. **Der Riss** — was hinter dem Thron aufbricht: Bruchstücke über dem Abgrund,
-   wandernde Plattformen, dunkle Magier
+6. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
+   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, am Ende
+   das Tor nach Hause
 
-Kontrollpunkte sichern den Fortschritt, Edelsteine geben Punkte, Herzen heilen.
+Kontrollpunkte sichern den Fortschritt, Edelsteine geben Punkte, Herzen heilen —
+bei vollem Leben bleiben sie liegen, statt sich an nichts zu verbrauchen.
 
 Der Fall des Ritters ist nicht das Ende: Er bricht das Siegel hinter dem Thron
-auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses.
+auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses — und dazwischen
+steht der Splitterwächter.
+
+Der Riss hält im Übrigen still: kein wehender Bewuchs, keine treibenden
+Silhouetten, kaum pulsende Kristalle. Vor einem fast schwarzen Grund ist jedes
+bewegte Glanzlicht ein Flackern, und ein Bildschirm voll davon ermüdet die Augen,
+statt Stimmung zu machen.
 
 | | |
 | --- | --- |
@@ -73,6 +81,17 @@ auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses.
 Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
 kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
+
+### Der Miniboss: Splitterwächter
+
+16 Trefferpunkte, drei Züge, die er nach Entfernung wählt: aus der Nähe ein
+Sprungschlag, auf mittlere Distanz ein Sturmangriff, von weitem eine Salve aus
+drei Splittern. Jeder Zug wird angekündigt — sein Kern glüht auf —, und danach
+steht er lange genug offen für eine Antwort.
+
+Er lässt sich nicht mit gehaltener Angriffstaste erledigen: einen begonnenen Zug
+zieht er durch. Erst fünf Schadenspunkte am Stück oder eine Parade bringen ihn
+aus dem Gleichgewicht.
 
 Die Vorwarnung ist auch die Einladung zur Parade: Wer im richtigen Moment `E`
 drückt, fängt den Schlag ab, statt ihn zu kassieren — der Ritter taumelt und
@@ -109,6 +128,7 @@ S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
+W  Splitterwächter (Miniboss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
@@ -123,6 +143,7 @@ npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
+npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -130,7 +151,10 @@ npm run screenshots    # erzeugt die Bilder in screenshots/
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
 einem bewusst konservativen Sprungmodell, ob Boss **und** Tor vom Startpunkt
 aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet auch
-begehbare Stellen, die von nirgendwo aus zu erreichen sind.
+begehbare Stellen, die von nirgendwo aus zu erreichen sind, und getrennt davon
+Plattformen, auf die niemand kommt: die reine Spaltenprüfung übersieht sie, weil
+eine unerreichbare Plattform über festem Boden hängt und die Spalte dadurch als
+erreichbar zählt.
 
 `verify:arena` spielt einen Softlock nach: den Schattenritter ans Fallgitter
 locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler
@@ -144,6 +168,10 @@ verloren, fühlt sich das nicht schwer an, sondern kaputt.
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft
 weiter. Beides muss im Sieg enden. Der Riss stand vorher nur im statischen
 Modell von `verify:level`, das keine Sprungbögen kennt.
+
+`verify:warden` stellt den Splitterwächter auf drei Entfernungen und prüft, dass
+er jeweils den passenden Zug wählt — und dass er gegen jemanden, der nur die
+Angriffstaste hält, überhaupt zum Zug kommt.
 
 ## Veröffentlichen
 

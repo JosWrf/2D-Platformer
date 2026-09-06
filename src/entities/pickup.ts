@@ -36,6 +36,9 @@ export class Pickup {
   update(dt: number, world: World): void {
     this.anim += dt;
     const player = world.player;
+    // A heart on full health is worth more left where it is: picking it up
+    // would spend it on nothing, and there is no way to put it back.
+    if (this.kind === 'heart' && player.hp >= player.maxHp) return;
     if (!player.dead && rectsOverlap(this.rect, player.rect)) {
       this.dead = true;
       if (this.kind === 'gem') {

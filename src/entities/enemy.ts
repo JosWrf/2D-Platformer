@@ -6,7 +6,7 @@ import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
 
-export type EnemyKind = 'slime' | 'bat' | 'skeleton' | 'mage';
+export type EnemyKind = 'slime' | 'bat' | 'skeleton' | 'mage' | 'warden';
 
 export abstract class Enemy extends Body {
   hp = 2;
@@ -564,6 +564,296 @@ export class DarkMage extends Enemy {
   }
 }
 
+/* ------------------------------------------------------------------ warden */
+
+/** Damage the warden shrugs off mid-move before it staggers. */
+const POISE = 5;
+
+/**
+ * The Shard Warden: what the rift grew in the knight's place.
+ *
+ * A mini-boss rather than a second boss - a third of the knight's health, three
+ * moves instead of five, and no arena to lock the player in. What it keeps from
+ * the knight is the thing that made him fair: every move is announced, and the
+ * pause afterwards is long enough to answer.
+ */
+export class Warden extends Enemy {
+  private state: 'wait' | 'stalk' | 'lungeWind' | 'lunge' | 'volleyWind' | 'slamWind' | 'slam' | 'recover' = 'wait';
+  private timer = 0;
+  private core = 0;
+  private hitThisMove = false;
+  /** Damage it can absorb mid-move before it is thrown off balance. */
+  private poise = POISE;
+  /** True once the player has come close enough to wake it. */
+  engaged = false;
+
+  constructor(x: number, y: number) {
+    super('warden', x, y);
+    this.w = 46;
+    this.h = 58;
+    this.hp = this.maxHp = 16;
+    this.scoreValue = 500;
+    this.aggroRange = 300;
+    this.contactDamage = 1;
+  }
+
+  protected override deathColor(): string {
+    return '#8f5fd0';
+  }
+
+  /**
+   * A move once started is seen through. Without this the warden is a sandbag:
+   * every hit re-stunned it, so a player who simply held the attack key never
+   * saw a single one of its attacks. Landing POISE damage still breaks it, and
+   * a parry always does - that is what the parry is for.
+   */
+  override hurt(amount: number, fromDir: number, world: World): void {
+    if (this.dead) return;
+    this.hp -= amount;
+    this.flash = 1;
+    this.poise -= amount;
+    if (this.hp <= 0) {
+      this.die(world);
+      return;
+    }
+    audio.play('hit');
+    const committed = this.state !== 'wait' && this.state !== 'stalk' && this.state !== 'recover';
+    if (!committed) this.vx = fromDir * 130;
+    if (this.poise <= 0) {
+      this.poise = POISE;
+      this.stun = 0.5;
+      this.vx = fromDir * 150;
+      world.particles.burst(this.cx, this.cy, 14, '#e2c4ff', { speed: 190, shape: 'spark' });
+    }
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    this.core = Math.max(0, this.core - dt * 2);
+
+    if (!this.engaged) {
+      if (dist < this.aggroRange && !player.dead) {
+        this.engaged = true;
+        this.state = 'recover';
+        this.timer = 0.9;
+        world.camera.addShake(5);
+      }
+      this.vx = approach(this.vx, 0, 900 * dt);
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    // A parry or a hard hit knocks it out of whatever it was doing.
+    if (this.stun > 0) {
+      if (this.state !== 'recover') {
+        this.state = 'recover';
+        this.timer = 0.75;
+      }
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.state !== 'lunge') this.facing = dx > 0 ? 1 : -1;
+    this.timer -= dt;
+
+    switch (this.state) {
+      case 'recover':
+      case 'wait':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.timer <= 0) {
+          this.state = 'stalk';
+          this.timer = rand(0.5, 0.9);
+        }
+        break;
+
+      case 'stalk': {
+        // Closes the distance at a walk, so its next move can be read coming.
+        const want = dist > 90 ? sign(dx) * 74 : dist < 50 ? -sign(dx) * 60 : 0;
+        this.vx = approach(this.vx, want, 620 * dt);
+        if (this.timer <= 0) {
+          this.hitThisMove = false;
+          this.core = 1;
+          if (dist < 84) {
+            this.state = 'slamWind';
+            this.timer = 0.5;
+          } else if (dist < 210) {
+            this.state = 'lungeWind';
+            this.timer = 0.55;
+          } else {
+            this.state = 'volleyWind';
+            this.timer = 0.5;
+          }
+          audio.play('shoot', 0.7);
+        }
+        break;
+      }
+
+      case 'lungeWind':
+        // Leans back into the wind-up; the core burns brighter the closer it is.
+        this.vx = approach(this.vx, -this.facing * 40, 700 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          this.state = 'lunge';
+          this.timer = 0.36;
+          this.vx = this.facing * 360;
+          world.camera.addShake(3);
+        }
+        break;
+
+      case 'lunge':
+        if (this.timer <= 0 || this.touching.left || this.touching.right) {
+          this.state = 'recover';
+          this.timer = 1.15;
+        }
+        break;
+
+      case 'volleyWind':
+        this.vx = approach(this.vx, 0, 800 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          for (let i = -1; i <= 1; i++) {
+            const dy = player.cy - this.cy + i * 46;
+            const len = Math.hypot(dx, dy) || 1;
+            const shard = new Projectile('orb', this.cx - 7, this.cy - 14, (dx / len) * 200, (dy / len) * 200);
+            world.spawnProjectile(shard);
+          }
+          audio.play('shoot');
+          this.state = 'recover';
+          this.timer = 1.25;
+        }
+        break;
+
+      case 'slamWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          this.state = 'slam';
+          this.timer = 1.1;
+          this.vy = -470;
+          this.vx = sign(dx) * 90;
+        }
+        break;
+
+      case 'slam':
+        if (this.vy > 0 && this.onGround) {
+          world.camera.addShake(9);
+          world.hitStop(0.05);
+          audio.play('slam');
+          world.particles.burst(this.cx, this.bottom, 26, '#b078ff', { speed: 260, gravity: 620, shape: 'spark' });
+          if (!this.hitThisMove && Math.abs(player.cx - this.cx) < 78 && Math.abs(player.bottom - this.bottom) < 40) {
+            this.hitThisMove = true;
+            player.hurt(2, sign(player.cx - this.cx) || 1, world);
+          }
+          this.state = 'recover';
+          this.timer = 1.3;
+        }
+        break;
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+
+    // The lunge is the only move that hurts on contact for more than a brush.
+    if (this.state === 'lunge' && !this.hitThisMove && !player.dead && !player.isInvulnerable && this.overlaps(player.rect)) {
+      this.hitThisMove = true;
+      player.hurt(2, sign(player.cx - this.cx) || 1, world);
+    }
+
+    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(3, 0, world);
+  }
+
+  /** Contact damage only outside the lunge, which does its own, heavier hit. */
+  override touchPlayer(world: World): void {
+    if (this.state === 'lunge') return;
+    super.touchPlayer(world);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.6);
+      ctx.scale(this.facing, 1);
+      const lean = this.state === 'lungeWind' ? -0.16 : this.state === 'lunge' ? 0.2 : 0;
+      ctx.rotate(lean);
+
+      // Body: a slab of rift stone standing on two short legs.
+      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
+      g.addColorStop(0, '#4a3070');
+      g.addColorStop(1, '#1d1230');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-16, -this.h + 8);
+      ctx.lineTo(16, -this.h + 3);
+      ctx.lineTo(20, -13);
+      ctx.lineTo(-19, -13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#2e1d4a';
+      ctx.fillRect(-16, -this.h + 8, 32, 3);
+      ctx.fillStyle = '#170e26';
+      ctx.fillRect(-15, -14, 11, 14);
+      ctx.fillRect(4, -14, 11, 14);
+
+      // The core, which is also the tell: it burns before every move.
+      const heat = 0.35 + this.core * 0.65;
+      const cy = -this.h + 26;
+      const halo = ctx.createRadialGradient(2, cy, 0, 2, cy, 30 * heat);
+      halo.addColorStop(0, `rgba(200,140,255,${(0.5 * heat).toFixed(2)})`);
+      halo.addColorStop(1, 'rgba(200,140,255,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(-28, cy - 30, 60, 60);
+      ctx.fillStyle = `rgba(226,196,255,${(0.6 + heat * 0.4).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(2, cy - 12);
+      ctx.lineTo(10, cy);
+      ctx.lineTo(2, cy + 12);
+      ctx.lineTo(-6, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      // Shoulder shards, turned outwards while it winds up.
+      const flare = this.core * 5;
+      ctx.fillStyle = '#6d4aa8';
+      for (const side of [-1, 1]) {
+        ctx.save();
+        ctx.translate(side * (16 + flare), -this.h + 16);
+        ctx.rotate(side * (0.5 + this.core * 0.35));
+        ctx.beginPath();
+        ctx.moveTo(0, -17);
+        ctx.lineTo(7, 8);
+        ctx.lineTo(-7, 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      // A crown of splinters, so the silhouette alone says "not a skeleton".
+      ctx.fillStyle = '#553584';
+      for (let i = -1; i <= 1; i++) {
+        const bx = i * 9;
+        const bh = 12 - Math.abs(i) * 4;
+        ctx.beginPath();
+        ctx.moveTo(bx, -this.h - 4 - bh);
+        ctx.lineTo(bx + 4, -this.h + 2);
+        ctx.lineTo(bx - 4, -this.h + 2);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Head: a narrow visor, lit from inside.
+      ctx.fillStyle = '#241640';
+      ctx.fillRect(-11, -this.h - 2, 22, 14);
+      ctx.fillStyle = `rgba(255,190,120,${(0.55 + this.core * 0.45).toFixed(2)})`;
+      ctx.fillRect(-6, -this.h + 3, 13, 4);
+      ctx.restore();
+    });
+  }
+}
+
 export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
   switch (kind) {
     case 'slime':
@@ -574,5 +864,7 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Skeleton(x, y);
     case 'mage':
       return new DarkMage(x, y);
+    case 'warden':
+      return new Warden(x, y);
   }
 }

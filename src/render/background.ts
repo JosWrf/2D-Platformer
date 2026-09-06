@@ -173,7 +173,7 @@ export class Background {
       const rng = new Rng(i * 7717 + 13);
       if (rng.next() > 0.82) continue;
       const scale = rng.range(0.7, 1.35);
-      const sway = Math.sin(time * 0.5 + i) * 1.6;
+      const sway = zone.calm ? 0 : Math.sin(time * 0.5 + i) * 1.6;
 
       switch (zone.name) {
         case 'forest': {
@@ -221,6 +221,34 @@ export class Background {
           for (let c = 0; c < 4; c++) {
             ctx.fillRect(x - 20 * scale + c * 11 * scale, baseY - h - 7 * scale, 7 * scale, 7 * scale);
           }
+          break;
+        }
+        case 'rift': {
+          // Torn slabs of rock standing on end, with a piece of one already
+          // adrift above it - the zone's whole idea in a silhouette.
+          const h = rng.range(120, 250) * scale;
+          const lean = rng.range(-10, 10);
+          ctx.fillStyle = dark;
+          ctx.beginPath();
+          ctx.moveTo(x - 18 * scale, baseY);
+          ctx.lineTo(x - 12 * scale + lean, baseY - h);
+          ctx.lineTo(x + 6 * scale + lean, baseY - h * 0.82);
+          ctx.lineTo(x + 20 * scale, baseY);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = near;
+          ctx.fillRect(x - 12 * scale + lean, baseY - h, 18 * scale, 3 * scale);
+          // The shard hangs still. It looked better bobbing, but a row of
+          // them across the horizon is a row of things twitching.
+          const sy = baseY - h - rng.range(30, 80) * scale;
+          ctx.fillStyle = near;
+          ctx.beginPath();
+          ctx.moveTo(x + lean, sy - 16 * scale);
+          ctx.lineTo(x + 13 * scale + lean, sy);
+          ctx.lineTo(x + lean, sy + 11 * scale);
+          ctx.lineTo(x - 11 * scale + lean, sy);
+          ctx.closePath();
+          ctx.fill();
           break;
         }
         default:

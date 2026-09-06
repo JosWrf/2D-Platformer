@@ -14,6 +14,7 @@ type PropKind =
   | 'urn'
   | 'stalagmite'
   | 'shard'
+  | 'riftshard'
   | 'bones'
   | 'candle'
   | 'vine'
@@ -32,6 +33,7 @@ interface Prop {
 const GLOWING: Partial<Record<PropKind, { rgb: string; radius: number }>> = {
   shroom: { rgb: '128,236,190', radius: 74 },
   shard: { rgb: '99,230,255', radius: 66 },
+  riftshard: { rgb: '176,120,255', radius: 70 },
   candle: { rgb: '255,178,96', radius: 82 },
 };
 
@@ -123,9 +125,12 @@ export class Scatter {
         if (roll < 0.27) return 'candle';
         return null;
       case 'rift':
-        if (roll < 0.2) return 'shard';
-        if (roll < 0.3) return 'rubble';
-        if (roll < 0.34) return 'bones';
+        // As densely dressed as the forest floor: the rift used to be bare
+        // stone with the odd crystal, which read as unfinished next to it.
+        if (roll < 0.26) return 'riftshard';
+        if (roll < 0.4) return 'stalagmite';
+        if (roll < 0.5) return 'rubble';
+        if (roll < 0.56) return 'bones';
         return null;
       default:
         return null;
@@ -272,6 +277,40 @@ export class Scatter {
         ctx.fill();
         ctx.fillStyle = 'rgba(150,196,214,0.7)';
         ctx.fillRect(-0.6, -h + 2, 1.2, h - 3);
+        break;
+      }
+      case 'riftshard': {
+        // The rift's own crystal: the cavern shard is cyan, which fought the
+        // violet rock it stands on here.
+        const h = 8 + s * 12;
+        const w = 2.2 + s * 1.6;
+        // Barely a pulse: these stand on every second tile, and a whole field
+        // of them breathing in step is what made the rift hard to look at.
+        const pulse = 0.9 + Math.sin(time * 0.5 + s * 9) * 0.1;
+        const g = ctx.createRadialGradient(0, -h * 0.6, 0, 0, -h * 0.6, h * 1.8);
+        g.addColorStop(0, `rgba(176,120,255,${(0.16 * pulse).toFixed(3)})`);
+        g.addColorStop(1, 'rgba(176,120,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(-h * 1.8, -h * 2.4, h * 3.6, h * 3.6);
+        ctx.fillStyle = 'rgba(120,74,190,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(-w, 0);
+        ctx.lineTo(0, -h);
+        ctx.lineTo(w, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = `rgba(214,180,255,${(0.55 + pulse * 0.35).toFixed(2)})`;
+        ctx.fillRect(-0.6, -h + 2, 1.2, h - 3);
+        // A smaller splinter leaning against it, so it is not one lonely spike.
+        if (s > 0.45) {
+          ctx.fillStyle = 'rgba(120,74,190,0.7)';
+          ctx.beginPath();
+          ctx.moveTo(w * 0.8, 0);
+          ctx.lineTo(w * 2.2, -h * 0.55);
+          ctx.lineTo(w * 3, 0);
+          ctx.closePath();
+          ctx.fill();
+        }
         break;
       }
       case 'bones': {

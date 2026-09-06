@@ -12,9 +12,16 @@ interface ZoneTileColors {
   edge: string;
   /** Indoor zones use carved stone ledges instead of wooden planks. */
   stoneLedges: boolean;
+  /** The stone a ledge is cut from, per zone: one grey for all of them read
+   * as the same corridor in five different places. */
+  ledge: string;
+  ledgeEdge: string;
+  /** Calm zones grow nothing that sways; the crust stands still. */
+  calm: boolean;
 }
 
 function colorsForZone(x: number): ZoneTileColors {
+  const calm = zoneAt(x).calm;
   switch (zoneAt(x).name) {
     case 'forest':
       return {
@@ -24,6 +31,9 @@ function colorsForZone(x: number): ZoneTileColors {
         topLight: PALETTE.grassLight,
         edge: PALETTE.grassDark,
         stoneLedges: false,
+        ledge: '#4b3a2a',
+        ledgeEdge: '#6d563c',
+        calm,
       };
     case 'ruins':
       return {
@@ -33,6 +43,9 @@ function colorsForZone(x: number): ZoneTileColors {
         topLight: '#7d9c6c',
         edge: '#39502f',
         stoneLedges: false,
+        ledge: '#4a4258',
+        ledgeEdge: '#6d6482',
+        calm,
       };
     case 'caverns':
       return {
@@ -42,6 +55,9 @@ function colorsForZone(x: number): ZoneTileColors {
         topLight: '#49a6bd',
         edge: '#1c4a5c',
         stoneLedges: true,
+        ledge: '#2c3e52',
+        ledgeEdge: '#4b7290',
+        calm,
       };
     case 'castle':
       return {
@@ -51,15 +67,23 @@ function colorsForZone(x: number): ZoneTileColors {
         topLight: '#7d5a60',
         edge: '#3a262c',
         stoneLedges: true,
+        ledge: '#3d3440',
+        ledgeEdge: '#665a68',
+        calm,
       };
     case 'rift':
       return {
         body: '#2b2140',
         bodyDark: '#180f28',
-        top: '#5a3d8a',
-        topLight: '#8a63c4',
-        edge: '#3c2760',
+        // Measured down, not guessed: the crust used to come out brighter
+        // than the hero himself, and the eye went to the floor.
+        top: '#412a63',
+        topLight: '#61458f',
+        edge: '#2e1d4a',
         stoneLedges: true,
+        ledge: '#332552',
+        ledgeEdge: '#6a4aa0',
+        calm,
       };
     default:
       return {
@@ -69,6 +93,9 @@ function colorsForZone(x: number): ZoneTileColors {
         topLight: '#96343f',
         edge: '#471a22',
         stoneLedges: true,
+        ledge: PALETTE.stone,
+        ledgeEdge: PALETTE.stoneEdge,
+        calm,
       };
   }
 }
@@ -203,11 +230,13 @@ function drawBlock(
         const bx = px + 3 + i * 10 + ((tuft + i) % 3);
         ctx.fillRect(bx, py + 8, 3, 3 + ((tuft + i) % 3));
       }
-      // Waving grass blades.
+      // Blades standing out of the surface. In a calm zone they hold still:
+      // a line of them swaying across the whole width of the screen is the
+      // single most restless thing in the picture.
       ctx.fillStyle = colors.topLight;
       for (let i = 0; i < 3; i++) {
         const bx = px + 5 + i * 10;
-        const sway = Math.sin(time * 1.6 + tx * 0.7 + i) * 1.6;
+        const sway = colors.calm ? 0 : Math.sin(time * 1.6 + tx * 0.7 + i) * 1.6;
         ctx.fillRect(bx + sway, py - 4, 2, 4);
       }
     }
@@ -283,9 +312,9 @@ function drawPlatform(
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.fillRect(px, py + 10, TILE, 4);
   if (colors.stoneLedges) {
-    ctx.fillStyle = PALETTE.stone;
+    ctx.fillStyle = colors.ledge;
     ctx.fillRect(px, py, TILE, 12);
-    ctx.fillStyle = PALETTE.stoneEdge;
+    ctx.fillStyle = colors.ledgeEdge;
     ctx.fillRect(px, py, TILE, 3);
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(px + 4 + noise * 16, py + 5, 3, 6);

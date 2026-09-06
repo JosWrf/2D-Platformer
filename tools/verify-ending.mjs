@@ -83,9 +83,20 @@ const result = await page.evaluate(() => {
         continue;
       }
       const dir = g.portal.cx > p.cx + 4 ? 1 : g.portal.cx < p.cx - 4 ? -1 : 0;
-      const ahead = Math.floor((p.cx + dir * 26) / 32);
       const foot = Math.floor((p.bottom + 6) / 32);
-      const gap = dir !== 0 && !g.level.solidAt(ahead, foot) && !g.level.platformAt(ahead, foot);
+      const here = Math.floor(p.cx / 32);
+      const ground = (t) => g.level.solidAt(t, foot) || g.level.platformAt(t, foot);
+      // Take off a tile or two before the edge, the way a player does, and
+      // only for a gap whose far side is within reach: a jump off the end of
+      // a high ledge is a dive into whatever is under it, while walking off
+      // the same edge just drops onto the floor below.
+      let edge = -1;
+      for (let i = 1; i <= 3 && edge < 0; i++) if (!ground(here + dir * i)) edge = i;
+      let landing = false;
+      if (edge >= 0) {
+        for (let i = edge + 1; i <= edge + 5 && !landing; i++) landing = ground(here + dir * i);
+      }
+      const gap = dir !== 0 && edge >= 0 && landing;
       const enemy = g.enemies.some((e) => !e.dead && Math.abs(e.cx - p.cx) < 60 && Math.abs(e.cy - p.cy) < 50);
       stuck = Math.abs(p.cx - lastX) < 0.6 ? stuck + 1 : 0;
       lastX = p.cx;
@@ -99,17 +110,17 @@ const result = await page.evaluate(() => {
       tick({ right: dir > 0, left: dir < 0, jump, attack: enemy && f % 12 < 3 });
       furthest = Math.max(furthest, p.cx);
     }
-    return { deaths, furthestTile: Math.round(furthest / 32) };
+    return { deaths, furthestTile: Math.round(furthest / 32), stuckAt: Math.round(p.cx / 32) };
   };
 
-  const run = travel(60 * 120);
+  const run = travel(60 * 240);
   const reached = g.state === 'victory';
 
   // Second run: touch the gate and keep walking. The run must still count.
   g.restart();
   g.state = 'playing';
   openTheWay();
-  p.x = 678 * 32;
+  p.x = 802 * 32;
   p.y = 17 * 32;
   p.vx = 0;
   p.vy = 0;

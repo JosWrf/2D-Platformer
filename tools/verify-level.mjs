@@ -122,6 +122,18 @@ const report = await page.evaluate(() => {
     }
   }
 
+  // Platform tiles nobody can stand on. The column check below hides these:
+  // a platform floating out of reach sits over solid floor, and the floor
+  // node makes the whole column count as reached.
+  const strandedPlatforms = [];
+  nodes.forEach((n, i) => {
+    if (seen[i]) return;
+    if (!L.platformAt(n.tx, n.ty + 1)) return;
+    const last = strandedPlatforms[strandedPlatforms.length - 1];
+    if (last && n.tx <= last[1] + 1 && n.ty === last[2]) last[1] = Math.max(last[1], n.tx);
+    else strandedPlatforms.push([n.tx, n.tx, n.ty]);
+  });
+
   // Columns that hold a standable tile but were never reached.
   const reachableCols = new Set();
   const allCols = new Set();
@@ -147,6 +159,7 @@ const report = await page.evaluate(() => {
   return {
     width: W,
     nodes: nodes.length,
+    strandedPlatforms,
     furthestReachableTile: maxX,
     bossTile: boss.tx,
     bossReachable,
@@ -161,4 +174,7 @@ await browser.close();
 server.close();
 if (!report.bossReachable) console.error('FAIL: the boss cannot be reached from the spawn.');
 if (!report.portalReachable) console.error('FAIL: the gate home cannot be reached.');
-process.exit(report.bossReachable && report.portalReachable ? 0 : 1);
+if (report.strandedPlatforms.length) {
+  console.error(`FAIL: ${report.strandedPlatforms.length} platform(s) hang out of reach - [fromTile, toTile, row].`);
+}
+process.exit(report.bossReachable && report.portalReachable && !report.strandedPlatforms.length ? 0 : 1);

@@ -74,6 +74,13 @@ export interface Zone {
   darkTint: string;
   /** Colour of the spores drifting through the zone, as "r,g,b". */
   sporeRgb: string;
+  /**
+   * A calm zone holds still: no swaying growth, no bobbing silhouettes, and
+   * spores that drift instead of pulsing. Against a nearly black background
+   * every moving highlight is a flicker, and a screen full of them is tiring
+   * to look at rather than atmospheric.
+   */
+  calm: boolean;
 }
 
 export const ZONES: Zone[] = [
@@ -90,6 +97,7 @@ export const ZONES: Zone[] = [
     darkness: 0.72,
     darkTint: '#050a10',
     interior: false,
+    calm: false,
   },
   {
     name: 'ruins',
@@ -104,6 +112,7 @@ export const ZONES: Zone[] = [
     darkness: 0.76,
     darkTint: '#080512',
     interior: false,
+    calm: false,
   },
   {
     name: 'caverns',
@@ -118,6 +127,7 @@ export const ZONES: Zone[] = [
     darkness: 0.88,
     darkTint: '#01060c',
     interior: true,
+    calm: false,
   },
   {
     name: 'castle',
@@ -132,6 +142,7 @@ export const ZONES: Zone[] = [
     darkness: 0.78,
     darkTint: '#0c0509',
     interior: false,
+    calm: false,
   },
   {
     name: 'throne',
@@ -146,6 +157,7 @@ export const ZONES: Zone[] = [
     darkness: 0.82,
     darkTint: '#0b0207',
     interior: true,
+    calm: false,
   },
   {
     name: 'rift',
@@ -160,6 +172,7 @@ export const ZONES: Zone[] = [
     ambient: 'rgba(150,90,255,0.07)',
     label: 'Der Riss',
     interior: false,
+    calm: true,
   },
 ];
 

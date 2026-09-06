@@ -40,17 +40,20 @@ export class Spores {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, rgb: string): void {
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, rgb: string, calm = false): void {
     const { viewW, viewH } = this;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (const s of this.spores) {
-      const wrapX = (s.x - camera.x * 0.55 * s.depth + Math.sin(time * 0.4 + s.phase) * 26 - time * s.speed) % viewW;
+      // In a calm zone they only drift: the sideways weave is what makes a
+      // field of them read as flickering rather than floating.
+      const weave = calm ? 0 : Math.sin(time * 0.4 + s.phase) * 26;
+      const wrapX = (s.x - camera.x * 0.55 * s.depth + weave - time * s.speed * (calm ? 0.45 : 1)) % viewW;
       const x = wrapX < 0 ? wrapX + viewW : wrapX;
       const wrapY = (s.y - camera.y * 0.4 * s.depth - time * s.rise) % viewH;
       const y = wrapY < 0 ? wrapY + viewH : wrapY;
       // Slow individual breathing keeps the field from looking like static.
-      const pulse = 0.55 + Math.sin(time * 1.6 + s.phase) * 0.45;
+      const pulse = calm ? 0.8 + Math.sin(time * 0.5 + s.phase) * 0.12 : 0.55 + Math.sin(time * 1.6 + s.phase) * 0.45;
       const halo = s.size * 7;
 
       const g = ctx.createRadialGradient(x, y, 0, x, y, halo);

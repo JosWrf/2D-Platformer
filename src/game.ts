@@ -3,7 +3,7 @@ import { Camera } from './core/camera';
 import { Input } from './core/input';
 import { clamp, rand } from './core/math';
 import { Boss } from './entities/boss';
-import { Enemy, EnemyKind, createEnemy } from './entities/enemy';
+import { Enemy, EnemyKind, Warden, createEnemy } from './entities/enemy';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
 import { Player } from './entities/player';
@@ -120,6 +120,7 @@ export class Game implements World {
         case 'bat':
         case 'skeleton':
         case 'mage':
+        case 'warden':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -753,7 +754,7 @@ export class Game implements World {
     this.drawCastLight(ctx);
 
     // Spores sit in front of the darkness, so they glow through it.
-    this.spores.draw(ctx, this.camera, this.time, sporeRgb);
+    this.spores.draw(ctx, this.camera, this.time, sporeRgb, blend.t > 0.5 ? blend.to.calm : blend.from.calm);
 
     this.drawLighting(ctx);
     if (this.state !== 'title') this.drawHud(ctx);
@@ -863,6 +864,19 @@ export class Game implements World {
           phase: this.boss.phase,
         },
         this.bossIntro,
+      );
+    }
+
+    // The warden gets the same bar, half the width: it is a mini-boss, and a
+    // fight with a health bar is a fight the player knows to take seriously.
+    const warden = this.enemies.find((e): e is Warden => e instanceof Warden && e.engaged && !e.dead);
+    if (warden && !(this.boss && this.boss.engaged && !this.boss.dead)) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        { name: 'SPLITTERWÄCHTER', hp: warden.hp, maxHp: warden.maxHp, ghost: warden.hp, phase: 1 },
+        0,
       );
     }
   }

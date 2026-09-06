@@ -39,7 +39,7 @@ export class Portal {
   draw(ctx: CanvasRenderingContext2D): void {
     const cx = this.cx;
     const cy = this.cy;
-    const pulse = 0.85 + Math.sin(this.anim * 2.2) * 0.15;
+    const pulse = 0.92 + Math.sin(this.anim * 0.9) * 0.08;
 
     glow(ctx, cx, cy, 58 * pulse, 'rgba(180,130,255,0.4)');
 
@@ -65,7 +65,7 @@ export class Portal {
     }
     // Motes falling upwards into the tear.
     for (let i = 0; i < 6; i++) {
-      const a = this.anim * 1.4 + i * 1.05;
+      const a = this.anim * 0.7 + i * 1.05;
       const r = ((a % 1) * 26) % 26;
       ctx.globalAlpha = 1 - r / 26;
       ctx.fillStyle = '#e8d8ff';
