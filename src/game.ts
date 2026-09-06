@@ -277,7 +277,7 @@ export class Game implements World {
    * level mid-jump with no word of explanation reads as a bug, not a reward.
    */
   private offerCrystalWorld(): void {
-    if (this.bonusOffered || this.inCrystalWorld) return;
+    if (this.bonusOffered || this.inCrystalWorld || this.dialogue) return;
     this.bonusOffered = true;
     this.dialogue = {
       speaker: 'EINE STIMME AUS DEM STEIN',
@@ -312,6 +312,13 @@ export class Game implements World {
   /** Reaching the gate home is what actually finishes the run. */
   onPortalReached(): void {
     if (this.victoryTimer > 0 || this.state !== 'playing') return;
+    // A second door into the crystal hall. The gate is where a player who has
+    // everything goes looking for the reward, so it has to lead there too -
+    // and it means the whole bonus never hangs on one trigger firing.
+    if (!this.inCrystalWorld && this.gems >= this.totalGems && this.totalGems > 0) {
+      this.offerCrystalWorld();
+      return;
+    }
     this.victoryTimer = 1.6;
     this.flashWhite = 1;
     // Stop him where the gate caught him; from here on he is a passenger.
@@ -427,6 +434,11 @@ export class Game implements World {
     this.playTime += dt;
     this.spawnAmbient(dt);
 
+    // Checked every frame rather than only in the branch that books a gem.
+    // Hanging the one thing a player has to work for off a single line in a
+    // loop means any path that ever counts a gem differently loses it silently.
+    if (this.gems >= this.totalGems && this.totalGems > 0) this.offerCrystalWorld();
+
     if (this.victoryTimer > 0) {
       this.victoryTimer -= dt;
       if (this.victoryTimer <= 0) {
@@ -507,10 +519,7 @@ export class Game implements World {
       pickup.update(dt, this);
       if (pickup.dead) {
         this.collected.add(pickup.id);
-        if (pickup.kind === 'gem') {
-          this.gems++;
-          if (this.gems >= this.totalGems) this.offerCrystalWorld();
-        }
+        if (pickup.kind === 'gem') this.gems++;
       }
     }
 
@@ -1113,6 +1122,12 @@ export class Game implements World {
 
     ctx.fillStyle = 'rgba(150,170,225,0.35)';
     ctx.fillRect(VIEW_W / 2 - 170, 232, 340, 1);
+
+    // Which build this is. One cached index.html looks exactly like the new
+    // one, and then a missing feature is indistinguishable from a bug.
+    ctx.globalAlpha = 0.5;
+    drawTextCentered(ctx, `Stand ${__BUILD__}`, VIEW_W / 2, VIEW_H - 12, 11, '#6f7ba0', 600);
+    ctx.globalAlpha = 1;
 
     const rows: [string, string][] = [
       ['← →  /  A D', 'Laufen'],

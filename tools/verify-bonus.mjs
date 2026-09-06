@@ -8,6 +8,10 @@
  * holds the world still while it is read, finishing it puts the hero in the
  * hall, and the boss there can be fought and beaten.
  *
+ * The gate at the end of the rift is checked too. That is where a player who
+ * has everything goes looking for the reward, so it has to lead there as well -
+ * and it means the whole thing never hangs on one trigger firing.
+ *
  * Usage: node tools/verify-bonus.mjs
  */
 import { chromium } from 'playwright';
@@ -77,6 +81,7 @@ const result = await page.evaluate(() => {
     p.vy = 0;
     tick();
   }
+  for (let i = 0; i < 3; i++) tick();
   const opened = !!g.dialogue;
   const lines = g.dialogue ? g.dialogue.lines.length : 0;
 
@@ -94,6 +99,8 @@ const result = await page.evaluate(() => {
 
   const boss = g.enemies.find((e) => e.kind === 'prismarch');
   if (!boss) return { ok: false, note: 'no Prismarch in the hall', opened, teleported };
+
+
 
   /** Which move it picks from which range, with the hero held at that range. */
   const home = boss.x;
@@ -124,6 +131,11 @@ const result = await page.evaluate(() => {
   };
   const far = moveAt(300);
   const near = moveAt(70);
+
+  // Back into the hall for the fight itself: the gate runs above left the game
+  // wherever they ended.
+  g.state = 'playing';
+  g.inCrystalWorld = true;
 
   // And then it is actually fought down. Pinning it above may have let the
   // game drop it from the list, so it goes back in first.
@@ -158,6 +170,42 @@ const result = await page.evaluate(() => {
   }
   const killed = boss.dead;
   for (let i = 0; i < 260 && g.state !== 'victory'; i++) tick();
+  const trueEnding = g.state === 'victory';
+
+  /**
+   * The second door: a full counter but no dialogue yet, standing in front of
+   * the gate. It must open the hall rather than end the run - and with nothing
+   * collected the same gate must still end the run the ordinary way.
+   */
+  const gateWith = (all) => {
+    g.restart();
+    g.state = 'playing';
+    g.level.exitSealed = false;
+    g.bossDefeated = true;
+    if (g.boss) g.boss.dead = true;
+    if (all) {
+      for (const q of g.pickups.filter((x) => x.kind === 'gem')) {
+        q.dead = true;
+        g.collected.add(q.id);
+        g.gems++;
+      }
+    }
+    p.x = 802 * 32;
+    p.y = 17 * 32;
+    p.vx = 0;
+    p.vy = 0;
+    p.dead = false;
+    g.camera.snapTo(p.cx, p.cy);
+    for (let f = 0; f < 500; f++) {
+      // Confirm has to be released between lines: the key is edge-triggered,
+      // so holding it advances the dialogue exactly once and then stalls.
+      tick({ right: !g.dialogue, confirm: !!g.dialogue && f % 2 === 0 });
+      if (g.inCrystalWorld || g.state === 'victory') break;
+    }
+    return { crystalWorld: g.inCrystalWorld, state: g.state };
+  };
+  const gateWithEverything = gateWith(true);
+  const gateWithout = gateWith(false);
 
   return {
     ok:
@@ -168,16 +216,22 @@ const result = await page.evaluate(() => {
       zone === 'Der Kristallhort' &&
       far.includes('fanWind') &&
       near.includes('chargeWind') &&
+      trueEnding &&
+      gateWithEverything.crystalWorld &&
+      !gateWithout.crystalWorld &&
+      gateWithout.state === 'victory' &&
       killed &&
       sawPhaseTwo &&
       hurtThePlayer > 0 &&
-      g.state === 'victory',
+      true,
     dialogueLines: lines,
     worldHeldStill: heldStill,
     teleported,
     zone,
     movesFar: far,
     movesNear: near,
+    gateWithEverything,
+    gateWithout,
     bossMaxHp: boss.maxHp,
     sawPhaseTwo,
     damageDealtToPlayer: hurtThePlayer,

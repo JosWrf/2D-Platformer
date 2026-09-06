@@ -1,4 +1,23 @@
+import { execSync } from 'node:child_process';
 import { defineConfig, type Plugin } from 'vite';
+
+/**
+ * A short mark of which build is running, shown on the title screen.
+ *
+ * The game ships as one index.html with no hashed file name, so a browser that
+ * holds on to it serves an old game that looks exactly like a new one. Without
+ * something visible on screen there is no way to tell a bug from a stale tab.
+ */
+function buildStamp(): string {
+  let sha = 'lokal';
+  try {
+    sha = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+  } catch {
+    // No git here; the date alone still says something.
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  return `${day} · ${sha}`;
+}
 
 /**
  * Packs the emitted JavaScript straight into index.html, so a build is one
@@ -31,6 +50,7 @@ function singleFile(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: { __BUILD__: JSON.stringify(buildStamp()) },
   build: {
     target: 'es2022',
     outDir: 'dist',

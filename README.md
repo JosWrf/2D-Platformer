@@ -96,7 +96,10 @@ kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 
 Wer alle 138 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
 Stein meldet sich, fünf Zeilen lang, und wer sie zu Ende gelesen hat, steht im
-Kristallhort. Solange der Dialog liegt, steht die Welt still — sonst liest man
+Kristallhort. Es gibt zwei Türen dorthin — der volle Zähler öffnet sie sofort,
+und wer trotzdem am Tor im Riss ankommt, wird dort hinübergeschickt statt den
+Lauf zu beenden. Eine Belohnung, die man sich erarbeitet hat, darf nicht an
+einem einzigen Auslöser hängen. Solange der Dialog liegt, steht die Welt still — sonst liest man
 und läuft dabei von der Kante.
 
 70 Trefferpunkte, zwei Phasen, drei Züge nach Entfernung: aus der Nähe ein
@@ -205,7 +208,8 @@ Angriffstaste hält, überhaupt zum Zug kommt.
 `verify:bonus` fährt den ganzen Bonusweg ab: den letzten Edelstein wirklich
 aufsammeln, den Dialog lesen (und prüfen, dass die Welt dabei steht), im Hort
 landen, den Prismarchen auf zwei Entfernungen zu seinen Zügen bringen und ihn
-erlegen. Es ist der einzige Inhalt, an dem niemand aus Versehen vorbeikommt —
+erlegen. Dazu beide Türen: mit vollem Zähler muss das Tor im Riss in den Hort
+führen, ohne ihn weiterhin den Lauf beenden. Es ist der einzige Inhalt, an dem niemand aus Versehen vorbeikommt —
 also auch der, der am leichtesten unbemerkt kaputtgeht.
 
 `verify:motion` misst, wie weit das Bild bei einem Treffer je Einzelbild springt
@@ -232,6 +236,14 @@ je Sekunde vorher, 56 und 2,2 jetzt.
 
 Und `B` schaltet alles davon ganz ab — das Bildwackeln und die ziehenden Sporen,
 in jeder Zone.
+
+## Welcher Stand läuft gerade?
+
+Unten im Titelbild steht `Stand <Datum> · <Commit>`. Das Spiel wird als eine
+einzige `index.html` ohne Dateinamens-Hash ausgeliefert, und ein Browser, der
+die festhält, zeigt ein altes Spiel, das genauso aussieht wie ein neues. Wenn
+etwas Neues fehlt, sagt diese Zeile zuerst, ob es überhaupt ankommen ist — sonst
+hilft ein hartes Neuladen (Strg+Umschalt+R bzw. Cmd+Umschalt+R).
 
 ## Veröffentlichen
 
