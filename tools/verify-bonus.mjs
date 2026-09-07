@@ -6,7 +6,9 @@
  * easiest to break without noticing - nobody walks past it by accident. So the
  * whole chain is driven here: the last gem opens the dialogue, the dialogue
  * holds the world still while it is read, finishing it puts the hero in the
- * hall, and the boss there can be fought and beaten.
+ * hall, the boss there can be fought and beaten, and beating it hands back both
+ * the hero - on the exact spot he was taken from - and the blade upgrade that
+ * throws a crescent with every swing.
  *
  * The gate at the end of the rift is checked too. That is where a player who
  * has everything goes looking for the reward, so it has to lead there as well -
@@ -82,6 +84,7 @@ const result = await page.evaluate(() => {
     tick();
   }
   for (let i = 0; i < 3; i++) tick();
+  const departedFromTile = Math.round(p.cx / 32);
   const opened = !!g.dialogue;
   const lines = g.dialogue ? g.dialogue.lines.length : 0;
 
@@ -169,8 +172,55 @@ const result = await page.evaluate(() => {
     tick({ right: d > 44, left: d < -44, attack: Math.abs(d) < 74 && f % 11 < 4 });
   }
   const killed = boss.dead;
-  for (let i = 0; i < 260 && g.state !== 'victory'; i++) tick();
-  const trueEnding = g.state === 'victory';
+
+  // The reward: read the closing words, land back where he started, and swing.
+  const dialogueAfterWin = !!g.dialogue;
+  for (let i = 0; i < 40 && g.dialogue; i++) {
+    tick({ confirm: i % 2 === 0 });
+  }
+  for (let i = 0; i < 10; i++) tick();
+  const backInTheWorld = !g.inCrystalWorld;
+  const landedOnTile = Math.round(p.cx / 32);
+  const gotTheBeam = p.bladeBeam;
+
+  // One crescent per swing, friendly, and it reaches something out of arm's
+  // reach - which is the whole point of the upgrade.
+  g.projectiles.length = 0;
+  p.attackTimer = 0;
+  p.attackCombo = 0;
+  p.facing = 1;
+  let beams = 0;
+  for (let i = 0; i < 30; i++) {
+    tick({ attack: i < 3 });
+    beams = Math.max(beams, g.projectiles.filter((q) => q.kind === 'beam').length);
+  }
+  const allFriendly = g.projectiles.filter((q) => q.kind === 'beam').every((q) => q.friendly);
+
+  // Measured on the flat floor of the warden's arena: wherever the hero
+  // happens to land, a wall in front of him would eat the crescent and the
+  // test would be measuring the terrain instead of the upgrade.
+  let reachDamage = 0;
+  p.x = 700 * 32;
+  p.y = 17 * 32;
+  p.vx = 0;
+  p.vy = 0;
+  p.facing = 1;
+  g.camera.snapTo(p.cx, p.cy);
+  for (let i = 0; i < 20; i++) tick();
+  const target = g.enemies.find((e) => !e.dead && e.kind !== 'prismarch');
+  if (target) {
+    target.hp = target.maxHp = 20;
+    target.x = p.x + 130;
+    target.y = 17 * 32 - (target.h - 32);
+    target.active = true;
+    target.dead = false;
+    g.projectiles.length = 0;
+    p.attackTimer = 0;
+    p.attackCombo = 0;
+    const before = target.hp;
+    for (let i = 0; i < 60; i++) tick({ attack: i < 3 });
+    reachDamage = before - target.hp;
+  }
 
   /**
    * The second door: a full counter but no dialogue yet, standing in front of
@@ -216,7 +266,13 @@ const result = await page.evaluate(() => {
       zone === 'Der Kristallhort' &&
       far.includes('fanWind') &&
       near.includes('chargeWind') &&
-      trueEnding &&
+      dialogueAfterWin &&
+      backInTheWorld &&
+      landedOnTile === departedFromTile &&
+      gotTheBeam &&
+      beams === 1 &&
+      allFriendly &&
+      reachDamage > 0 &&
       gateWithEverything.crystalWorld &&
       !gateWithout.crystalWorld &&
       gateWithout.state === 'victory' &&
@@ -236,6 +292,13 @@ const result = await page.evaluate(() => {
     sawPhaseTwo,
     damageDealtToPlayer: hurtThePlayer,
     killed,
+    dialogueAfterWin,
+    backInTheWorld,
+    departedFromTile,
+    landedOnTile,
+    gotTheBeam,
+    beamsPerSwing: beams,
+    beamDamageAtRange: reachDamage,
     endState: g.state,
   };
 });
@@ -245,7 +308,13 @@ await browser.close();
 server.close();
 
 if (!result.ok) {
-  console.error('FAIL: the road behind the world no longer opens, or the Prismarch no longer fights.');
+  console.error(
+  'FAIL: the road behind the world no longer opens, the Prismarch no longer fights, or the way ' +
+    'back and the blade upgrade no longer arrive.',
+);
   process.exit(1);
 }
-console.log('OK: the last gem opens the way, the hall takes the hero, and the Prismarch fights and falls.');
+console.log(
+  'OK: the last gem opens the way, the hall takes the hero, the Prismarch fights and falls, ' +
+    'and the hero comes back with a blade that shoots.',
+);

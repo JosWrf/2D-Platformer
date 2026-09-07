@@ -74,6 +74,8 @@ export class Game implements World {
   private bonusOffered = false;
   /** True while the hero is behind the world, fighting the Prismarch. */
   inCrystalWorld = false;
+  /** Where to put him back down, and which checkpoint was his before. */
+  private returnTo: { x: number; y: number; cpX: number; cpY: number } | null = null;
   private trueEnding = false;
   /** Stays true once the knight has fallen, across deaths in the rift. */
   bossDefeated = false;
@@ -258,17 +260,32 @@ export class Game implements World {
    * The Prismarch falls. That is the end of the longer road, so it ends the run
    * outright rather than sending the hero back through the gate.
    */
+  /**
+   * The Prismarch falls. This is not the end of the run: the shards of its
+   * heart go into the blade, and the hero is put back where he was taken from,
+   * so the reward can actually be used on the rest of the world.
+   */
   onCrystalBossDefeated(): void {
-    if (this.victoryTimer > 0 || this.state !== 'playing') return;
+    if (this.trueEnding || this.state !== 'playing') return;
     this.trueEnding = true;
     this.score += 5000;
     this.flashWhite = 1;
     this.zoneBanner = { text: 'DAS HERZ ZERSPRINGT', timer: 3.4 };
     this.camera.addShake(10);
     audio.play('victory');
-    this.victoryTimer = 2.4;
     this.player.vx = 0;
     this.player.vy = 0;
+    this.dialogue = {
+      speaker: 'DAS HERZ DES KRISTALLS',
+      lines: [
+        'Du hast mich zerschlagen. Also gehören mir meine Splitter nicht mehr.',
+        'Sie liegen jetzt in deiner Klinge — nimm sie mit.',
+        'Jeder Hieb wirft von nun an eine Welle aus Licht voraus.',
+        'Und du gehst zurück. Was du begonnen hast, ist nicht hier zu beenden.',
+      ],
+      index: 0,
+      after: () => this.leaveCrystalWorld(),
+    };
   }
 
   /**
@@ -298,6 +315,13 @@ export class Game implements World {
     const spawn = this.level.spawns.find((s) => s.kind === 'prismarch');
     if (!spawn) return;
     const hallLeft = (spawn.tx - 30) * TILE;
+    // Remembered before anything is overwritten, so there is a way back.
+    this.returnTo = {
+      x: this.player.x,
+      y: this.player.y,
+      cpX: this.checkpointX,
+      cpY: this.checkpointY,
+    };
     this.inCrystalWorld = true;
     this.player.respawn(hallLeft, 17 * TILE);
     this.checkpointX = hallLeft;
@@ -309,13 +333,36 @@ export class Game implements World {
     audio.play('victory');
   }
 
+  /**
+   * Back out of the hall, with the blade upgraded. He lands where he was taken
+   * from - a few tiles clear of the gate if that is where it happened, because
+   * being dropped straight into it would end the run on the spot.
+   */
+  private leaveCrystalWorld(): void {
+    const back = this.returnTo;
+    this.inCrystalWorld = false;
+    this.player.bladeBeam = true;
+    this.flashWhite = 1;
+    this.zoneBanner = { text: 'KLINGENWELLE — JEDER HIEB SCHIESST', timer: 4.2 };
+    audio.play('victory');
+    if (!back) return;
+    this.checkpointX = back.cpX;
+    this.checkpointY = back.cpY;
+    this.player.respawn(back.x, back.y);
+    if (this.portal && this.portal.overlaps(this.player.rect)) {
+      this.player.respawn(back.x - TILE * 4, back.y);
+    }
+    this.camera.snapTo(this.player.cx, this.player.cy);
+    this.currentZone = zoneAt(this.player.cx).label;
+  }
+
   /** Reaching the gate home is what actually finishes the run. */
   onPortalReached(): void {
     if (this.victoryTimer > 0 || this.state !== 'playing') return;
     // A second door into the crystal hall. The gate is where a player who has
     // everything goes looking for the reward, so it has to lead there too -
     // and it means the whole bonus never hangs on one trigger firing.
-    if (!this.inCrystalWorld && this.gems >= this.totalGems && this.totalGems > 0) {
+    if (!this.bonusOffered && !this.inCrystalWorld && this.gems >= this.totalGems && this.totalGems > 0) {
       this.offerCrystalWorld();
       return;
     }
@@ -613,7 +660,9 @@ export class Game implements World {
     this.bonusOffered = false;
     this.inCrystalWorld = false;
     this.trueEnding = false;
+    this.returnTo = null;
     this.dialogue = null;
+    this.player.bladeBeam = false;
     this.level.exitSealed = true;
     this.respawnAtCheckpoint();
   }
@@ -949,6 +998,30 @@ export class Game implements World {
     ctx.fillStyle = '#8b95bd';
     ctx.fillText(`EDELSTEINE ${this.gems}/${this.totalGems}   TODE ${this.deaths}`, 24, 92);
 
+    // The blade upgrade, once it is earned. A power the player cannot see he
+    // has is a power he does not use.
+    if (this.player.bladeBeam) {
+      const pulse = 0.75 + Math.sin(this.time * 2.4) * 0.25;
+      ctx.save();
+      ctx.translate(30, 112);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = pulse;
+      ctx.fillStyle = '#9fe6ff';
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.quadraticCurveTo(1, -6, -7, -4);
+      ctx.quadraticCurveTo(0, 0, -7, 4);
+      ctx.quadraticCurveTo(1, 6, 7, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 0.55 + pulse * 0.45;
+      ctx.font = font(12, 600);
+      ctx.fillStyle = '#8fe8ff';
+      ctx.fillText('KLINGENWELLE', 42, 116);
+      ctx.globalAlpha = 1;
+    }
+
     // Progress bar of the whole level.
     const barW = 260;
     const barX = VIEW_W - barW - 24;
@@ -1163,7 +1236,15 @@ export class Game implements World {
     if (this.trueEnding) {
       glow(ctx, VIEW_W / 2, 150, 300, 'rgba(140,230,255,0.2)');
       drawTextCentered(ctx, 'DAS WAHRE ENDE', VIEW_W / 2, 168, 60, '#8fe8ff');
-      drawTextCentered(ctx, 'Das Herz des Kristalls ist zersprungen.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
+      drawTextCentered(
+        ctx,
+        'Morvain gefallen, das Herz des Kristalls zersprungen.',
+        VIEW_W / 2,
+        208,
+        17,
+        '#e7ecff',
+        600,
+      );
     } else {
       glow(ctx, VIEW_W / 2, 150, 300, 'rgba(255,200,90,0.18)');
       drawTextCentered(ctx, 'SIEG!', VIEW_W / 2, 168, 74, '#ffd166');
@@ -1190,7 +1271,9 @@ export class Game implements World {
       ctx.fillText(value, VIEW_W / 2 + 150, y);
     });
     ctx.textAlign = 'left';
-    if (!this.trueEnding) {
+    if (this.trueEnding) {
+      drawTextCentered(ctx, 'Klingenwelle erworben.', VIEW_W / 2, 408, 14, '#8fe8ff', 600);
+    } else {
       drawTextCentered(
         ctx,
         'Alle Edelsteine — und hinter der Welt wartet noch etwas.',

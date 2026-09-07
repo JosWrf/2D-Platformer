@@ -1,10 +1,10 @@
-import { Rect, rectsOverlap } from '../core/math';
+import { Rect, rand, rectsOverlap } from '../core/math';
 import { PALETTE } from '../render/palette';
 import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
 
-export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock';
+export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam';
 
 export class Projectile extends Body {
   friendly = false;
@@ -44,6 +44,14 @@ export class Projectile extends Body {
         this.w = 20;
         this.h = 20;
         this.damage = 2;
+        break;
+      case 'beam':
+        // The crescent thrown off an upgraded blade. Short-lived on purpose:
+        // it is a reach extension, not a gun.
+        this.w = 30;
+        this.h = 20;
+        this.life = 0.62;
+        this.damage = 1;
         break;
     }
   }
@@ -92,6 +100,20 @@ export class Projectile extends Body {
       }
     } else if (this.kind === 'bone' || this.kind === 'rock') {
       this.vy += 900 * dt;
+    } else if (this.kind === 'beam') {
+      // Flies flat and thins out as it goes, so its reach can be read.
+      if (world.time % 0.03 < dt) {
+        world.particles.spawn({
+          x: this.cx - Math.sign(this.vx) * 8,
+          y: this.cy,
+          vx: -this.vx * 0.08,
+          vy: rand(-24, 24),
+          color: 'rgba(190,240,255,0.6)',
+          size: 2.5,
+          life: 0.22,
+          shape: 'spark',
+        });
+      }
     }
 
     this.x += this.vx * dt;
@@ -124,6 +146,8 @@ export class Projectile extends Body {
         return PALETTE.skeleton;
       case 'rock':
         return '#8a7460';
+      case 'beam':
+        return '#bff0ff';
       default:
         return '#ff9a5c';
     }
@@ -133,6 +157,34 @@ export class Projectile extends Body {
     const cx = this.cx;
     const cy = this.cy;
     switch (this.kind) {
+      case 'beam': {
+        // A crescent of light, leaning the way it flies, with the tips drawn
+        // back: it has to read as thrown off a blade, not as a bullet.
+        const dir = Math.sign(this.vx) || 1;
+        const fade = Math.max(0, Math.min(1, this.life / 0.4));
+        glow(ctx, cx, cy, 26 * fade, `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(dir, 1);
+        ctx.globalCompositeOperation = 'lighter';
+        for (const [w, alpha, color] of [
+          [1, 0.5 * fade, '#5ec8ff'],
+          [0.62, 0.85 * fade, '#e8fbff'],
+        ] as const) {
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(13 * w, 0);
+          ctx.quadraticCurveTo(2 * w, -11 * w, -13 * w, -8 * w);
+          ctx.quadraticCurveTo(-1 * w, 0, -13 * w, 8 * w);
+          ctx.quadraticCurveTo(2 * w, 11 * w, 13 * w, 0);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        break;
+      }
       case 'orb': {
         const color = this.friendly ? '#8fe6ff' : '#d46bf0';
         glow(ctx, cx, cy, 18, this.friendly ? 'rgba(140,230,255,0.55)' : 'rgba(210,90,240,0.5)');

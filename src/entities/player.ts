@@ -5,6 +5,7 @@ import { PALETTE } from '../render/palette';
 import { glow, shadow, slashCrescent, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
+import { Projectile } from './projectile';
 
 const MAX_RUN = 235;
 const ACCEL = 1500;
@@ -108,6 +109,14 @@ export class Player extends Body {
   attackTimer = 0;
   attackCombo = 0;
   /** True while the running swing is the heavy charged one. */
+  /**
+   * The reward for the Prismarch: every swing throws a crescent of light ahead
+   * of the blade. It is a reach extension, not a gun - one per swing, and it
+   * dies after two thirds of a second.
+   */
+  bladeBeam = false;
+  private beamFired = false;
+
   charged = false;
   chargeTimer = 0;
   chargeReady = false;
@@ -320,6 +329,10 @@ export class Player extends Body {
       const elapsed = ATTACK_TOTAL - this.attackTimer;
       if (elapsed >= ATTACK_WINDUP && elapsed <= ATTACK_WINDUP + ATTACK_ACTIVE) {
         this.applySwordHits(world);
+        if (this.bladeBeam && !this.beamFired) {
+          this.beamFired = true;
+          this.throwBeam(world);
+        }
         this.emitSwingSparks(world, elapsed);
         if (this.attackCombo === 3 && !this.finisherDone && elapsed > ATTACK_WINDUP + ATTACK_ACTIVE * 0.72) {
           this.finisherDone = true;
@@ -430,10 +443,27 @@ export class Player extends Body {
     // The heavy strike stands outside the combo and opens a fresh one.
     this.attackCombo = charged ? 3 : (this.attackCombo % 3) + 1;
     this.finisherDone = charged;
+    this.beamFired = false;
     this.sheathTimer = 0;
     this.hitThisSwing.clear();
     if (charged) audio.play('chargeRelease');
     else audio.play('swing', this.attackCombo === 3 ? 0.8 : 1 + this.attackCombo * 0.08);
+  }
+
+  /**
+   * Throws the crescent, once per swing, from the hand rather than from the
+   * middle of the body - it has to leave the blade.
+   */
+  private throwBeam(world: World): void {
+    const pose = this.swingPose(ATTACK_TOTAL - this.attackTimer);
+    const hand = this.handWorld(pose);
+    const beam = new Projectile('beam', hand.x - 15, hand.y - 10, this.facing * 430, 0);
+    beam.friendly = true;
+    // The heavy strike throws a heavier wave, the same way it hits harder.
+    beam.damage = this.charged ? 3 : this.attackCombo === 3 ? 2 : 1;
+    world.spawnProjectile(beam);
+    audio.play('shoot', this.charged ? 0.8 : 1.25);
+    world.particles.burst(hand.x, hand.y, 6, '#cdf3ff', { speed: 120, shape: 'spark' });
   }
 
   /** Blows turned aside during the parry window fly back at their owner. */

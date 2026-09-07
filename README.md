@@ -108,8 +108,15 @@ Decke fallen und dorthin zielen, wo man gleich sein wird, von weitem ein Fächer
 aus drei Splittern — in der zweiten Phase fünf, und alle Pausen um ein Fünftel
 kürzer. Denselben Zug zweimal hintereinander macht er nie.
 
-Fällt er, endet der Lauf mit dem anderen Ende. Das Tor im Riss bleibt der Weg
-für alle, die nicht alles einsammeln.
+Fällt er, ist der Lauf **nicht** vorbei: die Splitter seines Herzens gehen in die
+Klinge, und der Held wird genau dorthin zurückgesetzt, wo er weggeholt wurde —
+mitsamt seinem alten Kontrollpunkt. Von da an wirft jeder Hieb eine
+**Klingenwelle** voraus, ein Halbmond aus Licht, der auf Abstand trifft: einer je
+Hieb, Schaden 1 in der Kombo, 2 beim Abschluss, 3 beim Ladeschlag. Im HUD steht
+sie unter der Edelsteinzeile, damit man weiß, dass man sie hat.
+
+Das Tor im Riss beendet den Lauf wie immer — der Siegbildschirm nennt dann das
+wahre Ende, wenn das Herz gefallen ist.
 
 ### Der Miniboss: Splitterwächter
 
