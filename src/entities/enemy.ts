@@ -6,7 +6,14 @@ import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
 
-export type EnemyKind = 'slime' | 'bat' | 'skeleton' | 'mage' | 'warden' | 'prismarch';
+export type EnemyKind =
+  | 'slime'
+  | 'bat'
+  | 'skeleton'
+  | 'mage'
+  | 'warden'
+  | 'thalassa'
+  | 'prismarch';
 
 export abstract class Enemy extends Body {
   hp = 2;
@@ -19,6 +26,16 @@ export abstract class Enemy extends Body {
   aggroRange = 240;
   /** Enemies far off-screen are frozen to keep the big level cheap. */
   active = false;
+  /**
+   * How long a boss is safe from being thrown off balance again.
+   *
+   * Poise alone is not enough. A player who simply holds the attack key deals
+   * damage faster than any wind-up takes, so break after break lands and the
+   * boss never completes a single move - measured on Thalassa: two projectiles
+   * in ten seconds of fighting. After a break there is a breath in which the
+   * next one cannot happen, and that breath is what lets her answer.
+   */
+  protected poiseLock = 0;
   anim = 0;
   readonly homeX: number;
   readonly homeY: number;
@@ -67,6 +84,7 @@ export abstract class Enemy extends Body {
     this.anim += dt;
     this.flash = Math.max(0, this.flash - dt * 5);
     this.stun = Math.max(0, this.stun - dt);
+    this.poiseLock = Math.max(0, this.poiseLock - dt);
   }
 
   abstract update(dt: number, world: World): void;
@@ -619,8 +637,9 @@ export class Warden extends Enemy {
     audio.play('hit');
     const committed = this.state !== 'wait' && this.state !== 'stalk' && this.state !== 'recover';
     if (!committed) this.vx = fromDir * 130;
-    if (this.poise <= 0) {
+    if (this.poise <= 0 && this.poiseLock <= 0) {
       this.poise = POISE;
+      this.poiseLock = 2.0;
       this.stun = 0.5;
       this.vx = fromDir * 150;
       world.particles.burst(this.cx, this.cy, 14, '#e2c4ff', { speed: 190, shape: 'spark' });
@@ -854,6 +873,290 @@ export class Warden extends Enemy {
   }
 }
 
+/* ---------------------------------------------------------------- thalassa */
+
+/** Damage she absorbs mid-move. Between the warden's and the Prismarch's. */
+const THALASSA_POISE = 6;
+
+/**
+ * Thalassa, the Drowned Crown - what was left of whoever the flooded hall was
+ * built for. The boss of the middle of the game: she comes after the caves and
+ * before the castle, so she has to be a step up from the roaming skeletons and
+ * a step below the knight.
+ *
+ * The same contract as the other two: every move is announced, a move once
+ * begun is seen through, and the pause afterwards is long enough to answer.
+ * What is hers alone is that two of her three moves reach across the whole
+ * floor - standing far away is not a way out of this fight.
+ */
+export class Thalassa extends Enemy {
+  private state: 'wait' | 'stalk' | 'surgeWind' | 'anchorWind' | 'undertowWind' | 'undertow' | 'recover' =
+    'wait';
+  private timer = 0;
+  private crown = 0;
+  private poise = THALASSA_POISE;
+  private lastMove = '';
+  engaged = false;
+
+  constructor(x: number, y: number) {
+    super('thalassa', x, y);
+    this.w = 50;
+    this.h = 62;
+    this.hp = this.maxHp = 42;
+    this.scoreValue = 1200;
+    this.aggroRange = 380;
+    this.contactDamage = 1;
+  }
+
+  get phase(): 1 | 2 {
+    return this.hp <= this.maxHp / 2 ? 2 : 1;
+  }
+
+  protected override deathColor(): string {
+    return '#4fb3a6';
+  }
+
+  override hurt(amount: number, fromDir: number, world: World): void {
+    if (this.dead) return;
+    this.hp -= amount;
+    this.flash = 1;
+    this.poise -= amount;
+    if (this.hp <= 0) {
+      this.die(world);
+      return;
+    }
+    audio.play('bossHit');
+    if (this.poise <= 0 && this.poiseLock <= 0) {
+      this.poise = THALASSA_POISE;
+      this.poiseLock = 2.2;
+      this.stun = 0.5;
+      this.vx = fromDir * 130;
+      world.particles.burst(this.cx, this.cy, 16, '#9fe4dc', { speed: 200, shape: 'spark' });
+    }
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    this.crown = Math.max(0, this.crown - dt * 2);
+
+    if (!this.engaged) {
+      if (dist < this.aggroRange && !player.dead) {
+        this.engaged = true;
+        this.state = 'recover';
+        this.timer = 1.1;
+        world.camera.addShake(5);
+      }
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.stun > 0) {
+      if (this.state !== 'recover') {
+        this.state = 'recover';
+        this.timer = 0.75;
+      }
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    this.facing = dx > 0 ? 1 : -1;
+    this.timer -= dt;
+    const quick = this.phase === 2 ? 0.8 : 1;
+
+    switch (this.state) {
+      case 'wait':
+      case 'recover':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.timer <= 0) {
+          this.state = 'stalk';
+          this.timer = rand(0.5, 0.85) * quick;
+        }
+        break;
+
+      case 'stalk': {
+        const want = dist > 130 ? sign(dx) * 58 : dist < 70 ? -sign(dx) * 58 : 0;
+        this.vx = approach(this.vx, want, 480 * dt);
+        if (this.timer <= 0) {
+          this.crown = 1;
+          const options = dist < 120 ? ['surgeWind', 'undertowWind'] : ['anchorWind', 'undertowWind', 'surgeWind'];
+          const pick = options.filter((o) => o !== this.lastMove);
+          const move = pick[Math.floor(Math.random() * pick.length)] ?? options[0];
+          this.lastMove = move;
+          this.state = move as typeof this.state;
+          this.timer = 0.55 * quick;
+          audio.play('shoot', 0.55);
+        }
+        break;
+      }
+
+      case 'surgeWind':
+        // The tide surge: a wave along the floor in both directions, so the
+        // answer is height, not distance.
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.crown = 1;
+        if (this.timer <= 0) {
+          for (const dir of [-1, 1]) {
+            const wave = new Projectile('shockwave', this.cx + dir * 22, this.bottom - 30, dir * 250, 0);
+            world.spawnProjectile(wave);
+          }
+          audio.play('slam');
+          world.camera.addShake(7);
+          world.particles.burst(this.cx, this.bottom, 22, '#7fd6cc', { speed: 240, gravity: 500 });
+          this.state = 'recover';
+          this.timer = 1.2 * quick;
+        }
+        break;
+
+      case 'anchorWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.crown = 1;
+        if (this.timer <= 0) {
+          // Thrown on an arc that lands where the hero is heading.
+          // The arc is solved from the point it is actually thrown from. It
+          // used to be solved from her centre and thrown from 26 px above it,
+          // which put every anchor down two feet over the hero's head.
+          const flight = 0.9;
+          const originY = this.cy - 26;
+          const vx = (dx + player.vx * 0.25) / flight;
+          const vy = (player.cy - originY) / flight - 0.5 * 900 * flight;
+          const anchor = new Projectile('rock', this.cx - 10, originY, vx, vy);
+          world.spawnProjectile(anchor);
+          audio.play('shoot');
+          this.state = 'recover';
+          this.timer = 1.15 * quick;
+        }
+        break;
+
+      case 'undertowWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.crown = 1;
+        if (this.timer <= 0) {
+          this.state = 'undertow';
+          this.timer = 1.1;
+          audio.play('shoot', 0.5);
+        }
+        break;
+
+      case 'undertow': {
+        // Pulls him in while two orbs drift out. Running away costs ground,
+        // so the fight is decided in her reach whether he likes it or not.
+        this.vx = approach(this.vx, 0, 900 * dt);
+        if (!player.dead && player.onGround && dist > 40) {
+          player.vx += -sign(dx) * 260 * dt;
+        }
+        world.particles.spawn({
+          x: player.cx + rand(-20, 20),
+          y: player.cy + rand(-18, 18),
+          vx: -sign(dx) * rand(60, 160),
+          vy: rand(-30, 30),
+          color: 'rgba(140,220,215,0.6)',
+          size: 2.5,
+          life: 0.35,
+          shape: 'spark',
+        });
+        if (this.timer <= 0) {
+          // Aimed from the hem, not from her shoulders: one orb low along the
+          // floor and one just above it, both at the hero rather than over him.
+          for (const up of [-0.12, 0.12]) {
+            const originY = this.cy + 6;
+            const ady = player.cy - originY;
+            const len = Math.hypot(dx, ady) || 1;
+            const orb = new Projectile(
+              'orb',
+              this.cx - 7,
+              originY,
+              (dx / len) * 190,
+              (ady / len) * 190 + up * 110,
+            );
+            world.spawnProjectile(orb);
+          }
+          audio.play('shoot');
+          this.state = 'recover';
+          this.timer = 1.25 * quick;
+        }
+        break;
+      }
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.6);
+      ctx.scale(this.facing, 1);
+      const heat = 0.35 + this.crown * 0.65;
+
+      // Robe: a wide skirt of water-heavy cloth, wider at the floor.
+      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
+      g.addColorStop(0, '#2c5f63');
+      g.addColorStop(0.6, '#1a3d45');
+      g.addColorStop(1, '#0b1e26');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-9, -this.h + 12);
+      ctx.lineTo(9, -this.h + 12);
+      ctx.quadraticCurveTo(22, -20, 24, 0);
+      ctx.lineTo(-24, 0);
+      ctx.quadraticCurveTo(-22, -20, -9, -this.h + 12);
+      ctx.closePath();
+      ctx.fill();
+      // Weed trailing off the hem, drawn still: this zone holds its breath.
+      ctx.fillStyle = 'rgba(60,140,110,0.55)';
+      for (let i = -3; i <= 3; i++) {
+        ctx.fillRect(i * 6 - 1, -6, 2, 6 + Math.abs(i));
+      }
+
+      // Shoulders and arms.
+      ctx.fillStyle = '#20464e';
+      ctx.fillRect(-14, -this.h + 14, 28, 7);
+      ctx.fillRect(this.crown > 0.5 ? 12 : 10, -this.h + 18, 6, 20);
+
+      // Head, veiled.
+      ctx.fillStyle = '#173239';
+      ctx.beginPath();
+      ctx.moveTo(-8, -this.h + 14);
+      ctx.quadraticCurveTo(0, -this.h - 8, 8, -this.h + 14);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = `rgba(150,240,225,${(0.5 + heat * 0.5).toFixed(2)})`;
+      ctx.fillRect(-4, -this.h + 4, 3, 2.5);
+      ctx.fillRect(2, -this.h + 4, 3, 2.5);
+
+      // The crown, which is the tell: it fills before every move.
+      const cy = -this.h - 4;
+      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 34 * heat);
+      halo.addColorStop(0, `rgba(120,225,210,${(0.5 * heat).toFixed(2)})`);
+      halo.addColorStop(1, 'rgba(120,225,210,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(-34, cy - 34, 68, 68);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(190,250,240,${(0.55 + heat * 0.45).toFixed(2)})`;
+      for (let i = -2; i <= 2; i++) {
+        const h = 9 - Math.abs(i) * 2;
+        const bx = i * 6;
+        ctx.beginPath();
+        ctx.moveTo(bx, cy - h);
+        ctx.lineTo(bx + 2.5, cy + 3);
+        ctx.lineTo(bx - 2.5, cy + 3);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.restore();
+    });
+  }
+}
+
 /* --------------------------------------------------------------- prismarch */
 
 /** Damage it shrugs off mid-move. Higher than the warden's: it is the last word. */
@@ -916,8 +1219,9 @@ export class Prismarch extends Enemy {
       return;
     }
     audio.play('bossHit');
-    if (this.poise <= 0) {
+    if (this.poise <= 0 && this.poiseLock <= 0) {
       this.poise = PRISM_POISE;
+      this.poiseLock = 2.0;
       this.stun = 0.55;
       this.vx = fromDir * 120;
       world.particles.burst(this.cx, this.cy, 20, '#bff2ff', { speed: 220, shape: 'spark' });
@@ -1161,6 +1465,8 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new DarkMage(x, y);
     case 'warden':
       return new Warden(x, y);
+    case 'thalassa':
+      return new Thalassa(x, y);
     case 'prismarch':
       return new Prismarch(x, y);
   }

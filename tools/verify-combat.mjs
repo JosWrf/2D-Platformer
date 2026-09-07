@@ -35,7 +35,16 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message));
-await page.goto(`http://127.0.0.1:${server.address().port}/?x=524`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'load' });
+await page.waitForFunction(() => !!window.game);
+// Der Startpunkt wird aus den Spawns abgeleitet, nicht aus einer Kachelzahl:
+// ein Abschnitt, der irgendwo im Level eingeschoben wird, verschiebt sonst
+// jedes Werkzeug auf einmal.
+const startTile = await page.evaluate(() => {
+  const boss = window.game.level.spawns.find((s) => s.kind === 'boss');
+  return Math.max(2, (boss?.tx ?? 550) - 26);
+});
+await page.goto(`http://127.0.0.1:${server.address().port}/?x=${startTile}`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.game);
 await page.evaluate(() => window.loop.stop());
 

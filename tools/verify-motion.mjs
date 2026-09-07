@@ -58,7 +58,16 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message));
-await page.goto(`http://127.0.0.1:${server.address().port}/?x=700`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'load' });
+await page.waitForFunction(() => !!window.game);
+// Der Startpunkt wird aus den Spawns abgeleitet, nicht aus einer Kachelzahl:
+// ein Abschnitt, der irgendwo im Level eingeschoben wird, verschiebt sonst
+// jedes Werkzeug auf einmal.
+const startTile = await page.evaluate(() => {
+  const w = window.game.level.spawns.find((s) => s.kind === 'warden');
+  return Math.max(2, (w?.tx ?? 712) - 12);
+});
+await page.goto(`http://127.0.0.1:${server.address().port}/?x=${startTile}`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.game);
 await page.evaluate(() => window.loop.stop());
 
@@ -66,6 +75,8 @@ const result = await page.evaluate(() => {
   const g = window.game;
   const input = window.input;
   const p = g.player;
+  const bossTile = g.level.spawns.find((s) => s.kind === 'boss')?.tx ?? 550;
+  const arenaTile = (g.level.spawns.find((s) => s.kind === 'warden')?.tx ?? 712) - 12;
   const ctx = document.querySelector('canvas').getContext('2d');
   const tick = (actions = {}) => {
     for (const [a, v] of Object.entries({ left: false, right: false, calm: false, ...actions })) {
@@ -166,7 +177,7 @@ const result = await page.evaluate(() => {
   const deathSequence = () => {
     g.state = 'playing';
     // Back to the door of the throne room; the tool starts past it.
-    p.x = 540 * 32;
+    p.x = (bossTile - 10) * 32;
     p.y = 16 * 32;
     p.vx = 0;
     p.vy = 0;
@@ -218,7 +229,7 @@ const result = await page.evaluate(() => {
   const death = deathSequence();
 
   // Back on the flat ground of the warden's arena, which is a calm zone.
-  g.player.x = 700 * 32;
+  g.player.x = arenaTile * 32;
   g.player.y = 17 * 32;
   g.player.vx = 0;
   g.player.vy = 0;

@@ -59,6 +59,19 @@ function colorsForZone(x: number): ZoneTileColors {
         ledgeEdge: '#4b7290',
         calm,
       };
+    case 'drowned':
+      return {
+        body: '#1c3a42',
+        bodyDark: '#0c1e26',
+        // Waterlogged stone with a skin of algae on every ledge.
+        top: '#2c6152',
+        topLight: '#3f8a6c',
+        edge: '#1d4438',
+        stoneLedges: true,
+        ledge: '#204450',
+        ledgeEdge: '#3f7f8c',
+        calm,
+      };
     case 'castle':
       return {
         body: '#38303a',

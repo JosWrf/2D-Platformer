@@ -49,6 +49,7 @@ const result = await page.evaluate(() => {
   const g = window.game;
   const input = window.input;
   const p = g.player;
+  const arenaTile = (g.level.spawns.find((s) => s.kind === 'warden')?.tx ?? 712) - 12;
   const ctx = document.querySelector('canvas').getContext('2d');
   const tick = (actions = {}) => {
     for (const [a, v] of Object.entries({
@@ -200,7 +201,7 @@ const result = await page.evaluate(() => {
   // happens to land, a wall in front of him would eat the crescent and the
   // test would be measuring the terrain instead of the upgrade.
   let reachDamage = 0;
-  p.x = 700 * 32;
+  p.x = arenaTile * 32;
   p.y = 17 * 32;
   p.vx = 0;
   p.vy = 0;
@@ -240,7 +241,7 @@ const result = await page.evaluate(() => {
         g.gems++;
       }
     }
-    p.x = 802 * 32;
+    p.x = (g.portal.cx - 300) | 0;
     p.y = 17 * 32;
     p.vx = 0;
     p.vy = 0;

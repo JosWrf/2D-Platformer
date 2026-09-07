@@ -81,6 +81,8 @@ export class Scatter {
           const kind: PropKind =
             zone === 'caverns' || zone === 'rift' || zone === 'crystalworld'
               ? 'stalactite'
+              : zone === 'drowned'
+                ? 'vine'
               : zone === 'castle'
                 ? 'chain'
                 : 'vine';
@@ -123,6 +125,13 @@ export class Scatter {
         if (roll < 0.14) return 'rubble';
         if (roll < 0.22) return 'bones';
         if (roll < 0.27) return 'candle';
+        return null;
+      case 'drowned':
+        // What settles in still water: weed on every ledge, silt and shells.
+        if (roll < 0.3) return 'tuft';
+        if (roll < 0.42) return 'shroom';
+        if (roll < 0.5) return 'rubble';
+        if (roll < 0.56) return 'bones';
         return null;
       case 'crystalworld':
         if (roll < 0.34) return 'shard';

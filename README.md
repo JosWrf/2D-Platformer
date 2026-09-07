@@ -42,18 +42,20 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Das Level
 
-Ein durchgehendes Level aus 814 Kacheln (26 048 px) in sechs Zonen, plus eine
-siebte hinter der Welt, die man sich verdienen muss:
+Ein durchgehendes Level aus 934 Kacheln (29 888 px) in sieben Zonen, plus eine
+achte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
 3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
-4. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
-5. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
-6. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
+4. **Die Ertrunkene Halle** — was das Wasser geholt hat: Algenkanten, Korallen,
+   dunkle Magier im Kirchenschiff, und im Chor Thalassa
+5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
+6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
+7. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
    über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, am Ende
    das Tor nach Hause
-7. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 138 Edelsteine
+8. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 157 Edelsteine
    eingesammelt sind. Acht leere Spalten trennen ihn vom Riss; kein Sprung
    überbrückt die, das ist Absicht.
 
@@ -78,7 +80,8 @@ statt Stimmung zu machen.
 | --- | --- |
 | ![Nebelwald](screenshots/02-nebelwald.png) | ![Schwertkampf](screenshots/03-schwertkampf.png) |
 | ![Lava](screenshots/06-lava.png) | ![Ruinen](screenshots/07-ruinen.png) |
-| ![Kristallhöhlen](screenshots/09-kristallhoehlen.png) | ![Burg](screenshots/10-burg-nachtfall.png) |
+| ![Kristallhöhlen](screenshots/09-kristallhoehlen.png) | ![Ertrunkene Halle](screenshots/10-ertrunkene-halle.png) |
+| ![Thalassa](screenshots/11-thalassa.png) | ![Burg](screenshots/12-burg-nachtfall.png) |
 
 ## Der Boss: Schattenritter Morvain
 
@@ -92,9 +95,18 @@ Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
 kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
 
+### Der Boss der Halle: Thalassa, die Ertrunkene Krone
+
+42 Trefferpunkte, zwei Phasen, drei Züge nach Entfernung: aus der Nähe ein
+**Flutstoß**, zwei Wellen über den Boden in beide Richtungen — die Antwort ist
+Höhe, nicht Abstand. Auf Distanz ein **Ankerwurf** auf einer Bahn, die dort
+landet, wo man gerade hinläuft. Und der **Sog**, der einen für gut eine Sekunde
+zu ihr hinzieht und dann zwei Kugeln schickt: weglaufen kostet Boden, der Kampf
+wird in ihrer Reichweite entschieden.
+
 ### Der Bonusboss: Prismarch, Herz des Kristalls
 
-Wer alle 138 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
+Wer alle 157 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
 Stein meldet sich, fünf Zeilen lang, und wer sie zu Ende gelesen hat, steht im
 Kristallhort. Es gibt zwei Türen dorthin — der volle Zähler öffnet sie sofort,
 und wer trotzdem am Tor im Riss ankommt, wird dort hinübergeschickt statt den
@@ -136,9 +148,9 @@ nur gegen Angriffe; Stacheln und Lava lassen sich nicht wegparieren.
 
 | | |
 | --- | --- |
-| ![Boss erscheint](screenshots/11-boss-erscheint.png) | ![Phase 2](screenshots/13-bosskampf-phase-2.png) |
-| ![Phase 3](screenshots/14-bosskampf-phase-3.png) | ![Der Riss](screenshots/16-der-riss.png) |
-| ![Das Tor](screenshots/17-das-tor.png) | ![Sieg](screenshots/18-sieg.png) |
+| ![Boss erscheint](screenshots/13-boss-erscheint.png) | ![Phase 2](screenshots/15-bosskampf-phase-2.png) |
+| ![Phase 3](screenshots/16-bosskampf-phase-3.png) | ![Der Riss](screenshots/17-der-riss.png) |
+| ![Das Tor](screenshots/18-das-tor.png) | ![Sieg](screenshots/19-sieg.png) |
 
 ## Aufbau des Codes
 
@@ -164,11 +176,17 @@ S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
-W  Splitterwächter (Miniboss)   K  Prismarch (Bonusboss)
+W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
-Kacheln breit, Plattformen höchstens drei Reihen über der Fläche darunter.
+Kacheln breit, Plattformen höchstens drei Reihen über der Fläche darunter und
+waagerecht mit der Stufe darunter überlappend, Stacheln in der Bodenreihe statt
+darauf.
+
+Die Prüfwerkzeuge leiten ihre Startpunkte inzwischen aus den Spawns ab statt aus
+Kachelzahlen. Ein Abschnitt, der mitten im Level eingeschoben wird, verschob
+sonst jedes Werkzeug auf einmal.
 
 ## Werkzeuge
 
@@ -178,6 +196,7 @@ Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
+npm run verify:thalassa # wählt Thalassa ihren Zug nach Entfernung, und trifft sie?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run verify:bonus   # öffnet der letzte Edelstein den Weg zum Prismarchen?
@@ -202,6 +221,14 @@ wieder drin ist.
 `verify:combat` prüft Parade und Ladeschlag am Boss. Die Parade hängt an einem
 Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
 verloren, fühlt sich das nicht schwer an, sondern kaputt.
+
+`verify:thalassa` stellt sie auf zwei Entfernungen und prüft, dass sie den
+passenden Zug wählt. Dazu zwanzig Sekunden gegen jemanden, der nur die
+Angriffstaste hält, mit aufgefüllter Lebensleiste — sonst ist der Kampf vorher
+vorbei und es hängt vom Zufall ab, ob sie in der Zeit überhaupt zum Zug kam.
+Aus derselben Messung ist die Aufprall-Sperre entstanden: Poise allein reicht
+nicht, weil ein Dauerangreifer schneller Schaden macht als jede Ankündigung
+dauert. Vorher zwei Geschosse in zehn Sekunden, jetzt fünf bis sieben in zwanzig.
 
 `verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft

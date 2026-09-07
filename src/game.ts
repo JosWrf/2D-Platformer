@@ -3,7 +3,7 @@ import { Camera } from './core/camera';
 import { Input } from './core/input';
 import { clamp, rand } from './core/math';
 import { Boss } from './entities/boss';
-import { Enemy, EnemyKind, Prismarch, Warden, createEnemy } from './entities/enemy';
+import { Enemy, EnemyKind, Prismarch, Thalassa, Warden, createEnemy } from './entities/enemy';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
 import { Player } from './entities/player';
@@ -139,6 +139,7 @@ export class Game implements World {
         case 'skeleton':
         case 'mage':
         case 'warden':
+        case 'thalassa':
         case 'prismarch':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
@@ -817,6 +818,21 @@ export class Game implements World {
         });
         break;
       }
+      case 'drowned':
+        // Bubbles, slow. The water in here has been still a long time.
+        this.particles.spawn({
+          x,
+          y: this.camera.y + VIEW_H + 10,
+          vx: rand(-6, 6),
+          vy: rand(-26, -12),
+          color: 'rgba(150,225,225,0.4)',
+          gravity: -4,
+          drag: 0.998,
+          size: rand(1.4, 3),
+          life: rand(3, 5),
+          shape: 'circle',
+        });
+        break;
       case 'castle':
         // Embers climbing out of the braziers.
         this.particles.spawn({
@@ -1083,6 +1099,24 @@ export class Game implements World {
           maxHp: prism.maxHp,
           ghost: prism.hp,
           phase: prism.phase,
+        },
+        0,
+      );
+      return;
+    }
+
+    const drowned = this.enemies.find((e): e is Thalassa => e instanceof Thalassa && e.engaged && !e.dead);
+    if (drowned) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `THALASSA   ·   DIE ERTRUNKENE KRONE   ·   PHASE ${drowned.phase}`,
+          hp: drowned.hp,
+          maxHp: drowned.maxHp,
+          ghost: drowned.hp,
+          phase: drowned.phase,
         },
         0,
       );

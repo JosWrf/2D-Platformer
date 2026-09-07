@@ -40,7 +40,16 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message));
 // Just past the throne room, where the rift begins.
-await page.goto(`http://127.0.0.1:${server.address().port}/?x=572`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'load' });
+await page.waitForFunction(() => !!window.game);
+// Der Startpunkt wird aus den Spawns abgeleitet, nicht aus einer Kachelzahl:
+// ein Abschnitt, der irgendwo im Level eingeschoben wird, verschiebt sonst
+// jedes Werkzeug auf einmal.
+const startTile = await page.evaluate(() => {
+  const boss = window.game.level.spawns.find((s) => s.kind === 'boss');
+  return (boss?.tx ?? 550) + 22;
+});
+await page.goto(`http://127.0.0.1:${server.address().port}/?x=${startTile}`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.game);
 await page.evaluate(() => window.loop.stop());
 
@@ -120,7 +129,7 @@ const result = await page.evaluate(() => {
   g.restart();
   g.state = 'playing';
   openTheWay();
-  p.x = 802 * 32;
+  p.x = (g.portal.cx - 300) | 0;
   p.y = 17 * 32;
   p.vx = 0;
   p.vy = 0;

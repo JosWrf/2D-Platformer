@@ -35,7 +35,16 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r));
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 760 } });
 page.on('pageerror', (e) => console.error('PAGE ERROR:', e.message));
-await page.goto(`http://127.0.0.1:${server.address().port}/?x=700`, { waitUntil: 'load' });
+await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'load' });
+await page.waitForFunction(() => !!window.game);
+// Der Startpunkt wird aus den Spawns abgeleitet, nicht aus einer Kachelzahl:
+// ein Abschnitt, der irgendwo im Level eingeschoben wird, verschiebt sonst
+// jedes Werkzeug auf einmal.
+const startTile = await page.evaluate(() => {
+  const w = window.game.level.spawns.find((s) => s.kind === 'warden');
+  return Math.max(2, (w?.tx ?? 712) - 12);
+});
+await page.goto(`http://127.0.0.1:${server.address().port}/?x=${startTile}`, { waitUntil: 'load' });
 await page.waitForFunction(() => !!window.game);
 await page.evaluate(() => window.loop.stop());
 
@@ -57,6 +66,8 @@ const result = await page.evaluate(() => {
 
   const warden = g.enemies.find((e) => e.kind === 'warden');
   if (!warden) return { ok: false, note: 'no warden in the level' };
+  /** Where the level puts her; every reset goes back to this. */
+  const home = warden.x;
 
   /** Puts both back on their feet, a given distance apart. */
   const reset = (gap) => {
@@ -69,7 +80,7 @@ const result = await page.evaluate(() => {
     warden.timer = 0.1;
     warden.stun = 0;
     warden.engaged = true;
-    warden.x = 712 * 32;
+    warden.x = home;
     warden.y = 17 * 32 - 14;
     warden.vx = warden.vy = 0;
     p.x = warden.x - gap;

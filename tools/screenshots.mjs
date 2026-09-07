@@ -113,7 +113,14 @@ await step(60);
 await shot('01-titel');
 
 /* 02 — first steps in the forest ----------------------------------------- */
+// Die Sprungpunkte hinter den Höhlen aus den Spawns ableiten: ein neuer
+// Abschnitt mitten im Level verschiebt sonst jedes Bild um dieselbe Zahl.
 await open('?x=6');
+const marken = await page.evaluate(() => {
+  const spawns = window.game.level.spawns;
+  const at = (kind) => spawns.find((s) => s.kind === kind)?.tx ?? 0;
+  return { boss: at('boss'), thalassa: at('thalassa'), portal: at('portal') };
+});
 await step(30);
 await step(50, { right: true });
 await release('right');
@@ -186,37 +193,53 @@ await jump(18);
 await release('right');
 await shot('09-kristallhoehlen');
 
-/* 10 — castle ------------------------------------------------------------ */
-await open('?x=404');
+/* 10 — the drowned hall --------------------------------------------------- */
+await open(`?x=${marken.thalassa - 86}`);
+await step(30);
+await step(40, { right: true });
+await release('right');
+await step(6);
+await shot('10-ertrunkene-halle');
+
+/* 11 — Thalassa ----------------------------------------------------------- */
+await open(`?x=${marken.thalassa - 14}`);
+await step(20);
+await step(60, { right: true });
+await release('right');
+await step(40);
+await shot('11-thalassa');
+
+/* 12 — castle ------------------------------------------------------------- */
+await open(`?x=${marken.boss - 146}`);
 await step(30);
 await step(40, { right: true });
 await release('right');
 await step(3, { attack: true });
 await release('attack');
 await step(4);
-await shot('10-burg-nachtfall');
+await shot('12-burg-nachtfall');
 
-/* 11 — entering the throne room ------------------------------------------ */
-await open('?x=524');
+/* 13 — entering the throne room ------------------------------------------ */
+await open(`?x=${marken.boss - 26}`);
 await step(20);
 await step(70, { right: true });
 await release('right');
 await step(40);
-await shot('11-boss-erscheint');
+await shot('13-boss-erscheint');
 
 /* 12 — boss fight, phase 1 ----------------------------------------------- */
 results.phase1 = await fightRound(60 * 7);
-await shot('12-bosskampf-phase-1');
+await shot('14-bosskampf-phase-1');
 
 /* 13 — phase 2: shockwaves and summoned minions -------------------------- */
 results.phase2 = await fightRound(60 * 60, 'phase2');
 results.phase2attack = (await fightRound(60 * 20, 'orbs', 210)) ?? null;
-await shot('13-bosskampf-phase-2');
+await shot('15-bosskampf-phase-2');
 
 /* 14 — phase 3: the enraged knight --------------------------------------- */
 results.phase3 = await fightRound(60 * 90, 'phase3');
 results.phase3attack = await fightRound(60 * 20, 'attack', 150);
-await shot('14-bosskampf-phase-3');
+await shot('16-bosskampf-phase-3');
 
 /* 15 — the seal breaks, the rift opens ------------------------------------ */
 results.finish = await fightRound(60 * 120);
@@ -231,20 +254,20 @@ await step(60 * 5);
 results.sealOpen = await page.evaluate(() => !window.game.level.exitSealed);
 
 /* 16 — the rift ----------------------------------------------------------- */
-await open('?x=585');
+await open(`?x=${marken.boss + 35}`);
 await step(40);
 await step(40, { right: true });
 await release('right');
 await step(10);
-await shot('16-der-riss');
+await shot('17-der-riss');
 
 /* 17 — the gate home ------------------------------------------------------ */
-await open('?x=676');
+await open(`?x=${marken.portal - 135}`);
 await step(40);
 await step(46, { right: true });
 await release('right');
 await step(10);
-await shot('17-das-tor');
+await shot('18-das-tor');
 
 /* 18 — victory ------------------------------------------------------------ */
 await page.evaluate(() => {
@@ -253,7 +276,7 @@ await page.evaluate(() => {
   g.player.y = g.portal.y + 10;
 });
 await step(60 * 5);
-await shot('18-sieg');
+await shot('19-sieg');
 results.finalState = await page.evaluate(() => window.game.state);
 
 console.log(JSON.stringify(results, null, 2));

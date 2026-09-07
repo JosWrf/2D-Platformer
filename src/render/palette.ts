@@ -54,7 +54,15 @@ export const PALETTE = {
   bossAura: 'rgba(255,60,60,0.35)',
 } as const;
 
-export type ZoneName = 'forest' | 'ruins' | 'caverns' | 'castle' | 'throne' | 'rift' | 'crystalworld';
+export type ZoneName =
+  | 'forest'
+  | 'ruins'
+  | 'caverns'
+  | 'drowned'
+  | 'castle'
+  | 'throne'
+  | 'rift'
+  | 'crystalworld';
 
 export interface Zone {
   name: ZoneName;
@@ -130,8 +138,24 @@ export const ZONES: Zone[] = [
     calm: false,
   },
   {
-    name: 'castle',
+    name: 'drowned',
+    // Between the caves and the castle: a hall that the water took.
     start: 12800,
+    skyTop: '#03080e',
+    skyBottom: '#08202c',
+    hillFar: '#0e3040',
+    hillNear: '#092230',
+    ambient: 'rgba(50,150,175,0.07)',
+    label: 'Die Ertrunkene Halle',
+    sporeRgb: '150,214,222',
+    darkness: 0.8,
+    darkTint: '#02090f',
+    interior: true,
+    calm: true,
+  },
+  {
+    name: 'castle',
+    start: 16640,
     skyTop: '#0d0710',
     skyBottom: '#1a0c14',
     hillFar: '#2c1620',
@@ -146,7 +170,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'throne',
-    start: 16640,
+    start: 20480,
     skyTop: '#0c040a',
     skyBottom: '#1e0710',
     hillFar: '#340d18',
@@ -161,7 +185,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'rift',
-    start: 18240,
+    start: 22080,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',
@@ -177,7 +201,7 @@ export const ZONES: Zone[] = [
   {
     name: 'crystalworld',
     // Behind the rift, reached only by teleport. Nothing walks in here.
-    start: 26048,
+    start: 29888,
     // This colour is also the rim light along every ledge. Cyan carries a lot
     // of luminance, so it is pulled down until the floor stops outshining the
     // hero walking on it.
