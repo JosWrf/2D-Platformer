@@ -137,6 +137,33 @@ const report = await page.evaluate(() => {
   }
   const bonusHallSealed = !nodes.some((n, i) => seen[i] && n.tx >= bonusFrom);
 
+  /*
+   * Ground-bound spawns standing on nothing, or on something deadly.
+   *
+   * Found by driving every enemy in the level for nine seconds: three
+   * skeletons were placed over open shafts and fell out of the world before
+   * the player could ever meet them, and one stood on its own spikes. Eyeing
+   * ASCII art does not catch that; this does.
+   */
+  const GROUNDED = ['slime', 'skeleton', 'bomber', 'shieldman', 'charger', 'warden', 'thalassa', 'prismarch'];
+  const badSpawns = [];
+  for (const sp of L.spawns) {
+    if (!GROUNDED.includes(sp.kind)) continue;
+    // Looks down a few tiles rather than only at the one below: a spawn placed
+    // a row or two over the floor is fine, it simply drops onto it.
+    let landsOn = null;
+    for (let ty = sp.ty + 1; ty <= sp.ty + 4 && landsOn === null; ty++) {
+      if (L.hazardAt(sp.tx, ty)) landsOn = 'hazard';
+      else if (L.solidAt(sp.tx, ty) || L.platformAt(sp.tx, ty)) landsOn = 'ground';
+    }
+    // The neighbours count too: an enemy body is wider than nothing, and one
+    // placed flush against a spike column dies on its first frame of drift.
+    const touching = [-1, 1].some((d) => L.hazardAt(sp.tx + d, sp.ty + 1) || L.hazardAt(sp.tx + d, sp.ty));
+    if (landsOn !== 'ground' || touching) {
+      badSpawns.push({ kind: sp.kind, tile: sp.tx, standsOn: landsOn !== 'ground' ? (landsOn ?? 'nothing') : 'spikes next door' });
+    }
+  }
+
   // Platform tiles nobody can stand on. The column check below hides these:
   // a platform floating out of reach sits over solid floor, and the floor
   // node makes the whole column count as reached.
@@ -176,6 +203,7 @@ const report = await page.evaluate(() => {
   return {
     width: W,
     nodes: nodes.length,
+    badSpawns,
     bonusHallFromTile: bonusFrom,
     bonusHallSealed,
     strandedPlatforms,
@@ -193,6 +221,9 @@ await browser.close();
 server.close();
 if (!report.bossReachable) console.error('FAIL: the boss cannot be reached from the spawn.');
 if (!report.portalReachable) console.error('FAIL: the gate home cannot be reached.');
+if (report.badSpawns.length) {
+  console.error(`FAIL: ${report.badSpawns.length} enemy spawn(s) stand on nothing or on a hazard.`);
+}
 if (!report.bonusHallSealed) {
   console.error('FAIL: the crystal hall can be walked into. It is meant to be reached only by teleport.');
 }
@@ -200,7 +231,11 @@ if (report.strandedPlatforms.length) {
   console.error(`FAIL: ${report.strandedPlatforms.length} platform(s) hang out of reach - [fromTile, toTile, row].`);
 }
 process.exit(
-  report.bossReachable && report.portalReachable && report.bonusHallSealed && !report.strandedPlatforms.length
+  report.bossReachable &&
+  report.portalReachable &&
+  report.bonusHallSealed &&
+  !report.badSpawns.length &&
+  !report.strandedPlatforms.length
     ? 0
     : 1,
 );

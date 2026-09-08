@@ -163,6 +163,11 @@ export function slashCrescent(
 /**
  * Flash a sprite white while it is taking damage. Uses a canvas filter so only
  * the sprite drawn inside the callback is affected.
+ *
+ * A canvas filter is not free: the browser allocates and processes a layer the
+ * size of the whole canvas for every filtered draw. That is affordable once per
+ * frame on the play field, and it is not affordable in the cast-light pass -
+ * see Game.drawCastLight, which drops the flash for exactly this reason.
  */
 export function withHitFlash(
   ctx: CanvasRenderingContext2D,

@@ -12,6 +12,12 @@
  *  - Klingenläufer crosses the room, and a charge into a wall leaves it dazed
  *    and taking double - the level is the weapon.
  *
+ * And one thing that is not about behaviour at all: an explosion must not cost
+ * a frame. The hit flash is a canvas filter, every enemy caught in the blast
+ * carries one for a dozen frames, and each filtered draw makes the browser
+ * allocate a layer the size of the view. Measured before the fix: 97 ms
+ * frames, six in a row, every time a Zunder went off.
+ *
  * Usage: node tools/verify-enemies.mjs
  */
 import { chromium } from 'playwright';
@@ -257,6 +263,30 @@ const result = await page.evaluate(() => {
     out.chargerDazedOnWall = { dazed, damageFromTwo: doubled };
   }
 
+  /* -------------------------------------------------- cost of a burst */
+
+  {
+    const z = stage('bomber', 90);
+    // Two neighbours, so the blast flashes several sprites at once.
+    for (const dx of [40, 130]) {
+      const other = g.spawnEnemyOfKind('skeleton', z.x + dx, floorTop);
+      other.active = true;
+      other.hp = other.maxHp = 30;
+    }
+    for (let i = 0; i < 20; i++) tick();
+    z.hp = 1;
+    z.hurt(5, 1, g);
+    let worst = 0;
+    for (let f = 0; f < 90; f++) {
+      p.invuln = 9999;
+      p.hp = p.maxHp;
+      const t0 = performance.now();
+      tick();
+      worst = Math.max(worst, performance.now() - t0);
+    }
+    out.burstWorstFrameMs = +worst.toFixed(1);
+  }
+
   out.ok =
     out.bomberWalksAndBursts.litItself &&
     out.bomberWalksAndBursts.exploded &&
@@ -274,7 +304,8 @@ const result = await page.evaluate(() => {
     out.chargerRuns.states.includes('run') &&
     out.chargerRuns.heartsLost > 0 &&
     out.chargerDazedOnWall.dazed &&
-    out.chargerDazedOnWall.damageFromTwo === 4;
+    out.chargerDazedOnWall.damageFromTwo === 4 &&
+    out.burstWorstFrameMs < 16.67;
   return out;
 });
 
@@ -286,4 +317,7 @@ if (!result.ok) {
   console.error('FAIL: one of the three new enemies no longer does the one thing it is there for.');
   process.exit(1);
 }
-console.log('OK: Zunder goes off (and only reaches what is near it), the shield holds from the front, and a charge into a wall pays.');
+console.log(
+  'OK: Zunder goes off (and only reaches what is near it) without costing a frame, the shield ' +
+    'holds from the front, and a charge into a wall pays.',
+);

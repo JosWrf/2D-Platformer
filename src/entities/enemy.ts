@@ -103,6 +103,49 @@ export abstract class Enemy extends Body {
     void world;
   }
 
+  /**
+   * True when the step ahead leads off a ledge or onto something deadly.
+   *
+   * Measured over the whole level: five of eighteen skeletons walked into
+   * their own spikes within nine seconds of waking up, and three more walked
+   * off into the void. A patrol that kills itself before the player arrives is
+   * an enemy the player never meets.
+   */
+  protected badStepAhead(world: World, dir: number): boolean {
+    const level = world.level;
+    const probeX = dir > 0 ? this.x + this.w + 4 : this.x - 4;
+    if (level.groundBelow(probeX, this.bottom + 2, 3) > 40) return true;
+    const tx = Math.floor(probeX / 32);
+    const foot = Math.floor((this.bottom + 6) / 32);
+    return level.hazardAt(tx, foot) || level.hazardAt(tx, foot - 1);
+  }
+
+  /**
+   * Stops a walk that would carry the enemy into spikes or off a ledge.
+   *
+   * Applied to the velocity just before it moves, rather than inside a patrol
+   * branch: measured, the shield carrier walked into his own spikes while
+   * *advancing* on the player, and a guard that lives in the patrol case never
+   * sees that. Only while standing - a knockback throws them airborne, and
+   * being able to punt something into a pit is worth keeping.
+   */
+  protected holdBackAtEdges(world: World): void {
+    if (!this.onGround || this.vx === 0) return;
+    if (this.badStepAhead(world, Math.sign(this.vx))) this.vx = 0;
+  }
+
+  /**
+   * Spikes, measured on a slightly smaller box than the body - the same
+   * allowance the hero gets.
+   *
+   * On the full box a skeleton standing one tile from a spike died on its
+   * first frame: two tenths of a pixel of drift put the corner of its box into
+   * the neighbouring column.
+   */
+  protected touchesHazard(world: World): boolean {
+    return world.level.rectHitsHazard(this.x + 4, this.y + 4, this.w - 8, this.h - 6);
+  }
+
   /** Touch damage; called by the game each frame. */
   touchPlayer(world: World): void {
     if (this.dead || this.contactDamage <= 0) return;
@@ -168,7 +211,7 @@ export class Slime extends Enemy {
     }
 
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -262,7 +305,7 @@ export class Bat extends Enemy {
       this.vx *= -0.4;
       this.vy *= -0.4;
     }
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -347,7 +390,12 @@ export class Skeleton extends Enemy {
           this.vx = approach(this.vx, this.dir * 52, 700 * dt);
           if (this.touching.left) this.dir = 1;
           if (this.touching.right) this.dir = -1;
-          if (this.onGround && this.isLedgeAhead(world)) this.dir = (-this.dir) as 1 | -1;
+          if (this.onGround && this.badStepAhead(world, this.dir)) {
+            this.dir = (-this.dir) as 1 | -1;
+            // Away at once. approach() would let the old direction run on for
+            // another few frames, and those frames are inside the spikes.
+            this.vx = this.dir * 30;
+          }
           if (dist < this.aggroRange && Math.abs(player.cy - this.cy) < 70) this.state = 'chase';
           break;
         }
@@ -355,7 +403,6 @@ export class Skeleton extends Enemy {
           this.dir = dx > 0 ? 1 : -1;
           this.facing = this.dir;
           this.vx = approach(this.vx, this.dir * 108, 900 * dt);
-          if (this.onGround && this.isLedgeAhead(world)) this.vx = 0;
           if (dist < 46) {
             this.state = 'windup';
             this.timer = 0.36;
@@ -398,14 +445,11 @@ export class Skeleton extends Enemy {
       }
     }
 
+    this.holdBackAtEdges(world);
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
-  private isLedgeAhead(world: World): boolean {
-    const probeX = this.dir > 0 ? this.x + this.w + 4 : this.x - 4;
-    return world.level.groundBelow(probeX, this.bottom + 2, 3) > 40;
-  }
 
   private attackRect(): Rect {
     return {
@@ -546,7 +590,7 @@ export class DarkMage extends Enemy {
     }
 
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -705,18 +749,17 @@ export class Bomber extends Enemy {
         this.vx = approach(this.vx, 0, 400 * dt);
       }
       this.facing = this.dir;
-      // Turns at a ledge instead of walking off it.
-      const ahead = Math.floor((this.cx + this.dir * 14) / 32);
-      const below = Math.floor((this.bottom + 6) / 32);
-      if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+      // Turns at a ledge or in front of spikes instead of walking into them.
+      if (this.onGround && this.badStepAhead(world, this.dir)) {
         this.dir = -this.dir as 1 | -1;
         this.vx = 0;
       }
     }
 
     this.vy += 1400 * dt;
+    this.holdBackAtEdges(world);
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.light(0.2);
+    if (this.touchesHazard(world)) this.light(0.2);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -859,10 +902,9 @@ export class Shieldman extends Enemy {
       switch (this.state) {
         case 'patrol': {
           this.vx = approach(this.vx, this.dir * 42, 340 * dt);
-          const ahead = Math.floor((this.cx + this.dir * 16) / 32);
-          const below = Math.floor((this.bottom + 6) / 32);
-          if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+          if (this.onGround && this.badStepAhead(world, this.dir)) {
             this.dir = -this.dir as 1 | -1;
+            this.vx = this.dir * 30;
           }
           if (this.touching.left || this.touching.right) this.dir = -this.dir as 1 | -1;
           if (dist < this.aggroRange && Math.abs(player.cy - this.cy) < 60) {
@@ -922,8 +964,9 @@ export class Shieldman extends Enemy {
     }
 
     this.vy += 1400 * dt;
+    this.holdBackAtEdges(world);
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -1045,10 +1088,9 @@ export class Charger extends Enemy {
         case 'patrol': {
           this.vx = approach(this.vx, this.dir * 46, 320 * dt);
           this.facing = this.dir;
-          const ahead = Math.floor((this.cx + this.dir * 16) / 32);
-          const below = Math.floor((this.bottom + 6) / 32);
-          if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+          if (this.onGround && this.badStepAhead(world, this.dir)) {
             this.dir = -this.dir as 1 | -1;
+            this.vx = this.dir * 30;
           }
           if (this.touching.left || this.touching.right) this.dir = -this.dir as 1 | -1;
           // Only charges at something roughly level with it, so a hero on a
@@ -1084,6 +1126,14 @@ export class Charger extends Enemy {
           }
           break;
         case 'run':
+          if (this.badStepAhead(world, this.facing)) {
+            // Digs its heels in at the edge. Baiting it into a wall still
+            // works; running itself into the void unprompted does not.
+            this.state = 'patrol';
+            this.timer = 0.5;
+            this.dir = -this.facing as 1 | -1;
+            this.vx = this.dir * 40;
+          }
           if (!this.hitThisRun && !player.dead && !player.isInvulnerable && this.overlaps(player.rect)) {
             this.hitThisRun = true;
             player.hurt(2, sign(player.cx - this.cx) || 1, world);
@@ -1111,8 +1161,9 @@ export class Charger extends Enemy {
     }
 
     this.vy += 1400 * dt;
+    this.holdBackAtEdges(world);
     this.moveAndCollide(world.level, dt);
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+    if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -1369,7 +1420,7 @@ export class Warden extends Enemy {
       player.hurt(2, sign(player.cx - this.cx) || 1, world);
     }
 
-    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(3, 0, world);
+    if (this.touchesHazard(world)) this.hurt(3, 0, world);
   }
 
   /** Contact damage only outside the lunge, which does its own, heavier hit. */

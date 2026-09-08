@@ -238,7 +238,9 @@ npm run screenshots    # erzeugt die Bilder in screenshots/
 
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
 einem bewusst konservativen Sprungmodell, ob Boss **und** Tor vom Startpunkt
-aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet auch
+aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet Gegner,
+die auf nichts oder neben Stacheln stehen (gefunden: fünf Skelette, die sich
+binnen neun Sekunden selbst erledigten), und außerdem
 begehbare Stellen, die von nirgendwo aus zu erreichen sind, und getrennt davon
 Plattformen, auf die niemand kommt: die reine Spaltenprüfung übersieht sie, weil
 eine unerreichbare Plattform über festem Boden hängt und die Spalte dadurch als
@@ -269,7 +271,11 @@ und Nachbarn nimmt er mit (3 Schaden). Am Schild von vorn kommt 0 an, von hinten
 an der Wand benommen — wo zwei Schaden zu vier werden. Die Wandprobe steht in der
 Kristallhalle, weil das die einzige Stelle mit einer Wand vom Boden bis zur
 Decke ist; die Arenen sind offener Boden, und ein Sturm über offenen Boden
-landet nie.
+landet nie. Zuletzt: eine Explosion darf kein Bild kosten. Der Treffer-Blitz ist
+ein Canvas-Filter, jeder Gegner in der Druckwelle trägt einen, und jeder
+gefilterte Zug lässt den Browser eine Ebene in voller Bildgröße anlegen —
+gemessen 97 ms je Bild, sechs hintereinander, bei jeder Explosion. Erlaubt sind
+16,67 ms, gemessen werden 5,7.
 
 `verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft

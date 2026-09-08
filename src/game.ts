@@ -541,6 +541,10 @@ export class Game implements World {
         else continue;
       }
       enemy.update(dt, this);
+      // Anything that ends up under the world is gone. Without this it falls
+      // for ever, still updated every frame, and the player never meets it -
+      // measured, three of eighteen skeletons left the level this way.
+      if (enemy.y > this.level.pixelHeight + 80) enemy.dead = true;
       enemy.touchPlayer(this);
     }
     for (let i = this.enemies.length - 1; i >= 0; i--) {
@@ -891,10 +895,17 @@ export class Game implements World {
     layer.save();
     layer.translate(-this.camera.renderX, -this.camera.renderY);
     for (const enemy of this.enemies) {
-      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) {
-        enemy.draw(layer, this);
-        any = true;
-      }
+      if (enemy.dead || !this.isVisible(enemy.x, enemy.y, 140)) continue;
+      // Drawn without its hit flash. The flash is a canvas filter, and a canvas
+      // filter costs a layer the size of the whole view per draw: measured, one
+      // flashing enemy took this pass from 0.4 ms to 64 ms, for the dozen
+      // frames after every explosion. In a faint additive overlay it is not
+      // visible anyway - the flash on the play field is the one that reads.
+      const flash = enemy.flash;
+      enemy.flash = 0;
+      enemy.draw(layer, this);
+      enemy.flash = flash;
+      any = true;
     }
     layer.restore();
     if (!any) return;
