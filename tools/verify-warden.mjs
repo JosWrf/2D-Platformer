@@ -74,6 +74,10 @@ const result = await page.evaluate(() => {
     // A death in an earlier phase would leave the game paused on its death
     // screen, and every tick after that would do nothing at all.
     g.state = 'playing';
+    // Topping its health up mid-loop can still let a frame slip through where
+    // it counts as dead, and the game drops dead enemies from the list. Put it
+    // back before every phase, or the next phase measures a detached object.
+    if (!g.enemies.includes(warden)) g.enemies.push(warden);
     warden.hp = warden.maxHp;
     warden.dead = false;
     warden.state = 'stalk';
@@ -117,19 +121,38 @@ const result = await page.evaluate(() => {
   const mid = moveAt(150);
   const far = moveAt(280);
 
-  // Against a player who just mashes attack it still has to land a blow.
+  /*
+   * Against a player who just mashes attack it still has to land a blow -
+   * measured over a fixed twenty seconds with its health topped up. Measuring
+   * this up to its death was a coin toss: sixteen health falls to a masher in
+   * under three seconds, and whether one of its moves happened to connect in
+   * that window was chance rather than behaviour.
+   */
   reset(60);
   let taken = 0;
-  for (let f = 0; f < 60 * 30 && !warden.dead; f++) {
+  for (let f = 0; f < 60 * 20; f++) {
     if (p.hp < p.maxHp) {
       taken += p.maxHp - p.hp;
       p.hp = p.maxHp;
+      p.dead = false;
     }
-    if (p.dead) break;
+    warden.hp = Math.max(warden.hp, 6);
+    warden.dead = false;
     const d = warden.cx - p.cx;
     tick({ right: d > 40, left: d < -40, attack: f % 10 < 4 });
   }
-  const killed = warden.dead;
+
+  // And separately: a masher still brings it down.
+  reset(60);
+  let killed = false;
+  for (let f = 0; f < 60 * 40 && !killed; f++) {
+    p.hp = p.maxHp;
+    p.dead = false;
+    p.invuln = Math.max(p.invuln, 0.3);
+    const d = warden.cx - p.cx;
+    tick({ right: d > 40, left: d < -40, attack: f % 10 < 4 });
+    killed = warden.dead;
+  }
 
   return {
     ok:

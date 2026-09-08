@@ -13,6 +13,7 @@
     "verify:arena": "node tools/verify-arena.mjs",
     "verify:combat": "node tools/verify-combat.mjs",
     "verify:thalassa": "node tools/verify-thalassa.mjs",
+    "verify:enemies": "node tools/verify-enemies.mjs",
     "verify:ending": "node tools/verify-ending.mjs",
     "verify:warden": "node tools/verify-warden.mjs",
     "verify:bonus": "node tools/verify-bonus.mjs",

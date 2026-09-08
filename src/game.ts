@@ -138,6 +138,9 @@ export class Game implements World {
         case 'bat':
         case 'skeleton':
         case 'mage':
+        case 'bomber':
+        case 'shieldman':
+        case 'charger':
         case 'warden':
         case 'thalassa':
         case 'prismarch':
@@ -232,6 +235,21 @@ export class Game implements World {
 
   spawnEnemy(enemy: Enemy): void {
     this.enemies.push(enemy);
+  }
+
+  /**
+   * Places one enemy of a kind with its feet on a given floor line.
+   *
+   * Used by the verification tools to stage a single fight on known ground -
+   * the same reason Input.forceDown exists. Measuring what one enemy does is
+   * otherwise a matter of walking to wherever the level happens to put one.
+   */
+  spawnEnemyOfKind(kind: EnemyKind, x: number, floorTop: number): Enemy {
+    const enemy = createEnemy(kind, x, floorTop);
+    enemy.y = floorTop - enemy.h;
+    enemy.active = true;
+    this.enemies.push(enemy);
+    return enemy;
   }
 
   spawnProjectile(projectile: Projectile): void {

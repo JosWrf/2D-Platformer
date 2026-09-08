@@ -11,6 +11,9 @@ export type EnemyKind =
   | 'bat'
   | 'skeleton'
   | 'mage'
+  | 'bomber'
+  | 'shieldman'
+  | 'charger'
   | 'warden'
   | 'thalassa'
   | 'prismarch';
@@ -89,6 +92,16 @@ export abstract class Enemy extends Body {
 
   abstract update(dt: number, world: World): void;
   abstract draw(ctx: CanvasRenderingContext2D, world: World): void;
+
+  /**
+   * What a parry knocks out of this enemy, beyond the damage it deals.
+   *
+   * Most have nothing to lose; the shield carrier loses the shield, which is
+   * the whole reason the parry exists as an answer to him.
+   */
+  onParried(world: World): void {
+    void world;
+  }
 
   /** Touch damage; called by the game each frame. */
   touchPlayer(world: World): void {
@@ -576,6 +589,580 @@ export class DarkMage extends Enemy {
       ctx.arc(10.5, -36, 5 + (this.casting > 0 ? 2 : 0), 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 1;
+      ctx.restore();
+    });
+    this.drawHpPips(ctx);
+  }
+}
+
+/* -------------------------------------------------------------------- bomber */
+
+/** How far the burst reaches, and what it does inside that. */
+const BOOM_RADIUS = 66;
+const BOOM_DAMAGE = 2;
+
+/**
+ * Zunder - a sac of something that wants to go off.
+ *
+ * It waddles at the hero and lights itself when it gets close. What makes it
+ * more than a slow slime is that killing it lights it too: a point-blank swing
+ * is answered by the burst it was going to make anyway. The clean answer is to
+ * put it down from a distance, which is exactly what the thrown crescent and
+ * the mages' own orbs are for - so it also teaches the upgrade.
+ */
+export class Bomber extends Enemy {
+  private state: 'walk' | 'fuse' = 'walk';
+  private fuse = 0;
+  private dir: 1 | -1 = -1;
+  private beeped = 0;
+
+  constructor(x: number, y: number) {
+    super('bomber', x, y);
+    this.w = 22;
+    this.h = 22;
+    this.hp = this.maxHp = 2;
+    this.scoreValue = 45;
+    this.aggroRange = 210;
+    this.contactDamage = 0; // It does its damage by going off, not by touching.
+  }
+
+  protected override deathColor(): string {
+    return '#ff9a5c';
+  }
+
+  /** Any death lights the fuse instead of ending it. That is the whole trick. */
+  override hurt(amount: number, fromDir: number, _world: World): void {
+    if (this.dead) return;
+    this.hp -= amount;
+    this.flash = 1;
+    this.vx = fromDir * 150;
+    if (this.hp > 0) {
+      audio.play('hit');
+      return;
+    }
+    this.hp = 0;
+    if (this.state !== 'fuse') this.light(0.26);
+  }
+
+  private light(seconds: number): void {
+    this.state = 'fuse';
+    this.fuse = seconds;
+    this.beeped = 0;
+    audio.play('shoot', 1.7);
+  }
+
+  private boom(world: World): void {
+    this.dead = true;
+    audio.play('slam', 1.25);
+    world.camera.addShake(5);
+    world.particles.burst(this.cx, this.cy, 34, '#ffb066', { speed: 300, gravity: 220, size: 4 });
+    world.particles.burst(this.cx, this.cy, 18, '#fff0c8', { speed: 190, shape: 'spark' });
+    world.addScore(this.scoreValue, this.cx, this.y, `+${this.scoreValue}`);
+
+    const player = world.player;
+    if (!player.dead && !player.isInvulnerable) {
+      const d = Math.hypot(player.cx - this.cx, player.cy - this.cy);
+      if (d < BOOM_RADIUS) player.hurt(BOOM_DAMAGE, sign(player.cx - this.cx) || 1, world);
+    }
+    // It does not care whose side anyone is on. A skeleton standing next to it
+    // when it goes off is a skeleton the player did not have to fight.
+    for (const other of world.enemies) {
+      if (other === this || other.dead) continue;
+      const d = Math.hypot(other.cx - this.cx, other.cy - this.cy);
+      if (d < BOOM_RADIUS) other.hurt(3, sign(other.cx - this.cx) || 1, world);
+    }
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+
+    if (this.state === 'fuse') {
+      this.fuse -= dt;
+      // A rising tick, so the last moment is audible as well as visible.
+      this.beeped -= dt;
+      if (this.beeped <= 0) {
+        this.beeped = Math.max(0.06, this.fuse * 0.35);
+        audio.play('hit', 1.9);
+      }
+      this.vx = approach(this.vx, 0, 600 * dt);
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      if (this.fuse <= 0) this.boom(world);
+      return;
+    }
+
+    if (this.stun <= 0) {
+      if (dist < this.aggroRange && !player.dead) {
+        this.dir = dx > 0 ? 1 : -1;
+        this.vx = approach(this.vx, this.dir * 62, 400 * dt);
+        if (dist < 46 && Math.abs(player.cy - this.cy) < 44) this.light(0.85);
+      } else {
+        // Idles on the spot rather than patrolling: it is a trap, and a trap
+        // that wanders off is no trap.
+        this.vx = approach(this.vx, 0, 400 * dt);
+      }
+      this.facing = this.dir;
+      // Turns at a ledge instead of walking off it.
+      const ahead = Math.floor((this.cx + this.dir * 14) / 32);
+      const below = Math.floor((this.bottom + 6) / 32);
+      if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+        this.dir = -this.dir as 1 | -1;
+        this.vx = 0;
+      }
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.light(0.2);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    const lit = this.state === 'fuse';
+    // The tell: it swells, and a ring closes in on it. Both are needed - the
+    // swell reads up close, the ring reads across the room.
+    const heat = lit ? 1 - Math.max(0, this.fuse) / 0.9 : 0;
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.55);
+      const grow = 1 + heat * 0.25;
+      ctx.scale(grow, grow);
+
+      if (lit) {
+        const halo = ctx.createRadialGradient(0, -10, 0, 0, -10, 34);
+        halo.addColorStop(0, `rgba(255,170,90,${(0.35 + heat * 0.4).toFixed(2)})`);
+        halo.addColorStop(1, 'rgba(255,170,90,0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(-34, -44, 68, 68);
+      }
+
+      // Body: a taut sac on two stubby legs.
+      const g = ctx.createRadialGradient(-3, -14, 2, 0, -10, 14);
+      g.addColorStop(0, lit ? '#ffd9a0' : '#7a5a3c');
+      g.addColorStop(1, lit ? '#c1481f' : '#3a2a1e');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(0, -11, 10, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#2a1d14';
+      ctx.fillRect(-6, -3, 4, 3);
+      ctx.fillRect(2, -3, 4, 3);
+
+      // Seams, which glow apart as it fills.
+      ctx.strokeStyle = lit ? `rgba(255,220,150,${(0.4 + heat * 0.6).toFixed(2)})` : 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1.5;
+      for (const a of [-0.6, 0.6]) {
+        ctx.beginPath();
+        ctx.moveTo(Math.sin(a) * 9, -11 - Math.cos(a) * 9);
+        ctx.quadraticCurveTo(Math.sin(a) * 3, -11, Math.sin(a) * 9, -11 + Math.cos(a) * 9);
+        ctx.stroke();
+      }
+      // Eyes, wide open once it is lit.
+      ctx.fillStyle = lit ? '#fff6dc' : '#e8c88c';
+      const eye = lit ? 2.4 : 1.6;
+      ctx.fillRect(-4.5, -15, eye, eye);
+      ctx.fillRect(2.2, -15, eye, eye);
+      ctx.restore();
+
+      if (lit) {
+        // The closing ring, in world space so its size means distance.
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(255,190,110,${(0.35 + heat * 0.5).toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(this.cx, this.cy, BOOM_RADIUS * (1 - heat * 0.72), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    });
+    this.drawHpPips(ctx);
+  }
+}
+
+/* ----------------------------------------------------------------- shieldman */
+
+/**
+ * Schildwache - a tower shield with someone behind it.
+ *
+ * Everything that comes at the shield stops there, the thrown crescent
+ * included. The answers are position and timing: get behind it, or parry the
+ * thrust, which pulls the shield down for a breath. It is the one enemy in the
+ * game that a player who only holds the attack key cannot beat.
+ */
+export class Shieldman extends Enemy {
+  private state: 'patrol' | 'advance' | 'thrustWind' | 'thrust' | 'exposed' = 'patrol';
+  private timer = 0;
+  private dir: 1 | -1 = -1;
+  private hitThisThrust = false;
+
+  constructor(x: number, y: number) {
+    super('shieldman', x, y);
+    this.w = 24;
+    this.h = 34;
+    this.hp = this.maxHp = 6;
+    this.scoreValue = 90;
+    this.aggroRange = 250;
+    this.contactDamage = 1;
+  }
+
+  /** True while the shield is down and hits land from any side. */
+  get exposed(): boolean {
+    return this.state === 'exposed';
+  }
+
+  protected override deathColor(): string {
+    return '#9aa6c4';
+  }
+
+  override hurt(amount: number, fromDir: number, world: World): void {
+    if (this.dead) return;
+    // A blow into the shield is a blow into a wall.
+    const fromFront = Math.sign(fromDir) === -this.facing;
+    if (fromFront && !this.exposed) {
+      audio.play('parry', 0.8);
+      world.particles.burst(this.cx - this.facing * 12, this.cy - 4, 8, '#dfe8ff', {
+        speed: 150,
+        shape: 'spark',
+        angle: fromDir > 0 ? Math.PI : 0,
+        spread: 1.1,
+      });
+      this.flash = Math.max(this.flash, 0.4);
+      this.vx = fromDir * 60;
+      return;
+    }
+    super.hurt(amount, fromDir, world);
+  }
+
+  /** A parried thrust drops the shield: that is what the parry is for. */
+  override onParried(world: World): void {
+    if (this.dead) return;
+    this.state = 'exposed';
+    this.timer = 1.8;
+    this.vx = -this.facing * 120;
+    audio.play('hit', 0.7);
+    world.particles.burst(this.cx, this.cy, 12, '#dfe8ff', { speed: 170, shape: 'spark' });
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    if (this.stun <= 0 && this.state !== 'exposed') this.facing = dist < this.aggroRange ? (dx > 0 ? 1 : -1) : this.dir;
+    this.timer -= dt;
+
+    if (this.stun <= 0) {
+      switch (this.state) {
+        case 'patrol': {
+          this.vx = approach(this.vx, this.dir * 42, 340 * dt);
+          const ahead = Math.floor((this.cx + this.dir * 16) / 32);
+          const below = Math.floor((this.bottom + 6) / 32);
+          if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+            this.dir = -this.dir as 1 | -1;
+          }
+          if (this.touching.left || this.touching.right) this.dir = -this.dir as 1 | -1;
+          if (dist < this.aggroRange && Math.abs(player.cy - this.cy) < 60) {
+            this.state = 'advance';
+            this.timer = 0.6;
+          }
+          break;
+        }
+        case 'advance':
+          this.vx = approach(this.vx, dist > 40 ? this.facing * 52 : 0, 340 * dt);
+          if (this.timer <= 0) {
+            if (dist < 58) {
+              this.state = 'thrustWind';
+              this.timer = 0.42;
+              this.hitThisThrust = false;
+              audio.play('swing', 0.7);
+            } else if (dist > this.aggroRange) {
+              this.state = 'patrol';
+            } else {
+              this.timer = 0.5;
+            }
+          }
+          break;
+        case 'thrustWind':
+          this.vx = approach(this.vx, -this.facing * 30, 400 * dt);
+          if (this.timer <= 0) {
+            this.state = 'thrust';
+            this.timer = 0.24;
+            this.vx = this.facing * 210;
+          }
+          break;
+        case 'thrust': {
+          const reach = {
+            x: this.facing > 0 ? this.x + this.w - 4 : this.x - 22,
+            y: this.y + 6,
+            w: 26,
+            h: 16,
+          };
+          if (!this.hitThisThrust && !player.dead && rectsOverlap(reach, player.rect)) {
+            this.hitThisThrust = true;
+            player.hurt(1, this.facing, world);
+          }
+          if (this.timer <= 0) {
+            this.state = 'advance';
+            this.timer = 0.75;
+          }
+          break;
+        }
+        case 'exposed':
+          this.vx = approach(this.vx, 0, 500 * dt);
+          if (this.timer <= 0) {
+            this.state = 'advance';
+            this.timer = 0.4;
+          }
+          break;
+      }
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.6);
+      ctx.scale(this.facing, 1);
+
+      // Body, then the spear, then the shield on top of both: in this mirrored
+      // space local +x is forward, and the shield was drawn at -11 - which put
+      // it squarely on his back, where it guarded nothing and read as nothing.
+      ctx.fillStyle = '#2b3348';
+      ctx.fillRect(-9, -30, 15, 30);
+      ctx.fillStyle = '#3d4763';
+      ctx.fillRect(-9, -30, 15, 5);
+      ctx.fillStyle = '#1b2133';
+      ctx.fillRect(-7, -26, 11, 4);
+      // Helm with a slit.
+      ctx.fillStyle = '#39425c';
+      ctx.fillRect(-8, -38, 14, 9);
+      ctx.fillStyle = this.exposed ? '#ff9c6a' : '#9fd0ff';
+      ctx.fillRect(-1, -35, 7, 2);
+
+      // The spear, thrust over the rim of the shield rather than through it.
+      const out = this.state === 'thrust' ? 16 : this.state === 'thrustWind' ? -5 : 0;
+      ctx.fillStyle = '#5a4a34';
+      ctx.fillRect(0, -27, 13 + out, 3);
+      ctx.fillStyle = '#c7d2e8';
+      ctx.beginPath();
+      ctx.moveTo(13 + out, -29.5);
+      ctx.lineTo(21 + out, -25.5);
+      ctx.lineTo(13 + out, -21.5);
+      ctx.closePath();
+      ctx.fill();
+
+      // The shield: forward and covering him, or swung down while exposed.
+      ctx.save();
+      if (this.exposed) {
+        ctx.translate(4, -5);
+        ctx.rotate(1.15);
+      } else {
+        ctx.translate(9, -16);
+      }
+      ctx.fillStyle = '#4a5674';
+      ctx.beginPath();
+      ctx.moveTo(-5, -15);
+      ctx.lineTo(5, -12);
+      ctx.lineTo(5, 12);
+      ctx.lineTo(-5, 15);
+      ctx.closePath();
+      ctx.fill();
+      // A lit rim along the leading edge, so the guarded side is the side that
+      // catches the light.
+      ctx.fillStyle = '#8d9dc2';
+      ctx.fillRect(3, -12, 2.5, 24);
+      ctx.fillStyle = '#6d7c9f';
+      ctx.fillRect(-4, -12, 2.5, 24);
+      ctx.fillStyle = '#a8b6d6';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.restore();
+    });
+    this.drawHpPips(ctx);
+  }
+}
+
+/* ------------------------------------------------------------------- charger */
+
+/**
+ * Klingenläufer - it digs in, then crosses the room.
+ *
+ * The one enemy that punishes standing still, and the one that can be turned
+ * against the level: a charge into a wall leaves it dazed and taking double for
+ * a second and a half. Standing in front of a wall and stepping aside is the
+ * intended answer, and it is more satisfying than trading hits.
+ */
+export class Charger extends Enemy {
+  private state: 'patrol' | 'wind' | 'run' | 'dazed' = 'patrol';
+  private timer = 0;
+  private dir: 1 | -1 = -1;
+  private hitThisRun = false;
+
+  constructor(x: number, y: number) {
+    super('charger', x, y);
+    this.w = 26;
+    this.h = 24;
+    this.hp = this.maxHp = 4;
+    this.scoreValue = 75;
+    this.aggroRange = 270;
+    this.contactDamage = 1;
+  }
+
+  protected override deathColor(): string {
+    return '#c2705a';
+  }
+
+  override hurt(amount: number, fromDir: number, world: World): void {
+    // Dazed against a wall is the window, so it is worth twice as much.
+    super.hurt(this.state === 'dazed' ? amount * 2 : amount, fromDir, world);
+  }
+
+  override touchPlayer(world: World): void {
+    if (this.state === 'run') return; // The run does its own, heavier hit.
+    super.touchPlayer(world);
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    this.timer -= dt;
+
+    if (this.stun <= 0) {
+      switch (this.state) {
+        case 'patrol': {
+          this.vx = approach(this.vx, this.dir * 46, 320 * dt);
+          this.facing = this.dir;
+          const ahead = Math.floor((this.cx + this.dir * 16) / 32);
+          const below = Math.floor((this.bottom + 6) / 32);
+          if (this.onGround && !world.level.solidAt(ahead, below) && !world.level.platformAt(ahead, below)) {
+            this.dir = -this.dir as 1 | -1;
+          }
+          if (this.touching.left || this.touching.right) this.dir = -this.dir as 1 | -1;
+          // Only charges at something roughly level with it, so a hero on a
+          // ledge is not hit by something that cannot reach him.
+          if (dist < this.aggroRange && Math.abs(player.bottom - this.bottom) < 40) {
+            this.state = 'wind';
+            this.timer = 0.45;
+            this.facing = dx > 0 ? 1 : -1;
+            this.dir = this.facing;
+            audio.play('swing', 0.6);
+          }
+          break;
+        }
+        case 'wind':
+          this.vx = approach(this.vx, -this.facing * 40, 400 * dt);
+          if (world.time % 0.06 < dt) {
+            world.particles.spawn({
+              x: this.cx - this.facing * 12,
+              y: this.bottom - 3,
+              vx: -this.facing * rand(40, 110),
+              vy: rand(-40, -10),
+              color: 'rgba(180,150,120,0.6)',
+              gravity: 260,
+              size: 2.5,
+              life: 0.35,
+            });
+          }
+          if (this.timer <= 0) {
+            this.state = 'run';
+            this.timer = 0.62;
+            this.hitThisRun = false;
+            this.vx = this.facing * 420;
+          }
+          break;
+        case 'run':
+          if (!this.hitThisRun && !player.dead && !player.isInvulnerable && this.overlaps(player.rect)) {
+            this.hitThisRun = true;
+            player.hurt(2, sign(player.cx - this.cx) || 1, world);
+          }
+          if (this.touching.left || this.touching.right) {
+            this.state = 'dazed';
+            this.timer = 1.5;
+            this.vx = -this.facing * 90;
+            audio.play('slam', 1.4);
+            world.camera.addShake(3);
+            world.particles.burst(this.cx + this.facing * 12, this.cy, 16, '#c2a08a', {
+              speed: 200,
+              gravity: 300,
+            });
+          } else if (this.timer <= 0) {
+            this.state = 'patrol';
+            this.timer = 0.5;
+          }
+          break;
+        case 'dazed':
+          this.vx = approach(this.vx, 0, 400 * dt);
+          if (this.timer <= 0) this.state = 'patrol';
+          break;
+      }
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+    if (world.level.rectHitsHazard(this.x, this.y, this.w, this.h)) this.hurt(99, 0, world);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      shadow(ctx, 0, 0, this.w * 0.6);
+      ctx.scale(this.facing, 1);
+      const dazed = this.state === 'dazed';
+      if (dazed) ctx.rotate(0.18);
+      const crouch = this.state === 'wind' ? 3 : 0;
+
+      // Low, wide body built around the plate on its head.
+      const g = ctx.createLinearGradient(0, -20, 0, 0);
+      g.addColorStop(0, '#7c4a3a');
+      g.addColorStop(1, '#3a201a');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(-13, -16 + crouch);
+      ctx.lineTo(9, -19 + crouch);
+      ctx.lineTo(13, -4);
+      ctx.lineTo(-13, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#2a1712';
+      ctx.fillRect(-11, -5, 5, 5);
+      ctx.fillRect(4, -5, 5, 5);
+
+      // The ram plate, which is also where it hurts itself.
+      ctx.fillStyle = dazed ? '#8a7a6a' : '#b9a08a';
+      ctx.beginPath();
+      ctx.moveTo(9, -22 + crouch);
+      ctx.lineTo(17, -14 + crouch);
+      ctx.lineTo(9, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(10, -20 + crouch, 2, 12);
+
+      // Eye: a slit that opens wide before the run.
+      ctx.fillStyle = dazed ? '#ffd9a0' : this.state === 'wind' ? '#ffd166' : '#e08a5c';
+      ctx.fillRect(2, -16 + crouch, 4, this.state === 'wind' ? 3 : 1.8);
+      if (dazed) {
+        // Stars, so the window reads without watching the health pips.
+        ctx.fillStyle = 'rgba(255,240,200,0.85)';
+        for (let i = 0; i < 3; i++) {
+          const a = this.anim * 5 + i * 2.1;
+          ctx.fillRect(Math.cos(a) * 9 - 1, -26 + Math.sin(a) * 4, 2.5, 2.5);
+        }
+      }
       ctx.restore();
     });
     this.drawHpPips(ctx);
@@ -1463,6 +2050,12 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Skeleton(x, y);
     case 'mage':
       return new DarkMage(x, y);
+    case 'bomber':
+      return new Bomber(x, y);
+    case 'shieldman':
+      return new Shieldman(x, y);
+    case 'charger':
+      return new Charger(x, y);
     case 'warden':
       return new Warden(x, y);
     case 'thalassa':

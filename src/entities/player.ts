@@ -511,6 +511,7 @@ export class Player extends Body {
     for (const enemy of world.enemies) {
       if (enemy.dead) continue;
       if (Math.abs(enemy.cx - this.cx) > 60 || Math.abs(enemy.cy - this.cy) > 50) continue;
+      enemy.onParried(world);
       enemy.hurt(1, this.facing, world);
     }
   }

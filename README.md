@@ -95,6 +95,35 @@ Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
 kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
 
+## Die Gegner
+
+| | | Antwort |
+| --- | --- | --- |
+| **Schleim** | hüpft stur geradeaus | drüber oder drauf |
+| **Fledermaus** | fliegt in Wellen an | Timing |
+| **Skelett** | patrouliert, schlägt telegrafiert | parieren oder ausweichen |
+| **Dunkler Magier** | schwebt, wirft Kugeln | Kugeln zurückparieren |
+| **Zunder** | läuft heran und zündet sich | **auf Abstand erledigen** |
+| **Schildwache** | alles in den Schild hinein bleibt dort | **von hinten, oder parieren** |
+| **Klingenläufer** | gräbt sich ein und stürmt durch den Raum | **in eine Wand locken** |
+
+Der **Zunder** ist eine Falle, keine Wache: er wartet, bis man nah ist, und
+zündet dann eine gute Sekunde lang sichtbar und hörbar auf. Ihn zu erschlagen
+löst dieselbe Explosion aus — wer ihn aus einem Meter Entfernung umhaut, kassiert
+sie. Aus der Ferne erledigt kostet er nichts, und genau dafür ist die
+Klingenwelle da. Was neben ihm steht, nimmt er mit: ein Skelett in seiner
+Reichweite ist ein Skelett, das man nicht selbst bekämpfen muss.
+
+Die **Schildwache** ist der einzige Gegner im Spiel, den man mit gehaltener
+Angriffstaste nicht schafft. Von vorn stirbt jeder Hieb im Schild, die
+Klingenwelle inbegriffen. Hinten herum trifft alles — und ein parierter
+Lanzenstoß reißt ihm den Schild für knapp zwei Sekunden herunter.
+
+Der **Klingenläufer** ist der einzige, den das Level selbst erledigt: er gräbt
+sich ein, stürmt los, und wer sich vor einer Wand wegdreht, sieht ihn dagegen
+laufen. Danach steht er anderthalb Sekunden benommen da und nimmt doppelten
+Schaden.
+
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
 42 Trefferpunkte, zwei Phasen, drei Züge nach Entfernung: aus der Nähe ein
@@ -174,6 +203,7 @@ horizontal aneinandergehängt:
 ^  Stacheln      L/l Lava        G  Fallgitter   P  Startpunkt
 S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
+z  Zunder        w  Schildwache  r  Klingenläufer
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
 W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
@@ -197,6 +227,7 @@ npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
 npm run verify:thalassa # wählt Thalassa ihren Zug nach Entfernung, und trifft sie?
+npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run verify:bonus   # öffnet der letzte Edelstein den Weg zum Prismarchen?
@@ -229,6 +260,16 @@ vorbei und es hängt vom Zufall ab, ob sie in der Zeit überhaupt zum Zug kam.
 Aus derselben Messung ist die Aufprall-Sperre entstanden: Poise allein reicht
 nicht, weil ein Dauerangreifer schneller Schaden macht als jede Ankündigung
 dauert. Vorher zwei Geschosse in zehn Sekunden, jetzt fünf bis sieben in zwanzig.
+
+`verify:enemies` stellt die drei neuen Typen einzeln auf ebenen Boden und prüft
+je die Sache, für die sie da sind: der Zunder zündet von selbst **und** beim
+Erschlagen aus einem Meter (2 Herzen), aus der Ferne erschlagen kostet nichts,
+und Nachbarn nimmt er mit (3 Schaden). Am Schild von vorn kommt 0 an, von hinten
+4, nach einer Parade wieder etwas. Und der Klingenläufer läuft, trifft, und wird
+an der Wand benommen — wo zwei Schaden zu vier werden. Die Wandprobe steht in der
+Kristallhalle, weil das die einzige Stelle mit einer Wand vom Boden bis zur
+Decke ist; die Arenen sind offener Boden, und ein Sturm über offenen Boden
+landet nie.
 
 `verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft
