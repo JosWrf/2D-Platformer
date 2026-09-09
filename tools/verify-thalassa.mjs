@@ -433,6 +433,59 @@ const result = await page.evaluate(() => {
   }
   const killed = boss.dead;
 
+  /* ------------------------------------ and what her fall puts in the blade */
+
+  /*
+   * The Flutklinge, the first tier of the blade upgrade. It used to hang
+   * entirely off the Prismarch, which meant finding all 157 gems and then
+   * having only the last stretch of the world left to use it on. Half of it
+   * comes from her now, at the middle of the run.
+   */
+  const rewardDialogue = !!g.dialogue;
+  for (let f = 0; f < 60 * 8 && g.dialogue; f++) tick({ confirm: f % 16 < 4 });
+  const tier = p.beamTier;
+
+  /** One crescent per swing, friendly, and how far it carries. */
+  const swingReach = (targetGap) => {
+    g.projectiles.length = 0;
+    p.attackTimer = 0;
+    p.attackCombo = 0;
+    p.x = home - 260;
+    p.y = standY;
+    p.vx = 0;
+    p.vy = 0;
+    p.facing = 1;
+    p.hp = p.maxHp;
+    p.dead = false;
+    p.invuln = 999;
+    const mark = g.enemies.find((e) => e !== boss && !e.dead) ?? boss;
+    mark.hp = mark.maxHp = 40;
+    mark.dead = false;
+    mark.x = p.x + targetGap;
+    mark.y = standY + p.h - mark.h;
+    mark.stun = 0;
+    if (!g.enemies.includes(mark)) g.enemies.push(mark);
+    const before = mark.hp;
+    let crescents = 0;
+    for (let f = 0; f < 34; f++) {
+      mark.x = p.x + targetGap;
+      mark.vx = 0;
+      p.x = home - 260;
+      p.invuln = 999;
+      tick({ attack: f < 3 });
+      crescents = Math.max(crescents, g.projectiles.filter((q) => q.kind === 'beam').length);
+    }
+    return {
+      crescents,
+      hurtAtGap: before - mark.hp,
+      allFriendly: g.projectiles.filter((q) => q.kind === 'beam').every((q) => q.friendly),
+    };
+  };
+  // Out of arm's reach - the sword itself carries forty pixels - but nowhere
+  // near what the sharpened blade does. That is the Prismarch's half.
+  const beamNear = swingReach(120);
+  const beamFar = swingReach(250);
+
   return {
     ok:
       near.moves.includes('surgeWind') &&
@@ -459,6 +512,12 @@ const result = await page.evaluate(() => {
       sawPhaseTwo &&
       sawPhaseThree &&
       killed &&
+      rewardDialogue &&
+      tier === 1 &&
+      beamNear.crescents === 1 &&
+      beamNear.allFriendly &&
+      beamNear.hurtAtGap > 0 &&
+      beamFar.hurtAtGap === 0 &&
       passHp.walkedPast &&
       passHp.heartsLeft >= 3,
     maxHp: boss.maxHp,
@@ -479,6 +538,7 @@ const result = await page.evaluate(() => {
     sawPhaseThree,
     killed,
     killSeconds: +(killFrames / 60).toFixed(1),
+    reward: { dialogue: rewardDialogue, beamTier: tier, at120px: beamNear, at250px: beamFar },
     walkPast: passHp,
   };
 });
@@ -492,12 +552,13 @@ if (!result.ok) {
     'FAIL: Thalassa no longer picks her move by range, or her flood can be swatted away, or the ' +
       'spring tide no longer answers a squatter (or no longer spares someone who steps aside), or ' +
       'the crown no longer calls, or a parry no longer breaks her, or she no longer answers a ' +
-      'masher, or she cannot be killed or walked past.',
+      'masher, or she cannot be killed or walked past, or her fall no longer hands over the ' +
+      'Flutklinge.',
   );
   process.exit(1);
 }
 console.log(
   'OK: Thalassa surges up close, throws the anchor from afar, opens the floor under a squatter, ' +
     'answers twice in her second phase, calls the crown once for her last third, breaks to a ' +
-    'parry, makes a masher pay, can be walked past, and still drowns.',
+    'parry, makes a masher pay, can be walked past, drowns - and leaves the Flutklinge behind.',
 );

@@ -70,6 +70,18 @@ const result = await page.evaluate(({ seconds }) => {
     }
     if (g.state === 'victory') break;
 
+    /*
+     * A dialogue freezes the world until someone reads it - Thalassa's fall
+     * opens one now, and so does the last gem. A bot that never presses on
+     * would spend the rest of its run standing in front of the words, and the
+     * report would read as a stall in the middle of the level.
+     */
+    if (g.dialogue) {
+      input.forceDown('confirm', i % 8 < 3);
+      g.update(DT, input);
+      continue;
+    }
+
     const nearestEnemy = g.enemies
       .filter((e) => !e.dead && Math.abs(e.cy - p.cy) < 60 && Math.abs(e.cx - p.cx) < 90)
       .sort((a, b) => Math.abs(a.cx - p.cx) - Math.abs(b.cx - p.cx))[0];

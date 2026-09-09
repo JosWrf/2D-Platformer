@@ -110,11 +110,23 @@ export class Player extends Body {
   attackCombo = 0;
   /** True while the running swing is the heavy charged one. */
   /**
-   * The reward for the Prismarch: every swing throws a crescent of light ahead
-   * of the blade. It is a reach extension, not a gun - one per swing, and it
-   * dies after two thirds of a second.
+   * How far the blade has been taken past being a sword. Every swing throws a
+   * crescent ahead of it - a reach extension, not a gun: one per swing, and it
+   * dies within half a second.
+   *
+   *   0  a sword, nothing more.
+   *   1  the Flutklinge, from Thalassa: about 135 px of reach, damage 1 (2 out
+   *      of the heavy strike). Handed over in the middle of the run, because
+   *      the whole point of a toy this good is having it long enough to play
+   *      with it.
+   *   2  the Klingenwelle, from the Prismarch: twice the reach and the full
+   *      damage of the swing behind it.
    */
-  bladeBeam = false;
+  beamTier: 0 | 1 | 2 = 0;
+  /** Whether the blade throws anything at all - most of the game only asks that. */
+  get bladeBeam(): boolean {
+    return this.beamTier > 0;
+  }
   private beamFired = false;
 
   charged = false;
@@ -457,13 +469,20 @@ export class Player extends Body {
   private throwBeam(world: World): void {
     const pose = this.swingPose(ATTACK_TOTAL - this.attackTimer);
     const hand = this.handWorld(pose);
-    const beam = new Projectile('beam', hand.x - 15, hand.y - 10, this.facing * 430, 0);
+    const sharp = this.beamTier === 2;
+    const beam = new Projectile('beam', hand.x - 15, hand.y - 10, this.facing * (sharp ? 430 : 340), 0);
     beam.friendly = true;
+    if (!sharp) {
+      // The first tier is a good deal shorter, so the sword still has to be
+      // carried to most things: 340 px/s for four tenths of a second.
+      beam.life = 0.4;
+      beam.water = true;
+    }
     // The heavy strike throws a heavier wave, the same way it hits harder.
-    beam.damage = this.charged ? 3 : this.attackCombo === 3 ? 2 : 1;
+    beam.damage = sharp ? (this.charged ? 3 : this.attackCombo === 3 ? 2 : 1) : this.charged ? 2 : 1;
     world.spawnProjectile(beam);
     audio.play('shoot', this.charged ? 0.8 : 1.25);
-    world.particles.burst(hand.x, hand.y, 6, '#cdf3ff', { speed: 120, shape: 'spark' });
+    world.particles.burst(hand.x, hand.y, 6, sharp ? '#cdf3ff' : '#a6ecdf', { speed: 120, shape: 'spark' });
   }
 
   /** Blows turned aside during the parry window fly back at their owner. */

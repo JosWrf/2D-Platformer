@@ -124,7 +124,7 @@ export class Projectile extends Body {
           y: this.cy,
           vx: -this.vx * 0.08,
           vy: rand(-24, 24),
-          color: 'rgba(190,240,255,0.6)',
+          color: this.water ? 'rgba(170,240,225,0.6)' : 'rgba(190,240,255,0.6)',
           size: 2.5,
           life: 0.22,
           shape: 'spark',
@@ -180,14 +180,26 @@ export class Projectile extends Body {
         // back: it has to read as thrown off a blade, not as a bullet.
         const dir = Math.sign(this.vx) || 1;
         const fade = Math.max(0, Math.min(1, this.life / 0.4));
-        glow(ctx, cx, cy, 26 * fade, `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`);
+        // The first tier of the blade throws water rather than light, and a
+        // smaller crescent: the eye should be able to tell them apart.
+        const size = this.water ? 0.8 : 1;
+        glow(
+          ctx,
+          cx,
+          cy,
+          26 * fade * size,
+          this.water
+            ? `rgba(140,235,220,${(0.35 * fade).toFixed(2)})`
+            : `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`,
+        );
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.scale(dir, 1);
+        ctx.scale(dir * size, size);
         ctx.globalCompositeOperation = 'lighter';
+        const [edge, core] = this.water ? ['#3fc8b8', '#dcfaf2'] : ['#5ec8ff', '#e8fbff'];
         for (const [w, alpha, color] of [
-          [1, 0.5 * fade, '#5ec8ff'],
-          [0.62, 0.85 * fade, '#e8fbff'],
+          [1, 0.5 * fade, edge],
+          [0.62, 0.85 * fade, core],
         ] as const) {
           ctx.globalAlpha = alpha;
           ctx.fillStyle = color;

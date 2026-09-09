@@ -111,8 +111,10 @@ Der **Zunder** ist eine Falle, keine Wache: er wartet, bis man nah ist, und
 zündet dann eine gute Sekunde lang sichtbar und hörbar auf. Ihn zu erschlagen
 löst dieselbe Explosion aus — wer ihn aus einem Meter Entfernung umhaut, kassiert
 sie. Aus der Ferne erledigt kostet er nichts, und genau dafür ist die
-Klingenwelle da. Was neben ihm steht, nimmt er mit: ein Skelett in seiner
-Reichweite ist ein Skelett, das man nicht selbst bekämpfen muss.
+Klingenwelle da — beziehungsweise ab der Halbzeit die Flutklinge, deren 145 px
+weit außerhalb seiner Druckwelle von 66 px liegen. Was neben ihm steht, nimmt er
+mit: ein Skelett in seiner Reichweite ist ein Skelett, das man nicht selbst
+bekämpfen muss.
 
 Die **Schildwache** ist der einzige Gegner im Spiel, den man mit gehaltener
 Angriffstaste nicht schafft. Von vorn stirbt jeder Hieb im Schild, die
@@ -203,6 +205,42 @@ Die letzte Zeile ist Absicht und wird geprüft: ihr Chor hat kein Fallgitter, we
 den Kampf nicht will, muss vorbeikommen. Und die vorletzte auch: die beste
 Antwort auf sie ist die Parade, nicht das Ausdauerhalten.
 
+Wer sie schlägt, nimmt mit, was sie gehalten hat: die **Flutklinge**, die erste
+Hälfte des Klingen-Upgrades.
+
+### Die Klinge: zwei Stufen
+
+Jeder Hieb wirft eine Sichel voraus. Das ist eine Reichweitenverlängerung, keine
+Kanone: eine je Hieb, und sie ist nach einem knappen halben Herzschlag weg.
+
+| | woher | Reichweite | Schaden |
+| --- | --- | --- | --- |
+| Schwert allein | von Anfang an | 40 px | 1 / 2 in der Kombo / 3 geladen |
+| **Flutklinge** | Thalassa fällt — bei 43 % des Levels | 145 px | 1, geladen 2 |
+| **Klingenwelle** | Prismarch fällt — hinter allen 157 Edelsteinen | 273 px | 1 / 2 / 3 wie der Hieb |
+
+![Flutklinge](screenshots/20-flutklinge.png)
+
+Vorher hing das ganze Upgrade am Prismarchen. Das heißt: man musste alle 157
+Edelsteine finden, um es überhaupt zu sehen — und hatte dann nur noch den letzten
+Rest der Welt, um damit zu spielen. Die Hälfte kommt jetzt zur Halbzeit, der
+Prismarch schärft, was schon da ist. Die zwei Stufen sehen auch verschieden aus:
+die Flutklinge wirft Wasser, die Klingenwelle Licht, und im HUD steht, was man
+hat.
+
+Dass die erste Stufe das Spiel dahinter nicht kaputt macht, ist gemessen — ein
+Bot, der auf 150 px Abstand bleibt und nur die Sichel schickt:
+
+| gegen | nur Schwert | Flutklinge | Klingenwelle |
+| --- | --- | --- | --- |
+| Schattenritter (64 TP) | verliert, 7 Tode | 47 s, 10 Treffer, 1 Tod | 21 s, 2 Treffer |
+| Splitterwächter (16 TP) | 5 s, 0 Treffer | 8,3 s, 1 Treffer | 3,8 s, 0 Treffer |
+
+Der Ritter bleibt der härteste Kampf im Spiel, auch mit der Flutklinge in der
+Hand; beim Splitterwächter ändert sie nichts, den erledigt der Nahkampf ohnehin
+in fünf Sekunden. Die volle Klingenwelle ist stark — das ist der Punkt einer
+Belohnung, für die man die ganze Welt abgesucht hat.
+
 ### Der Bonusboss: Prismarch, Herz des Kristalls
 
 Wer alle 157 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
@@ -221,10 +259,11 @@ kürzer. Denselben Zug zweimal hintereinander macht er nie.
 
 Fällt er, ist der Lauf **nicht** vorbei: die Splitter seines Herzens gehen in die
 Klinge, und der Held wird genau dorthin zurückgesetzt, wo er weggeholt wurde —
-mitsamt seinem alten Kontrollpunkt. Von da an wirft jeder Hieb eine
-**Klingenwelle** voraus, ein Halbmond aus Licht, der auf Abstand trifft: einer je
-Hieb, Schaden 1 in der Kombo, 2 beim Abschluss, 3 beim Ladeschlag. Im HUD steht
-sie unter der Edelsteinzeile, damit man weiß, dass man sie hat.
+mitsamt seinem alten Kontrollpunkt. Aus der Flutklinge wird damit die
+**Klingenwelle**: doppelte Reichweite und der volle Schaden des Hiebs dahinter,
+1 in der Kombo, 2 beim Abschluss, 3 beim Ladeschlag. Wer Thalassa vorbeigelaufen
+ist und die erste Stufe nicht hat, bekommt sie hier — das Herz sagt dann auch
+einen anderen Satz.
 
 Das Tor im Riss beendet den Lauf wie immer — der Siegbildschirm nennt dann das
 wahre Ende, wenn das Herz gefallen ist.
@@ -296,11 +335,11 @@ Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
-npm run verify:thalassa # wählt Thalassa ihren Zug, macht sie den Boden auf, fällt sie?
+npm run verify:thalassa # ihre Züge, die Springflut, ihr Fall und die Flutklinge danach
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
-npm run verify:bonus   # öffnet der letzte Edelstein den Weg zum Prismarchen?
+npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
@@ -337,8 +376,11 @@ der nur die Angriffstaste hält, mit aufgefüllter Lebensleiste — sonst ist de
 Kampf vorher vorbei und es hängt vom Zufall ab, ob sie überhaupt zum Zug kam.
 Aus dieser Messung ist die Aufprall-Sperre entstanden, und später der ganze
 Umbau oben: Poise allein reicht nicht, weil ein Dauerangreifer schneller Schaden
-macht als jede Ankündigung dauert. Zuletzt läuft der Held einmal an ihr vorbei,
-ohne zu kämpfen — das muss gehen, und es darf höchstens drei Herzen kosten.
+macht als jede Ankündigung dauert. Danach, dass ihr Fall die Flutklinge hergibt:
+eine Sichel je Hieb, die auf 120 px trifft und auf 250 px eben nicht — das ist
+die andere Hälfte, und die gehört dem Prismarchen. Und der Held läuft einmal an
+ihr vorbei, ohne zu kämpfen — das muss gehen, und es darf höchstens drei Herzen
+kosten.
 
 `verify:enemies` stellt die drei neuen Typen einzeln auf ebenen Boden und prüft
 je die Sache, für die sie da sind: der Zunder zündet von selbst **und** beim

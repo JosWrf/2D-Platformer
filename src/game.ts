@@ -299,12 +299,56 @@ export class Game implements World {
       lines: [
         'Du hast mich zerschlagen. Also gehören mir meine Splitter nicht mehr.',
         'Sie liegen jetzt in deiner Klinge — nimm sie mit.',
-        'Jeder Hieb wirft von nun an eine Welle aus Licht voraus.',
+        this.player.beamTier > 0
+          ? 'Was die Krone dir gab, reicht damit doppelt so weit und schneidet tiefer.'
+          : 'Jeder Hieb wirft von nun an eine Welle aus Licht voraus.',
         'Und du gehst zurück. Was du begonnen hast, ist nicht hier zu beenden.',
       ],
       index: 0,
       after: () => this.leaveCrystalWorld(),
     };
+  }
+
+  /**
+   * Thalassa falls, in the middle of the run, and what she held goes into the
+   * blade: from here every swing throws a short crescent of water ahead of it.
+   *
+   * The upgrade used to hang entirely off the Prismarch, which meant a player
+   * had to find all 157 gems to ever see it - and then had the last stretch of
+   * the world left to use it on. Half of it now comes at the halfway mark, and
+   * the Prismarch sharpens what is already there.
+   */
+  onDrownedCrownDefeated(): void {
+    if (this.player.beamTier > 0 || this.state !== 'playing') return;
+    if (this.dialogue) {
+      // Something is already on the screen to be read. Skipping the words is
+      // fine; silently dropping the reward is not.
+      this.takeFloodIntoBlade();
+      return;
+    }
+    this.flashWhite = 1;
+    this.camera.addShake(8);
+    audio.play('victory');
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.dialogue = {
+      speaker: 'DIE ERTRUNKENE KRONE',
+      lines: [
+        'Tausend Jahre habe ich das Wasser dieser Halle gehalten.',
+        'Nimm es. Halten kann ich es nicht mehr.',
+        'Jeder deiner Hiebe wirft von nun an ein Stück davon voraus —',
+        'kurz, aber weiter als ein Schwert reicht.',
+      ],
+      index: 0,
+      after: () => this.takeFloodIntoBlade(),
+    };
+  }
+
+  /** The first tier of the blade, and the word for it on the HUD. */
+  private takeFloodIntoBlade(): void {
+    this.player.beamTier = 1;
+    this.zoneBanner = { text: 'FLUTKLINGE — JEDER HIEB SCHNEIDET WEITER', timer: 4.2 };
+    this.flashWhite = 0.7;
   }
 
   /**
@@ -360,7 +404,7 @@ export class Game implements World {
   private leaveCrystalWorld(): void {
     const back = this.returnTo;
     this.inCrystalWorld = false;
-    this.player.bladeBeam = true;
+    this.player.beamTier = 2;
     this.flashWhite = 1;
     this.zoneBanner = { text: 'KLINGENWELLE — JEDER HIEB SCHIESST', timer: 4.2 };
     audio.play('victory');
@@ -685,7 +729,7 @@ export class Game implements World {
     this.trueEnding = false;
     this.returnTo = null;
     this.dialogue = null;
-    this.player.bladeBeam = false;
+    this.player.beamTier = 0;
     this.level.exitSealed = true;
     this.respawnAtCheckpoint();
   }
@@ -1046,12 +1090,13 @@ export class Game implements World {
     // The blade upgrade, once it is earned. A power the player cannot see he
     // has is a power he does not use.
     if (this.player.bladeBeam) {
+      const sharp = this.player.beamTier === 2;
       const pulse = 0.75 + Math.sin(this.time * 2.4) * 0.25;
       ctx.save();
       ctx.translate(30, 112);
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = pulse;
-      ctx.fillStyle = '#9fe6ff';
+      ctx.fillStyle = sharp ? '#9fe6ff' : '#8ce8d4';
       ctx.beginPath();
       ctx.moveTo(7, 0);
       ctx.quadraticCurveTo(1, -6, -7, -4);
@@ -1062,8 +1107,8 @@ export class Game implements World {
       ctx.restore();
       ctx.globalAlpha = 0.55 + pulse * 0.45;
       ctx.font = font(12, 600);
-      ctx.fillStyle = '#8fe8ff';
-      ctx.fillText('KLINGENWELLE', 42, 116);
+      ctx.fillStyle = sharp ? '#8fe8ff' : '#7fe3cd';
+      ctx.fillText(sharp ? 'KLINGENWELLE' : 'FLUTKLINGE', 42, 116);
       ctx.globalAlpha = 1;
     }
 

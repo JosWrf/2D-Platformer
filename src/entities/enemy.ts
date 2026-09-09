@@ -1689,6 +1689,8 @@ export class Thalassa extends Enemy {
   protected override die(world: World): void {
     this.geysers.length = 0;
     super.die(world);
+    // What she held goes into the blade. The game says so, not she.
+    world.onDrownedCrownDefeated();
   }
 
   /**

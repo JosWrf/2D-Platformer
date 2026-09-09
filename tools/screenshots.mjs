@@ -129,10 +129,14 @@ async function drownedRound(rounds, stopWhen = 'tide') {
       g.render(document.querySelector('canvas').getContext('2d'));
       // Neither side is allowed to end the demo run early.
       if (p.hp <= 2) p.hp = p.maxHp;
-      if (boss.hp <= boss.maxHp * 0.45) boss.hp = boss.maxHp * 0.5;
+      if (stopWhen === 'tide' && boss.hp <= boss.maxHp * 0.45) boss.hp = boss.maxHp * 0.5;
       const standing = boss.geysers.filter((q) => q.t > q.wind && q.t < q.wind + 0.32);
       if (stopWhen === 'tide' && standing.length >= 2) {
         seen = { columns: standing.length, state: boss.state };
+        break;
+      }
+      if (stopWhen === 'fall' && boss.dead) {
+        seen = { fell: true, seconds: +(i / 60).toFixed(1) };
         break;
       }
     }
@@ -244,6 +248,30 @@ await step(60, { right: true });
 await release('right');
 results['11-tide'] = await drownedRound(900);
 await shot('11-thalassa');
+
+/* 20 — the Flutklinge, the reward for her ------------------------------- */
+// Carried out for real: the same fight to its end, the closing words read, and
+// then a swing. The first tier of the blade cannot be shown any other way
+// without simply handing it over, which would prove nothing.
+results['20-flutklinge'] = await drownedRound(60 * 200, 'fall');
+await page.evaluate(() => {
+  const g = window.game;
+  const input = window.input;
+  const ctx = document.querySelector('canvas').getContext('2d');
+  const t = (a = {}) => {
+    for (const [k, v] of Object.entries({ left: false, right: false, attack: false, confirm: false, ...a })) {
+      input.forceDown(k, v);
+    }
+    g.update(1 / 60, input);
+    g.render(ctx);
+  };
+  for (let i = 0; i < 60 * 10 && g.dialogue; i++) t({ confirm: i % 16 < 4 });
+  for (let i = 0; i < 40; i++) t();
+  g.player.facing = 1;
+  for (let i = 0; i < 12; i++) t({ attack: i < 3 });
+});
+results['20-tier'] = await page.evaluate(() => window.game.player.beamTier);
+await shot('20-flutklinge');
 
 /* 12 — castle ------------------------------------------------------------- */
 await open(`?x=${marken.boss - 146}`);

@@ -183,6 +183,9 @@ const result = await page.evaluate(() => {
   const backInTheWorld = !g.inCrystalWorld;
   const landedOnTile = Math.round(p.cx / 32);
   const gotTheBeam = p.bladeBeam;
+  // Read here, not in the result: the gate runs below restart the level, and a
+  // restart puts the blade back to being a sword.
+  const beamTierAfterWin = p.beamTier;
 
   // One crescent per swing, friendly, and it reaches something out of arm's
   // reach - which is the whole point of the upgrade.
@@ -208,19 +211,31 @@ const result = await page.evaluate(() => {
   p.facing = 1;
   g.camera.snapTo(p.cx, p.cy);
   for (let i = 0; i < 20; i++) tick();
+  let sharpenedReachDamage = 0;
   const target = g.enemies.find((e) => !e.dead && e.kind !== 'prismarch');
-  if (target) {
+  const hitAtGap = (gap) => {
     target.hp = target.maxHp = 20;
-    target.x = p.x + 130;
+    target.x = p.x + gap;
     target.y = 17 * 32 - (target.h - 32);
     target.active = true;
     target.dead = false;
+    target.stun = 0;
     g.projectiles.length = 0;
     p.attackTimer = 0;
     p.attackCombo = 0;
     const before = target.hp;
-    for (let i = 0; i < 60; i++) tick({ attack: i < 3 });
-    reachDamage = before - target.hp;
+    for (let i = 0; i < 60; i++) {
+      target.x = p.x + gap;
+      target.vx = 0;
+      tick({ attack: i < 3 });
+    }
+    return before - target.hp;
+  };
+  if (target) {
+    reachDamage = hitAtGap(130);
+    // What the Prismarch actually adds: Thalassa's half of the upgrade carries
+    // 145 px, this one better carry twice that.
+    sharpenedReachDamage = hitAtGap(250);
   }
 
   /**
@@ -271,9 +286,11 @@ const result = await page.evaluate(() => {
       backInTheWorld &&
       landedOnTile === departedFromTile &&
       gotTheBeam &&
+      beamTierAfterWin === 2 &&
       beams === 1 &&
       allFriendly &&
       reachDamage > 0 &&
+      sharpenedReachDamage > 0 &&
       gateWithEverything.crystalWorld &&
       !gateWithout.crystalWorld &&
       gateWithout.state === 'victory' &&
@@ -299,7 +316,9 @@ const result = await page.evaluate(() => {
     landedOnTile,
     gotTheBeam,
     beamsPerSwing: beams,
+    beamTier: beamTierAfterWin,
     beamDamageAtRange: reachDamage,
+    beamDamageAt250px: sharpenedReachDamage,
     endState: g.state,
   };
 });
