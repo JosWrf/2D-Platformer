@@ -124,6 +124,45 @@ die Füße still, was blinden Schaden angeht. Eine **Parade** wirft ihn weiter
 jedes Mal um — die kommt nur, wenn er wirklich zuschlägt, also begrenzt sein
 eigener Takt sie.
 
+#### Er schlägt die Sichel aus der Luft
+
+Auch mit mehr Leben blieb er nach dem Klingen-Upgrade zu leicht, und das lag
+nicht an seinen Zahlen. Gemessen, der Held steht fest und unverwundbar auf
+Abstand und schwingt nur:
+
+| Klinge | Abstand | Wellen in 30 s | Schaden | Anteil seiner Leiste |
+| --- | --- | --- | --- | --- |
+| Klingenwelle, **vorher** | 250 px | 99 | 92 | **100 %** |
+| Flutklinge, **vorher** | 130 px | 98 | 78 | **100 %** |
+| Klingenwelle, jetzt | 250 px | 100 | 33 | 36 % |
+| nur Schwert | 60 px | — | 64 | 100 % |
+
+250 px liegen außerhalb von allem, was er erreichen kann. Dastehen und
+schwingen nahm ihm also die ganze Leiste ab, ohne ein einziges Mal in Gefahr
+zu sein — mehr Leben macht das nur länger, nicht schwerer.
+
+Er ist ein Ritter mit einem Großschwert. Also **schlägt er die Sichel aus der
+Luft**, solange er nicht in einem Zug festhängt. Das ist keine Mauer:
+
+* nur von vorn — was in seinen Rücken fliegt, kommt an;
+* **nie**, während er festgelegt ist: Sturmangriff, Sprungschlag, Deckensprung
+  und benommen sind alle offen;
+* und höchstens dreimal pro Sekunde, damit zwei Sicheln in einem Moment nicht
+  zwei Funken werfen.
+
+Etwa ein Viertel des Kampfes sind seine festgelegten Bilder, also kommt aus der
+Ferne etwa ein Viertel der Sicheln an. Wer mehr will, muss nah genug heran, um
+seine Ansagen zu lesen — dieselbe Regel, nach der der ganze Kampf schon läuft.
+Wenn er es tut, leuchtet die Klinge auf ihrer ganzen Länge auf und es sprüht
+am Aufprallpunkt: man soll sehen, warum die Sichel weg ist. Ein Bot, der nur
+aus der Ferne warf, hat ihn vorher in 41 Sekunden erledigt; jetzt steht er nach
+100 Sekunden immer noch bei 64 von 78 Trefferpunkten.
+
+`verify:combat` nagelt beides fest: acht Sicheln auf einen offenen Ritter
+machen **0** Schaden, dieselben acht auf einen festgelegten machen **8**.
+
+![Der Ritter schlägt die Sichel aus der Luft](screenshots/22-klinge-pariert.png)
+
 #### Bosse nehmen die Klinge zur Kenntnis
 
 Wer mit einer geworfenen Klinge ankommt, trifft auf mehr Boss. Das Upgrade ist
@@ -434,7 +473,7 @@ Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 ```bash
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
-npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
+npm run verify:combat  # Parade, Ladeschlag, und was der Ritter gegen die Sichel tut
 npm run verify:gallert # Züge, Spucke zum Abschlagen, Herzkern — und bleibt er tot?
 npm run verify:thalassa # ihre Züge, die Springflut, ihr Fall und die Flutklinge danach
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?

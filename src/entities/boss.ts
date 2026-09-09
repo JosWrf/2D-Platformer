@@ -15,6 +15,18 @@ const MAX_MINIONS = 2;
 /** Damage he takes mid-action before he loses his footing. */
 const STAGGER_DAMAGE = 14;
 /**
+ * How long his blade needs between batting two crescents out of the air.
+ *
+ * Short on purpose: this is not a cooldown that decides how often he may
+ * guard, it is only there so two crescents in the same moment do not throw two
+ * sparks and two sounds. What decides whether the blade covers him is his own
+ * state - see guardBlade. Measured with a rest of 1.15 s instead, he turned
+ * aside 21 of 99 crescents and still lost his whole bar in thirty seconds to a
+ * hero who never came within reach.
+ */
+const GUARD_REST = 0.3;
+
+/**
  * And how long he keeps it afterwards, whatever else lands on him. Without this
  * the knight could be held on the floor for a whole fight: a hero with the
  * blade upgrade deals fourteen damage in less time than one stagger lasts, so
@@ -59,6 +71,10 @@ export class Boss extends Body {
   private parryLock = 0;
   /** Set once when he wakes, so the blade is only taken stock of once. */
   private scaled = false;
+  /** Time before his blade can turn aside another crescent. */
+  private guardLock = 0;
+  /** Decays after he has just done it; drives the spark on the blade. */
+  private guardFlash = 0;
   private swordAngle = -0.6;
   private targetSwordAngle = -0.6;
   private hitPlayerThisAction = false;
@@ -104,6 +120,8 @@ export class Boss extends Body {
     this.damageSinceStagger = 0;
     this.damageLock = 0;
     this.parryLock = 0;
+    this.guardLock = 0;
+    this.guardFlash = 0;
     this.hitPlayerThisAction = false;
     this.lastAction = '';
     this.swordAngle = -0.6;
@@ -215,6 +233,8 @@ export class Boss extends Body {
     const player = world.player;
     this.damageLock = Math.max(0, this.damageLock - dt);
     this.parryLock = Math.max(0, this.parryLock - dt);
+    this.guardLock = Math.max(0, this.guardLock - dt);
+    this.guardFlash = Math.max(0, this.guardFlash - dt * 3.5);
 
     if (this.state === 'dormant') {
       this.vy = Math.min(700, this.vy + 1800 * dt);
@@ -410,10 +430,66 @@ export class Boss extends Body {
     }
 
     this.moveAndCollide(world.level, dt);
+    this.guardBlade(world);
 
     // Contact damage while charging around.
     if ((this.state === 'dash' || this.state === 'leap') && !this.hitPlayerThisAction) {
       this.tryMeleeHit(world, this.rect, 2);
+    }
+  }
+
+  /**
+   * A knight with a greatsword, and a crescent of light coming at him: while he
+   * is not committed to anything, he bats it out of the air.
+   *
+   * Measured, this is why the fight needed it. A hero with the upgraded blade
+   * who stood 250 px away - well outside everything the knight can reach - and
+   * simply swung, put 99 crescents into him and took his whole health bar off
+   * in under thirty seconds without ever being in danger. More health only made
+   * that longer, which is not the same as harder.
+   *
+   * It is not a wall, and it is not meant to retire the upgrade:
+   *
+   *   - only what comes at his front; a crescent thrown at his back lands,
+   *   - never while he is committed to a move or reeling - dash, slam, leap and
+   *     benommen are all open,
+   *   - and at most once every GUARD_REST seconds, which is only there so two
+   *     crescents in one moment do not throw two sparks.
+   *
+   * Which is the rule the rest of the fight already runs on: hit him when he is
+   * open, not whenever you like. Roughly a quarter of the fight is his
+   * committed frames, so roughly a quarter of a kiting player's crescents land
+   * - and to raise that share he has to come close enough to read them.
+   */
+  private guardBlade(world: World): void {
+    if (this.guardLock > 0 || this.dead) return;
+    const committed =
+      this.state === 'dash' ||
+      this.state === 'slam' ||
+      this.state === 'leap' ||
+      this.state === 'stagger' ||
+      this.state === 'intro' ||
+      this.state === 'dormant' ||
+      this.state === 'dying';
+    if (committed) return;
+    const box = {
+      x: this.facing > 0 ? this.x + this.w - 8 : this.x - 42,
+      y: this.y + 6,
+      w: 50,
+      h: this.h - 10,
+    };
+    for (const p of world.projectiles) {
+      if (p.dead || !p.friendly || p.kind !== 'beam') continue;
+      // Coming the same way he faces means it is coming from behind him.
+      if (Math.sign(p.vx) === this.facing) continue;
+      if (!p.overlaps(box)) continue;
+      p.dead = true;
+      this.guardLock = GUARD_REST;
+      this.guardFlash = 1;
+      this.targetSwordAngle = -1.15;
+      audio.play('parry', 0.85);
+      world.particles.burst(p.cx, p.cy, 16, '#ffe6a8', { speed: 200, shape: 'spark' });
+      break;
     }
   }
 
@@ -434,6 +510,10 @@ export class Boss extends Body {
     // far end and chips away has to be reached, not followed.
     if (dist > 150) options.push('dash', 'dash', 'walk');
     if (dist <= 150) options.push('slam', 'slam', 'dash');
+    // And from far away he answers with something thrown, in every phase. He
+    // used to have nothing at all for that range before his second: a hero at
+    // 250 px in the first phase was in no danger whatsoever.
+    if (dist > 200) options.push('cast');
     if (phase >= 2) options.push('cast');
     if (phase >= 2 && dist > 110 && this.livingMinions() < MAX_MINIONS) options.push('summon');
     if (phase >= 3) options.push('leap', 'cast', 'slam');
@@ -761,6 +841,12 @@ export class Boss extends Body {
     ctx.globalCompositeOperation = 'lighter';
     ctx.fillStyle = this.phase === 3 ? 'rgba(255,90,60,0.9)' : 'rgba(200,60,60,0.6)';
     ctx.fillRect(10, -1.5, len - 26, 3);
+    // The blade lights up along its whole length when it has just turned a
+    // crescent aside, so the reason the crescent vanished is on the screen.
+    if (this.guardFlash > 0) {
+      ctx.fillStyle = `rgba(255,236,180,${(0.75 * this.guardFlash).toFixed(2)})`;
+      ctx.fillRect(7, -9, len - 12, 18);
+    }
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
 

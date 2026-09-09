@@ -299,12 +299,13 @@ results['21-gallert'] = await page.evaluate(() => {
     // Neither side ends the demo early.
     if (p.hp <= 3) p.hp = p.maxHp;
     if (boss.hp <= boss.maxHp * 0.55) boss.hp = boss.maxHp * 0.6;
+    // Held at the range he spits from, not the one he leaps at.
     const dx = boss.cx - p.cx;
-    t({ right: dx > 150, left: dx < 120, attack: Math.abs(dx) < 78 && i % 18 < 3 });
+    t({ right: dx > 240, left: dx < 200, attack: Math.abs(dx) < 78 && i % 18 < 3 });
     const blobs = g.projectiles.filter((q) => !q.friendly && q.kind === 'blob');
     // Out in the open between the two of them, or the picture is just his glow.
     if (
-      blobs.length >= 3 &&
+      blobs.length >= 2 &&
       blobs.every((q) => Math.abs(q.cx - p.cx) > 55 && Math.abs(q.cx - boss.cx) > 55)
     ) {
       for (const a of ['left', 'right', 'attack']) input.forceDown(a, false);
@@ -314,6 +315,54 @@ results['21-gallert'] = await page.evaluate(() => {
   return { blobs: 0 };
 });
 await shot('21-gallert');
+
+/* 22 — the knight answers the crescent ---------------------------------- */
+// Shown with the upgraded blade in hand, which a run only carries this far
+// after the crystal hall: he bats the crescent out of the air while he is not
+// committed to anything, and the picture has to make that readable.
+await open(`?x=${marken.boss - 22}`);
+await step(20);
+results['22-parry'] = await page.evaluate(() => {
+  const g = window.game;
+  const input = window.input;
+  const p = g.player;
+  const ctx = document.querySelector('canvas').getContext('2d');
+  const t = (a = {}) => {
+    for (const [k, v] of Object.entries({ left: false, right: false, attack: false, jump: false, ...a })) {
+      input.forceDown(k, v);
+    }
+    g.update(1 / 60, input);
+    g.render(ctx);
+  };
+  p.beamTier = 2;
+  const boss = g.boss;
+  for (let f = 0; f < 60 * 25 && !boss.engaged; f++) t({ right: true, jump: f % 90 < 12 });
+  for (let f = 0; f < 60 * 4 && boss.state === 'intro'; f++) t();
+  const home = boss.x;
+  for (let f = 0; f < 60 * 12; f++) {
+    // Held in his open stance, and the hero held out of sword reach: the shot
+    // is about the blade, not about who is winning.
+    boss.state = 'idle';
+    boss.timer = 9;
+    boss.x = home;
+    boss.vx = 0;
+    p.x = home - 190;
+    p.vx = 0;
+    p.facing = 1;
+    p.invuln = 999;
+    p.hp = p.maxHp;
+    const before = boss.guardFlash;
+    t({ attack: f % 24 < 4 });
+    if (boss.guardFlash > before && boss.guardFlash > 0.85) {
+      g.camera.snapTo((p.cx + boss.cx) / 2, boss.cy);
+      t();
+      for (const a of ['left', 'right', 'attack', 'jump']) input.forceDown(a, false);
+      return { guarded: true, atSecond: +(f / 60).toFixed(1) };
+    }
+  }
+  return { guarded: false };
+});
+await shot('22-klinge-pariert');
 
 
 /* 12 — castle ------------------------------------------------------------- */

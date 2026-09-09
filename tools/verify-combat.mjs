@@ -6,6 +6,14 @@
  * a second, and a key press swallowed anywhere on the way makes it feel broken
  * rather than hard. Hit stop used to eat exactly those presses.
  *
+ * It also pins what the knight does about the blade upgrade, because that is
+ * the difference between an upgrade and a replacement for the whole fight:
+ * while he is not committed to a move his sword covers his front and the
+ * crescent bursts on it, and the moment he is committed - or reeling - it
+ * lands. Measured before he could answer it, a hero standing 250 px away, out
+ * of reach of everything he has, put 99 crescents into him and took his entire
+ * health bar off in under thirty seconds.
+ *
  * Usage: node tools/verify-combat.mjs
  * Exits non-zero if a parry no longer turns a blow aside, or if the charged
  * strike stops hitting harder than a plain one.
@@ -131,6 +139,50 @@ const result = await page.evaluate(() => {
     return boss.maxHp - boss.hp;
   };
 
+  /**
+   * The blade upgrade against a knight who carries a sword. While he is not
+   * committed to a move, his blade covers his front and the crescent bursts on
+   * it; the moment he is - dashing, slamming, leaping, reeling - it lands.
+   *
+   * This is the difference between an upgrade and a replacement for the fight.
+   * Measured before he could answer it: a hero standing 250 px away, outside
+   * everything the knight can reach, put 99 crescents into him and took his
+   * whole health bar off in under thirty seconds.
+   */
+  const crescentRun = (state) => {
+    reset();
+    p.beamTier = 2;
+    boss.guardLock = 0;
+    const home = boss.x;
+    const before = boss.hp;
+    let thrown = 0;
+    const seen = new Set();
+    for (let i = 0; i < 60 * 4; i++) {
+      // Both held: the state under test has to hold, and the hero has to stay
+      // out of sword reach so only the crescent is being measured.
+      boss.state = state;
+      boss.timer = 9;
+      boss.x = home;
+      boss.vx = 0;
+      p.x = home - 210;
+      p.vx = 0;
+      p.facing = 1;
+      p.invuln = 999;
+      // One swing every half second, so no crescent arrives inside the moment
+      // after another was turned aside.
+      tick({ attack: i % 30 < 4 });
+      for (const q of g.projectiles) {
+        if (q.friendly && q.kind === 'beam' && !seen.has(q)) {
+          seen.add(q);
+          thrown++;
+        }
+      }
+    }
+    return { damage: before - boss.hp, thrown };
+  };
+  const crescentOnGuard = crescentRun('idle');
+  const crescentWhileCommitted = crescentRun('stagger');
+
   const unparried = parryRun(false);
   const parried = parryRun(true);
   const plain = hitRun(false);
@@ -142,12 +194,16 @@ const result = await page.evaluate(() => {
       parried.damage === 0 &&
       parried.parried &&
       parried.staggered &&
-      charged > plain,
+      charged > plain &&
+      crescentOnGuard.thrown >= 6 &&
+      crescentOnGuard.damage === 0 &&
+      crescentWhileCommitted.damage > 0,
     unparriedDamage: unparried.damage,
     parriedDamage: parried.damage,
     knightStaggered: parried.staggered,
     plainDamage: plain,
     chargedDamage: charged,
+    crescent: { onGuard: crescentOnGuard, whileCommitted: crescentWhileCommitted },
   };
 });
 
@@ -156,7 +212,12 @@ await browser.close();
 server.close();
 
 if (!result.ok) {
-  console.error('FAIL: parry or charged strike no longer behaves as expected.');
+  console.error(
+    'FAIL: parry or charged strike no longer behaves as expected, or the knight no longer turns ' +
+      'the blade crescent aside while he is open - or turns it aside even while committed.',
+  );
   process.exit(1);
 }
-console.log('OK: the parry turns the blow aside and staggers the knight, the charged strike hits harder.');
+console.log('OK: the parry turns the blow aside and staggers the knight, the charged strike hits harder, ' +
+    'and the knight bats the blade crescent out of the air while he is open but eats it while he ' +
+    'is committed.');
