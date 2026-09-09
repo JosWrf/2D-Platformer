@@ -49,7 +49,7 @@ achte hinter der Welt, die man sich verdienen muss:
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
 3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
 4. **Die Ertrunkene Halle** — was das Wasser geholt hat: Algenkanten, Korallen,
-   dunkle Magier im Kirchenschiff, und im Chor Thalassa
+   dunkle Magier im Kirchenschiff, und im Chor Thalassa, die den Boden aufmacht
 5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
 6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
 7. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
@@ -126,12 +126,82 @@ Schaden.
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
-42 Trefferpunkte, zwei Phasen, drei Züge nach Entfernung: aus der Nähe ein
-**Flutstoß**, zwei Wellen über den Boden in beide Richtungen — die Antwort ist
-Höhe, nicht Abstand. Auf Distanz ein **Ankerwurf** auf einer Bahn, die dort
-landet, wo man gerade hinläuft. Und der **Sog**, der einen für gut eine Sekunde
-zu ihr hinzieht und dann zwei Kugeln schickt: weglaufen kostet Boden, der Kampf
-wird in ihrer Reichweite entschieden.
+60 Trefferpunkte, drei Phasen, vier Züge. Ihre Züge nach Entfernung: aus der
+Nähe ein **Flutstoß**, zwei Wellen über den Boden in beide Richtungen — die
+Antwort ist Höhe, nicht Abstand. Auf Distanz ein **Ankerwurf** auf einer Bahn,
+die dort landet, wo man gerade hinläuft. Der **Sog**, der einen für gut eine
+Sekunde zu ihr hinzieht und dann Kugeln schickt: weglaufen kostet Boden, der
+Kampf wird in ihrer Reichweite entschieden. Und die **Springflut**, die den
+Boden selbst aufmacht.
+
+Jeder Zug wird angekündigt — die Krone füllt sich, und woran man erkennt,
+*welcher* kommt, steht ihr an: zwei Bögen am Saum für den Flutstoß, das Gewicht
+über der Schulter für den Anker, ein Wirbel um die Füße für den Sog, beide Arme
+hoch für die Flut.
+
+#### Warum der Kampf neu gebaut wurde
+
+Er war zu leicht, und zwar messbar: wer nur die Angriffstaste hielt, erledigte
+sie in **elf Sekunden** und verlor dabei zwischen null und vier Herzen. Drei
+Gründe, in der Reihenfolge, in der sie zählten:
+
+1. **Die Klinge wischte alles weg.** Jeder Hieb pariert Geschosse in Reichweite
+   — und schickt sie mit doppeltem Schaden zurück. Wer draufhielt, schlug damit
+   jede Welle ab, die sie machte, *und* traf sie damit selbst.
+2. **Ihr Poise war zu niedrig.** Sechs Schaden mitten im Zug warfen sie heraus;
+   ein Dauerangreifer macht 3,6 Schaden pro Sekunde. Sie kam in einem ganzen
+   Kampf viermal zum Zug.
+3. **Was übrig blieb, stand herum.** Über die Hälfte des Kampfes verbrachte sie
+   in der Erholung.
+
+Dagegen, der Reihe nach:
+
+**Ihre Flutwelle lässt sich nicht wegwischen.** Eine Wand aus Wasser ist nichts,
+was ein blinder Hieb zur Seite schlägt — die springt man, oder man pariert sie.
+Sie kommt seitdem auch in den Farben der ertrunkenen Halle statt in denen des
+Ritters, denn ein Geschoss, das man abschlagen kann, und eines, das man springen
+muss, dürfen nicht gleich aussehen.
+
+**Die Springflut macht den Boden auf.** Marken auf dem Boden — eine unter den
+Füßen des Helden, die anderen im Raum verteilt — blubbern zwei Drittel einer
+Sekunde, dann kommt das Wasser durch sie hoch. Das ist der eine Zug, den die
+Klinge nicht beantworten kann, also ist es der Zug, der Stehenbleiben
+beantwortet: wer sich in ihre Reichweite stellt und draufhaut, bekommt ihn.
+Trotzdem fair — man läuft aus der Marke heraus, oder man kommt mit dem
+Doppelsprung über die Säule (eine Säule ist 118 px hoch, ein einfacher Sprung
+trägt 103). Und weil man nach einem Treffer einen Moment unverwundbar ist, käme
+ein Schwung Säulen auf einmal nur ein Herz teuer: die Flut fragt darum ab der
+zweiten Phase zweimal, die zweite Welle dort, wo man inzwischen steht.
+
+**Poise 13 statt 6, und die Parade bricht sie immer.** Draufhauen kauft jetzt
+gelegentlich eine Unterbrechung statt immer. Was zuverlässig wirkt, ist die
+Parade: die reißt sie aus jedem Zug, egal wie viel Poise sie noch hat. Wer schon
+taumelt, taumelt nicht doppelt — sonst hielte man die Taste einfach gedrückt.
+
+**Drei Phasen statt zwei**, geschnitten dort, wo die Bossleiste ihre Kerben
+zeichnet. In der zweiten antwortet die Flut doppelt: der Flutstoß in zwei
+Salven, weit genug auseinander, dass ein Sprung nicht beide nimmt; der Anker als
+Paar, einer dorthin, wo man steht, einer dorthin, wo man hinläuft; der Sog
+greift auch in der Luft. Ihr letztes Drittel eröffnet der **Ruf der Krone** —
+einmal im Kampf, ein Ring aus fünf Säulen und die ganze Halle antwortet —, und
+danach hängt sie zwei Züge aneinander, bevor sie durchatmet.
+
+Gemessen, mit echten Lebenspunkten auf beiden Seiten, drei Läufe je Spielweise:
+
+| Spielweise | vorher | jetzt |
+| --- | --- | --- |
+| nur Angriffstaste halten | 11–12 s, 0–4 Treffer, kein Tod | 21–24 s, 9–13 Treffer, 1–2 Tode |
+| ausweichen, Kugeln parieren | 17–28 s, 0–4 Treffer, kein Tod | 40–58 s, 8–17 Treffer, 1–2 Tode |
+| stehen bleiben und hauen | 0–2 Treffer | 4–5 Treffer |
+| in ihrer Reichweite parieren | — | 18 s, 3–4 Treffer, kein Tod |
+| einfach vorbeilaufen | 1 Treffer | 1 Treffer |
+
+Ein Treffer ist ein kassiertes Herz von sechs; ein Tod füllt die Leiste wieder
+auf, darum stehen in der zweiten Spalte auch Zahlen über sechs.
+
+Die letzte Zeile ist Absicht und wird geprüft: ihr Chor hat kein Fallgitter, wer
+den Kampf nicht will, muss vorbeikommen. Und die vorletzte auch: die beste
+Antwort auf sie ist die Parade, nicht das Ausdauerhalten.
 
 ### Der Bonusboss: Prismarch, Herz des Kristalls
 
@@ -226,7 +296,7 @@ Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
-npm run verify:thalassa # wählt Thalassa ihren Zug nach Entfernung, und trifft sie?
+npm run verify:thalassa # wählt Thalassa ihren Zug, macht sie den Boden auf, fällt sie?
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
@@ -255,13 +325,20 @@ wieder drin ist.
 Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
 verloren, fühlt sich das nicht schwer an, sondern kaputt.
 
-`verify:thalassa` stellt sie auf zwei Entfernungen und prüft, dass sie den
-passenden Zug wählt. Dazu zwanzig Sekunden gegen jemanden, der nur die
-Angriffstaste hält, mit aufgefüllter Lebensleiste — sonst ist der Kampf vorher
-vorbei und es hängt vom Zufall ab, ob sie in der Zeit überhaupt zum Zug kam.
-Aus derselben Messung ist die Aufprall-Sperre entstanden: Poise allein reicht
-nicht, weil ein Dauerangreifer schneller Schaden macht als jede Ankündigung
-dauert. Vorher zwei Geschosse in zehn Sekunden, jetzt fünf bis sieben in zwanzig.
+`verify:thalassa` prüft ihren Kampf Eigenschaft für Eigenschaft: die Zugwahl auf
+zwei Entfernungen; zwei Wellen in Phase eins und vier in Phase zwei, ein Anker
+und dann zwei; dass ein blinder Hieb ihre Welle **nicht** abschlägt und sie
+trotzdem trifft; dass die Springflut jemandem ein Herz nimmt, der auf der Marke
+stehen bleibt, und **keines** dem, der herausläuft; dass sie von selbst danach
+greift, wenn einer in ihrer Reichweite parkt; dass die Krone genau einmal ruft,
+mit fünf Säulen; dass sie erst im letzten Drittel zwei Züge aneinanderhängt;
+dass eine Parade sie bricht; und zum Schluss vierzig Sekunden gegen jemanden,
+der nur die Angriffstaste hält, mit aufgefüllter Lebensleiste — sonst ist der
+Kampf vorher vorbei und es hängt vom Zufall ab, ob sie überhaupt zum Zug kam.
+Aus dieser Messung ist die Aufprall-Sperre entstanden, und später der ganze
+Umbau oben: Poise allein reicht nicht, weil ein Dauerangreifer schneller Schaden
+macht als jede Ankündigung dauert. Zuletzt läuft der Held einmal an ihr vorbei,
+ohne zu kämpfen — das muss gehen, und es darf höchstens drei Herzen kosten.
 
 `verify:enemies` stellt die drei neuen Typen einzeln auf ebenen Boden und prüft
 je die Sache, für die sie da sind: der Zunder zündet von selbst **und** beim

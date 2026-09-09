@@ -683,9 +683,9 @@ export class Player extends Body {
       boss.hurt(damage, this.facing, world);
       this.onHitLanded(world, boss.cx, boss.cy - 10, damage);
     }
-    // Deflect projectiles with the blade.
+    // Deflect projectiles with the blade - the ones that can be.
     for (const p of world.projectiles) {
-      if (p.dead || p.friendly || this.hitThisSwing.has(p)) continue;
+      if (p.dead || p.friendly || !p.deflectable || this.hitThisSwing.has(p)) continue;
       if (!p.overlaps(box)) continue;
       this.hitThisSwing.add(p);
       p.deflect(this.facing);

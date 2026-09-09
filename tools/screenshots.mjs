@@ -105,6 +105,42 @@ async function fightRound(rounds, stopWhen = null, keepDistance = 0) {
   }, { rounds, stopWhen, keepDistance });
 }
 
+/**
+ * The same for Thalassa, who is an enemy rather than the knight, so the boss
+ * helper above cannot see her. Stops on the moment worth a picture: a column of
+ * her spring tide standing on the floor.
+ */
+async function drownedRound(rounds, stopWhen = 'tide') {
+  return page.evaluate(({ rounds, stopWhen }) => {
+    const g = window.game;
+    const input = window.input;
+    const DT = 1 / 60;
+    let seen = null;
+    for (let i = 0; i < rounds; i++) {
+      const p = g.player;
+      const boss = g.enemies.find((e) => e.kind === 'thalassa' && !e.dead);
+      if (!boss || g.state !== 'playing') break;
+      boss.engaged = true;
+      const dx = boss.cx - p.cx;
+      input.forceDown('right', dx > 60);
+      input.forceDown('left', dx < -60);
+      input.forceDown('attack', Math.abs(dx) < 78 && i % 18 < 3);
+      g.update(DT, input);
+      g.render(document.querySelector('canvas').getContext('2d'));
+      // Neither side is allowed to end the demo run early.
+      if (p.hp <= 2) p.hp = p.maxHp;
+      if (boss.hp <= boss.maxHp * 0.45) boss.hp = boss.maxHp * 0.5;
+      const standing = boss.geysers.filter((q) => q.t > q.wind && q.t < q.wind + 0.32);
+      if (stopWhen === 'tide' && standing.length >= 2) {
+        seen = { columns: standing.length, state: boss.state };
+        break;
+      }
+    }
+    for (const a of ['left', 'right', 'attack', 'jump']) input.forceDown(a, false);
+    return seen ?? { columns: 0 };
+  }, { rounds, stopWhen });
+}
+
 const results = {};
 
 /* 01 — title ------------------------------------------------------------- */
@@ -206,7 +242,7 @@ await open(`?x=${marken.thalassa - 14}`);
 await step(20);
 await step(60, { right: true });
 await release('right');
-await step(40);
+results['11-tide'] = await drownedRound(900);
 await shot('11-thalassa');
 
 /* 12 — castle ------------------------------------------------------------- */

@@ -1513,8 +1513,36 @@ export class Warden extends Enemy {
 
 /* ---------------------------------------------------------------- thalassa */
 
-/** Damage she absorbs mid-move. Between the warden's and the Prismarch's. */
-const THALASSA_POISE = 6;
+/**
+ * Damage she absorbs mid-move. Far above the warden's five, and measured
+ * rather than picked: a player who simply holds the attack key deals about
+ * 3.6 damage a second, so at six she was thrown out of nearly every move she
+ * started and landed four in a whole fight. Thirteen means mashing buys an
+ * interruption now and then instead of always. The answer that always works
+ * is the parry - see onParried below.
+ */
+const THALASSA_POISE = 13;
+
+/** How high a column of the spring tide stands, and how wide it is. */
+const GEYSER_H = 118;
+const GEYSER_W = 30;
+/** How long a column stands once it has come up. */
+const GEYSER_LIFE = 0.5;
+
+/**
+ * One column of the spring tide: a spot on the floor that bubbles for a moment
+ * before the water comes up through it. It runs on its own clock, so knocking
+ * her off balance does not call the water back.
+ */
+interface Geyser {
+  x: number;
+  /** Seconds of bubbling before the water arrives. */
+  wind: number;
+  /** Seconds since the mark appeared. */
+  t: number;
+  /** Each column takes its toll once. */
+  hit: boolean;
+}
 
 /**
  * Thalassa, the Drowned Crown - what was left of whoever the flooded hall was
@@ -1524,30 +1552,98 @@ const THALASSA_POISE = 6;
  *
  * The same contract as the other two: every move is announced, a move once
  * begun is seen through, and the pause afterwards is long enough to answer.
- * What is hers alone is that two of her three moves reach across the whole
- * floor - standing far away is not a way out of this fight.
+ * What is hers alone is that her moves reach across the whole floor - standing
+ * far away is not a way out of this fight - and that she goes through three
+ * phases instead of two:
+ *
+ *   1. Her three opening moves, one at a time, the way they were - plus the
+ *      spring tide the moment someone parks in her reach, which is the one
+ *      thing she does that a blade cannot answer.
+ *   2. The flood answers twice: the surge comes in two volleys, the anchor in
+ *      a pair, the tide in two ripples, and the undertow keeps its grip in
+ *      mid-air. From here the tide is also one of the moves she simply picks.
+ *   3. The crown calls once - a ring of five columns and the hall answering -
+ *      and after that she stops resting between moves and answers with two
+ *      before she breathes.
+ *
+ * She used to be too easy, measured rather than guessed: a player who only
+ * held the attack key killed her in eleven seconds and lost between nothing
+ * and four hearts. Three reasons, in the order they mattered: every one of her
+ * moves could be batted out of the air by a blind swing and sent back into her
+ * for two; her poise was low enough that the same swinging threw her out of
+ * nearly every move she began; and what was left of her idled in recovery for
+ * more than half the fight.
  */
 export class Thalassa extends Enemy {
-  private state: 'wait' | 'stalk' | 'surgeWind' | 'anchorWind' | 'undertowWind' | 'undertow' | 'recover' =
-    'wait';
+  private state:
+    | 'wait'
+    | 'stalk'
+    | 'surgeWind'
+    | 'surge'
+    | 'anchorWind'
+    | 'undertowWind'
+    | 'undertow'
+    | 'tideWind'
+    | 'tide'
+    | 'crown'
+    | 'recover' = 'wait';
   private timer = 0;
   private crown = 0;
   private poise = THALASSA_POISE;
   private lastMove = '';
+  /** Which move the crown is filling for - the draw code reads this. */
+  private tell: 'none' | 'surge' | 'anchor' | 'undertow' | 'tide' = 'none';
+  /** Volleys left in the surge she is in the middle of. */
+  private surgeLeft = 0;
+  /** Ripples left in the tide she is in the middle of. */
+  private tideLeft = 0;
+  /** True while the second half of a third-phase pair is still to come. */
+  private chained = false;
+  /** Her last third opens with the crown's call, and only ever once. */
+  private called = false;
+  private geysers: Geyser[] = [];
+  /** Top of the floor she is standing on: where the tide comes up from. */
+  private floorY = 0;
+  /** How long he has been standing inside her reach. */
+  private crowded = 0;
+  /**
+   * Time until the floor can be opened again. Without it the crowding rule
+   * eats the fight: the tide holds her still for nearly three seconds, which
+   * is long enough for a melee player to have been standing there again by the
+   * time it ends, so she cast nothing else - measured at twelve tides in one
+   * fight, and thirty of its ninety-seven seconds spent in them.
+   */
+  private tideCool = 0;
   engaged = false;
 
   constructor(x: number, y: number) {
     super('thalassa', x, y);
     this.w = 50;
     this.h = 62;
-    this.hp = this.maxHp = 42;
+    /*
+     * Sixty, up from forty-two. A player who mashes deals about 3.6 damage a
+     * second, which used to end her in eleven seconds - before she had shown
+     * three of her moves once each.
+     */
+    this.hp = this.maxHp = 60;
     this.scoreValue = 1200;
     this.aggroRange = 380;
     this.contactDamage = 1;
+    this.floorY = y + this.h;
   }
 
-  get phase(): 1 | 2 {
-    return this.hp <= this.maxHp / 2 ? 2 : 1;
+  /**
+   * Three shapes now instead of two, and cut where the health bar already
+   * draws its notches - the same marks the knight's phases use.
+   */
+  get phase(): 1 | 2 | 3 {
+    const left = this.hp / this.maxHp;
+    return left > 0.62 ? 1 : left > 0.3 ? 2 : 3;
+  }
+
+  /** How much of her old, slow rhythm is left. */
+  private get quick(): number {
+    return this.phase === 3 ? 0.72 : this.phase === 2 ? 0.85 : 1;
   }
 
   protected override deathColor(): string {
@@ -1565,12 +1661,52 @@ export class Thalassa extends Enemy {
     }
     audio.play('bossHit');
     if (this.poise <= 0 && this.poiseLock <= 0) {
-      this.poise = THALASSA_POISE;
-      this.poiseLock = 2.2;
-      this.stun = 0.5;
-      this.vx = fromDir * 130;
-      world.particles.burst(this.cx, this.cy, 16, '#9fe4dc', { speed: 200, shape: 'spark' });
+      this.stagger(world, fromDir, 2.4);
     }
+  }
+
+  /**
+   * A parry always breaks her, whatever her poise. That is what the parry is
+   * for: standing in her reach and answering the move itself, rather than
+   * hoping enough blind swings add up to an interruption.
+   */
+  override onParried(world: World): void {
+    // Someone already reeling cannot be thrown off balance again: otherwise
+    // held-down parries would keep her there.
+    if (this.dead || this.stun > 0) return;
+    this.stagger(world, -this.facing, 1.2);
+  }
+
+  /** Thrown off balance: whatever she was doing is dropped. */
+  private stagger(world: World, fromDir: number, lock: number): void {
+    this.poise = THALASSA_POISE;
+    this.poiseLock = lock;
+    this.stun = 0.5;
+    this.vx = fromDir * 130;
+    world.particles.burst(this.cx, this.cy, 16, '#9fe4dc', { speed: 200, shape: 'spark' });
+  }
+
+  protected override die(world: World): void {
+    this.geysers.length = 0;
+    super.die(world);
+  }
+
+  /**
+   * A move has ended. In her last third she answers a second time before she
+   * rests, and pays for the pair with a longer breath afterwards.
+   */
+  private afterMove(base: number): void {
+    this.tell = 'none';
+    if (this.phase === 3 && !this.chained) {
+      this.chained = true;
+      this.state = 'stalk';
+      this.timer = 0.26;
+      return;
+    }
+    const paired = this.chained;
+    this.chained = false;
+    this.state = 'recover';
+    this.timer = base * (paired ? 1.2 : this.quick);
   }
 
   override update(dt: number, world: World): void {
@@ -1579,6 +1715,9 @@ export class Thalassa extends Enemy {
     const dx = player.cx - this.cx;
     const dist = Math.abs(dx);
     this.crown = Math.max(0, this.crown - dt * 2);
+    if (this.onGround) this.floorY = this.bottom;
+    this.crowded = dist < 118 && !player.dead ? this.crowded + dt : 0;
+    this.tideCool = Math.max(0, this.tideCool - dt);
 
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
@@ -1592,10 +1731,17 @@ export class Thalassa extends Enemy {
       return;
     }
 
+    // The water she has already called up keeps coming, stagger or not.
+    this.updateTide(dt, world);
+
     if (this.stun > 0) {
       if (this.state !== 'recover') {
         this.state = 'recover';
         this.timer = 0.75;
+        this.tell = 'none';
+        this.surgeLeft = 0;
+        this.tideLeft = 0;
+        this.chained = false;
       }
       this.vy += 1400 * dt;
       this.moveAndCollide(world.level, dt);
@@ -1603,8 +1749,32 @@ export class Thalassa extends Enemy {
     }
 
     this.facing = dx > 0 ? 1 : -1;
+
+    /*
+     * The crown's call opens her last third: she drops whatever she was doing,
+     * rises, and the whole floor answers at once. It happens exactly once, and
+     * the ring of marks comes up with it rather than after it, so the warning
+     * is the move.
+     */
+    if (this.phase === 3 && !this.called && this.state !== 'crown') {
+      this.called = true;
+      this.state = 'crown';
+      this.timer = 1.2;
+      this.tell = 'tide';
+      this.crown = 1;
+      this.surgeLeft = 0;
+      this.chained = false;
+      this.vx = 0;
+      this.geysers = this.markTide([this.cx - 152, this.cx - 68, this.cx + 68, this.cx + 152, player.cx]);
+      this.tideLeft = 1;
+      this.crowded = 0;
+      this.tideCool = 5;
+      audio.play('slam', 0.7);
+      world.camera.addShake(6);
+      world.particles.burst(this.cx, this.cy, 26, '#a8efe6', { speed: 230, gravity: -80, shape: 'spark' });
+    }
+
     this.timer -= dt;
-    const quick = this.phase === 2 ? 0.8 : 1;
 
     switch (this.state) {
       case 'wait':
@@ -1612,7 +1782,7 @@ export class Thalassa extends Enemy {
         this.vx = approach(this.vx, 0, 700 * dt);
         if (this.timer <= 0) {
           this.state = 'stalk';
-          this.timer = rand(0.5, 0.85) * quick;
+          this.timer = rand(0.4, 0.7) * this.quick;
         }
         break;
 
@@ -1621,12 +1791,33 @@ export class Thalassa extends Enemy {
         this.vx = approach(this.vx, want, 480 * dt);
         if (this.timer <= 0) {
           this.crown = 1;
-          const options = dist < 120 ? ['surgeWind', 'undertowWind'] : ['anchorWind', 'undertowWind', 'surgeWind'];
+          const options =
+            dist < 120 ? ['surgeWind', 'undertowWind'] : ['anchorWind', 'undertowWind', 'surgeWind'];
+          // The tide opens the floor itself, so it answers any range.
+          if (this.phase >= 2 && this.tideCool <= 0) options.push('tideWind');
           const pick = options.filter((o) => o !== this.lastMove);
-          const move = pick[Math.floor(Math.random() * pick.length)] ?? options[0];
+          /*
+           * A guest who plants himself in her reach and swings gets the floor
+           * opened under him, whatever else she might have picked. Her thrown
+           * and cast moves can all be answered with the blade; the tide is the
+           * one that cannot, so it is the one that answers standing still.
+           */
+          const move =
+            this.crowded > (this.phase === 1 ? 2.4 : 1.9) && this.tideCool <= 0
+              ? 'tideWind'
+              : (pick[Math.floor(Math.random() * pick.length)] ?? options[0]);
           this.lastMove = move;
           this.state = move as typeof this.state;
-          this.timer = 0.55 * quick;
+          this.tell =
+            move === 'surgeWind'
+              ? 'surge'
+              : move === 'anchorWind'
+                ? 'anchor'
+                : move === 'tideWind'
+                  ? 'tide'
+                  : 'undertow';
+          // The warning itself never shortens - only the resting does.
+          this.timer = 0.55;
           audio.play('shoot', 0.55);
         }
         break;
@@ -1638,15 +1829,33 @@ export class Thalassa extends Enemy {
         this.vx = approach(this.vx, 0, 900 * dt);
         this.crown = 1;
         if (this.timer <= 0) {
+          this.surgeLeft = this.phase >= 2 ? 2 : 1;
+          this.state = 'surge';
+          this.timer = 0;
+        }
+        break;
+
+      case 'surge':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.crown = Math.max(this.crown, 0.75);
+        if (this.timer <= 0) {
           for (const dir of [-1, 1]) {
             const wave = new Projectile('shockwave', this.cx + dir * 22, this.bottom - 30, dir * 250, 0);
+            // Not something a blind swing bats away: this one is jumped, or
+            // turned aside with a parry. And it comes up the hall as water,
+            // not as the knight's fire.
+            wave.deflectable = false;
+            wave.water = true;
             world.spawnProjectile(wave);
           }
           audio.play('slam');
-          world.camera.addShake(7);
+          world.camera.addShake(this.surgeLeft > 1 ? 7 : 5);
           world.particles.burst(this.cx, this.bottom, 22, '#7fd6cc', { speed: 240, gravity: 500 });
-          this.state = 'recover';
-          this.timer = 1.2 * quick;
+          this.surgeLeft--;
+          // A second volley far enough behind the first that one jump cannot
+          // clear both: he has to land and go again.
+          if (this.surgeLeft > 0) this.timer = 0.72;
+          else this.afterMove(0.95);
         }
         break;
 
@@ -1660,13 +1869,17 @@ export class Thalassa extends Enemy {
           // which put every anchor down two feet over the hero's head.
           const flight = 0.9;
           const originY = this.cy - 26;
-          const vx = (dx + player.vx * 0.25) / flight;
-          const vy = (player.cy - originY) / flight - 0.5 * 900 * flight;
-          const anchor = new Projectile('rock', this.cx - 10, originY, vx, vy);
-          world.spawnProjectile(anchor);
+          // From her second phase on she throws a pair: one where he stands,
+          // one where he is going. Standing still stops being an answer.
+          const leads = this.phase >= 2 ? [0, 0.6] : [0.25];
+          for (const lead of leads) {
+            const vx = (dx + player.vx * lead) / flight;
+            const vy = (player.cy - originY) / flight - 0.5 * 900 * flight;
+            const anchor = new Projectile('rock', this.cx - 10, originY, vx, vy);
+            world.spawnProjectile(anchor);
+          }
           audio.play('shoot');
-          this.state = 'recover';
-          this.timer = 1.15 * quick;
+          this.afterMove(1.0);
         }
         break;
 
@@ -1681,11 +1894,15 @@ export class Thalassa extends Enemy {
         break;
 
       case 'undertow': {
-        // Pulls him in while two orbs drift out. Running away costs ground,
-        // so the fight is decided in her reach whether he likes it or not.
+        // Pulls him in while orbs drift out. Running away costs ground, so the
+        // fight is decided in her reach whether he likes it or not.
         this.vx = approach(this.vx, 0, 900 * dt);
-        if (!player.dead && player.onGround && dist > 40) {
-          player.vx += -sign(dx) * 260 * dt;
+        const pull = this.phase === 3 ? 340 : this.phase === 2 ? 300 : 260;
+        if (!player.dead && dist > 40) {
+          // From her second phase the water has hold of him in the air as
+          // well: jumping shortens the drag, it no longer cancels it.
+          const grip = player.onGround ? 1 : this.phase >= 2 ? 0.45 : 0;
+          if (grip > 0) player.vx += -sign(dx) * pull * grip * dt;
         }
         world.particles.spawn({
           x: player.cx + rand(-20, 20),
@@ -1700,7 +1917,9 @@ export class Thalassa extends Enemy {
         if (this.timer <= 0) {
           // Aimed from the hem, not from her shoulders: one orb low along the
           // floor and one just above it, both at the hero rather than over him.
-          for (const up of [-0.12, 0.12]) {
+          // Later a third goes straight down the middle.
+          const fan = this.phase >= 2 ? [-0.2, 0, 0.2] : [-0.12, 0.12];
+          for (const up of fan) {
             const originY = this.cy + 6;
             const ady = player.cy - originY;
             const len = Math.hypot(dx, ady) || 1;
@@ -1714,18 +1933,145 @@ export class Thalassa extends Enemy {
             world.spawnProjectile(orb);
           }
           audio.play('shoot');
-          this.state = 'recover';
-          this.timer = 1.25 * quick;
+          this.afterMove(1.05);
         }
         break;
       }
+
+      case 'tideWind':
+        this.vx = approach(this.vx, 0, 900 * dt);
+        this.crown = 1;
+        if (this.timer <= 0) {
+          /*
+           * Spring tide: marks on the floor, one under his feet and the rest
+           * spread across the room, that bubble before the water comes up
+           * through them. This is the answer to a player who parks in her
+           * face and mashes - it is a move you walk out of rather than one you
+           * have to guess, and it does not care where in the hall he stands.
+           */
+          const spots = [player.cx, this.cx - 128, this.cx + 128];
+          if (this.phase === 3) {
+            spots.push(player.cx + (sign(dx) || 1) * 78, this.cx);
+          }
+          this.geysers = this.markTide(spots);
+          this.crowded = 0;
+          this.tideCool = 5;
+          // A second ripple later, from her second phase on. One column takes
+          // a single heart however many come up at once - the hero is
+          // untouchable for a moment after a hit - so a tide that punishes
+          // standing still has to ask the question twice.
+          this.tideLeft = this.phase >= 2 ? 2 : 1;
+          audio.play('shoot', 0.4);
+          this.state = 'tide';
+          this.timer = 1.35;
+        }
+        break;
+
+      case 'tide':
+        // She holds the water up; the columns keep their own time.
+        this.vx = approach(this.vx, 0, 700 * dt);
+        if (this.timer <= 0) {
+          this.tideLeft--;
+          if (this.tideLeft > 0) {
+            // The second ripple asks where he is now, not where he was.
+            this.geysers.push(...this.markTide([player.cx, this.cx - 92, this.cx + 92]));
+            audio.play('shoot', 0.35);
+            this.timer = 1.35;
+          } else {
+            this.afterMove(1.0);
+          }
+        }
+        break;
+
+      case 'crown':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        this.crown = 1;
+        if (this.timer <= 0) this.afterMove(0.9);
+        break;
     }
 
     this.vy += 1400 * dt;
     this.moveAndCollide(world.level, dt);
   }
 
+  /**
+   * Marks on the floor for one ripple of the tide. Two columns in the same
+   * place is one wasted column, so whichever stands where an earlier one
+   * already does gets pushed out of the way.
+   */
+  private markTide(spots: number[]): Geyser[] {
+    const taken = this.geysers.filter((g) => g.t < g.wind).map((g) => g.x);
+    const out: Geyser[] = [];
+    for (const spot of spots) {
+      let x = spot;
+      for (const other of [...taken, ...out.map((g) => g.x)]) {
+        const gap = x - other;
+        if (Math.abs(gap) < 52) x = other + (sign(gap) || 1) * 52;
+      }
+      out.push({ x, wind: 0.68 + out.length * 0.09, t: 0, hit: false });
+    }
+    return out;
+  }
+
+  /** The columns of the spring tide, from bubble to burst. */
+  private updateTide(dt: number, world: World): void {
+    if (this.geysers.length === 0) return;
+    const player = world.player;
+    for (const g of this.geysers) {
+      const before = g.t;
+      g.t += dt;
+      if (g.t < g.wind) {
+        // Bubbles boiling up out of the floor: the warning.
+        if (world.time % 0.05 < dt) {
+          world.particles.spawn({
+            x: g.x + rand(-GEYSER_W / 2, GEYSER_W / 2),
+            y: this.floorY - 3,
+            vx: rand(-16, 16),
+            vy: rand(-90, -40),
+            color: 'rgba(150,235,225,0.7)',
+            size: 2.5,
+            life: 0.42,
+            shape: 'spark',
+          });
+        }
+        continue;
+      }
+      if (before < g.wind) {
+        audio.play('slam', 0.45);
+        world.camera.addShake(3);
+        world.particles.burst(g.x, this.floorY - 6, 14, '#a8efe6', {
+          speed: 220,
+          gravity: -60,
+          shape: 'spark',
+        });
+      }
+      const power = this.geyserPower(g);
+      if (!g.hit && power > 0.35 && !player.dead) {
+        const top = this.floorY - GEYSER_H * power;
+        if (
+          rectsOverlap(
+            { x: g.x - GEYSER_W / 2, y: top, w: GEYSER_W, h: this.floorY - top },
+            player.rect,
+          )
+        ) {
+          g.hit = true;
+          player.hurt(1, sign(player.cx - g.x) || 1, world);
+        }
+      }
+    }
+    this.geysers = this.geysers.filter((g) => g.t < g.wind + GEYSER_LIFE);
+  }
+
+  /** How much of a column stands right now: up fast, down soft. */
+  private geyserPower(g: Geyser): number {
+    if (g.t < g.wind) return 0;
+    const rise = clamp((g.t - g.wind) / 0.12, 0, 1);
+    const fall = clamp((g.wind + GEYSER_LIFE - g.t) / 0.16, 0, 1);
+    return Math.min(rise, fall);
+  }
+
   override draw(ctx: CanvasRenderingContext2D): void {
+    this.drawTide(ctx);
     withHitFlash(ctx, this.flash, () => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
@@ -1753,10 +2099,17 @@ export class Thalassa extends Enemy {
         ctx.fillRect(i * 6 - 1, -6, 2, 6 + Math.abs(i));
       }
 
-      // Shoulders and arms.
+      // Shoulders and arms. The throwing arm rears back for the anchor.
       ctx.fillStyle = '#20464e';
       ctx.fillRect(-14, -this.h + 14, 28, 7);
-      ctx.fillRect(this.crown > 0.5 ? 12 : 10, -this.h + 18, 6, 20);
+      if (this.tell === 'anchor') {
+        ctx.fillRect(-12, -this.h + 4, 6, 18);
+      } else if (this.tell === 'tide') {
+        ctx.fillRect(10, -this.h + 2, 6, 18);
+        ctx.fillRect(-16, -this.h + 2, 6, 18);
+      } else {
+        ctx.fillRect(this.crown > 0.5 ? 12 : 10, -this.h + 18, 6, 20);
+      }
 
       // Head, veiled.
       ctx.fillStyle = '#173239';
@@ -1768,6 +2121,8 @@ export class Thalassa extends Enemy {
       ctx.fillStyle = `rgba(150,240,225,${(0.5 + heat * 0.5).toFixed(2)})`;
       ctx.fillRect(-4, -this.h + 4, 3, 2.5);
       ctx.fillRect(2, -this.h + 4, 3, 2.5);
+
+      this.drawTell(ctx);
 
       // The crown, which is the tell: it fills before every move.
       const cy = -this.h - 4;
@@ -1792,6 +2147,107 @@ export class Thalassa extends Enemy {
       ctx.restore();
       ctx.restore();
     });
+  }
+
+  /**
+   * What she is about to do, drawn on her rather than only over her head, so
+   * the four moves can be told apart at a glance. Called inside her own
+   * mirrored space, hence the +x for what is in front of her.
+   */
+  private drawTell(ctx: CanvasRenderingContext2D): void {
+    if (this.tell === 'none' || this.crown < 0.05) return;
+    const a = this.crown;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    switch (this.tell) {
+      case 'surge':
+        // Two arcs sweeping out along the floor from under the hem.
+        ctx.strokeStyle = `rgba(140,235,225,${(0.5 * a).toFixed(2)})`;
+        ctx.lineWidth = 3;
+        for (const r of [18, 30]) {
+          ctx.beginPath();
+          ctx.ellipse(0, -3, r, r * 0.32, 0, Math.PI, Math.PI * 2);
+          ctx.stroke();
+        }
+        break;
+      case 'anchor': {
+        // The weight itself, held back over her shoulder.
+        ctx.fillStyle = `rgba(120,200,205,${(0.75 * a).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.arc(-15, -this.h - 4, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = `rgba(180,240,235,${(0.5 * a).toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-10, -this.h + 6);
+        ctx.lineTo(-15, -this.h - 4);
+        ctx.stroke();
+        break;
+      }
+      case 'undertow':
+        // Water winding inwards at her feet.
+        ctx.strokeStyle = `rgba(160,240,230,${(0.55 * a).toFixed(2)})`;
+        ctx.lineWidth = 2.5;
+        for (let i = 0; i < 3; i++) {
+          const r = 34 - i * 9;
+          ctx.beginPath();
+          ctx.ellipse(0, -5, r, r * 0.3, 0, 0.3 + i * 0.5, Math.PI * 1.3 + i * 0.5);
+          ctx.stroke();
+        }
+        break;
+      case 'tide':
+        // Both hands up, and the water answering from over her head.
+        ctx.fillStyle = `rgba(170,245,235,${(0.4 * a).toFixed(2)})`;
+        for (let i = -1; i <= 1; i += 2) {
+          ctx.fillRect(i * 13 - 2, -this.h - 14, 4, 12);
+        }
+        break;
+    }
+    ctx.restore();
+  }
+
+  /** The spring tide, drawn in world space: marks first, then the water. */
+  private drawTide(ctx: CanvasRenderingContext2D): void {
+    if (this.geysers.length === 0) return;
+    ctx.save();
+    for (const g of this.geysers) {
+      if (g.t < g.wind) {
+        // The mark: a ring closing in on the spot, no flicker in it.
+        const p = clamp(g.t / g.wind, 0, 1);
+        ctx.strokeStyle = `rgba(150,235,225,${(0.2 + p * 0.45).toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(g.x, this.floorY - 2, GEYSER_W * (0.9 - p * 0.3), 6 - p * 2, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = `rgba(120,215,210,${(0.12 + p * 0.2).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.ellipse(g.x, this.floorY - 2, GEYSER_W * 0.6, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+      const power = this.geyserPower(g);
+      if (power <= 0) continue;
+      const h = GEYSER_H * power;
+      const top = this.floorY - h;
+      const col = ctx.createLinearGradient(0, top, 0, this.floorY);
+      col.addColorStop(0, `rgba(214,252,248,${(0.9 * power).toFixed(2)})`);
+      col.addColorStop(0.4, `rgba(118,214,212,${(0.78 * power).toFixed(2)})`);
+      col.addColorStop(1, `rgba(46,138,152,${(0.6 * power).toFixed(2)})`);
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(g.x - GEYSER_W / 2, this.floorY);
+      ctx.quadraticCurveTo(g.x - GEYSER_W * 0.42, top + h * 0.3, g.x - GEYSER_W * 0.3, top);
+      ctx.lineTo(g.x + GEYSER_W * 0.3, top);
+      ctx.quadraticCurveTo(g.x + GEYSER_W * 0.42, top + h * 0.3, g.x + GEYSER_W / 2, this.floorY);
+      ctx.closePath();
+      ctx.fill();
+      // Crest.
+      ctx.fillStyle = `rgba(226,255,252,${(0.7 * power).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(g.x, top + 2, GEYSER_W * 0.34, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 

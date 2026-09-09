@@ -8,6 +8,22 @@ export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam';
 
 export class Projectile extends Body {
   friendly = false;
+  /**
+   * Whether a swing of the blade turns it aside. True for everything thrown or
+   * cast - that is what the blade is for. Thalassa's flood waves set it false:
+   * a wall of water is not something a blind swing can bat away, it has to be
+   * jumped or parried. Measured on her before that: a player who simply held
+   * the attack key swatted every wave she made and sent it back into her for
+   * two, which is why he could kill her without being touched once.
+   */
+  deflectable = true;
+  /**
+   * Drawn as water rather than as force. Thalassa's flood waves set it: they
+   * used to come up the hall in the knight's fire colours, which looked wrong
+   * in a drowned choir and, once they stopped being deflectable, read as the
+   * same thing his are.
+   */
+  water = false;
   damage = 1;
   life = 4;
   spin = 0;
@@ -124,7 +140,7 @@ export class Projectile extends Body {
       const level = world.level;
       if (level.rectHitsSolid(this.x, this.y, this.w, this.h)) {
         this.dead = true;
-        world.particles.burst(this.cx, this.cy, 12, '#ff9a5c', { speed: 150 });
+        world.particles.burst(this.cx, this.cy, 12, this.hitColor(), { speed: 150 });
       }
       const drop = world.level.groundBelow(this.cx, this.y + this.h - 4, 3);
       if (drop > 6) this.y += Math.min(drop, 260 * dt);
@@ -148,6 +164,8 @@ export class Projectile extends Body {
         return '#8a7460';
       case 'beam':
         return '#bff0ff';
+      case 'shockwave':
+        return this.water ? '#9fe4dc' : '#ff9a5c';
       default:
         return '#ff9a5c';
     }
@@ -230,16 +248,19 @@ export class Projectile extends Body {
       }
       case 'shockwave': {
         const a = Math.min(1, this.life / 1.5);
-        glow(ctx, cx, this.y + this.h, 34, 'rgba(255,120,60,0.45)', a);
+        const [halo, body, crest] = this.water
+          ? ['rgba(110,225,215,0.4)', '#2f93a0', '#d8faf4']
+          : ['rgba(255,120,60,0.45)', '#ff8a45', '#ffd08a'];
+        glow(ctx, cx, this.y + this.h, 34, halo, a);
         ctx.globalAlpha = a;
-        ctx.fillStyle = '#ff8a45';
+        ctx.fillStyle = body;
         ctx.beginPath();
         ctx.moveTo(this.x, this.y + this.h);
         ctx.lineTo(this.x + this.w * 0.5, this.y + Math.sin(this.spin * 3) * 3);
         ctx.lineTo(this.x + this.w, this.y + this.h);
         ctx.closePath();
         ctx.fill();
-        ctx.fillStyle = '#ffd08a';
+        ctx.fillStyle = crest;
         ctx.beginPath();
         ctx.moveTo(this.x + this.w * 0.28, this.y + this.h);
         ctx.lineTo(this.x + this.w * 0.5, this.y + this.h * 0.35);
