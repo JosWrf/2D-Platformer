@@ -100,6 +100,7 @@ const result = await page.evaluate(() => {
   const moveAt = (gap) => {
     reset(gap);
     const seen = new Set();
+    const counted = new Set();
     let shots = 0;
     for (let f = 0; f < 60 * 20; f++) {
       // The player is held at exactly this range rather than walking it: over
@@ -112,7 +113,14 @@ const result = await page.evaluate(() => {
       p.invuln = 1;
       tick();
       seen.add(warden.state);
-      shots = Math.max(shots, g.projectiles.filter((q) => !q.friendly).length);
+      // Counted as they appear, not as they stand: a shard that hits a wall
+      // before the next one leaves the hand made the volley look like two, and
+      // the check right at the boundary flaked.
+      for (const q of g.projectiles) {
+        if (q.friendly || counted.has(q)) continue;
+        counted.add(q);
+        shots++;
+      }
     }
     return { moves: [...seen].filter((s) => s.endsWith('Wind')).sort(), shots, seen: [...seen].sort() };
   };
@@ -154,20 +162,40 @@ const result = await page.evaluate(() => {
     killed = warden.dead;
   }
 
+  /*
+   * And its fall is final. This used to be wrong for every boss that lives in
+   * the enemy roster: a checkpoint rebuilds the roster, so dying anywhere in
+   * the world put the warden back on its feet with a full bar.
+   */
+  const alive = () => g.enemies.filter((e) => e.kind === 'warden' && !e.dead).length;
+  const aliveAfterWin = alive();
+  p.invuln = 0;
+  p.hurt(99, 1, g, true);
+  for (let f = 0; f < 60 * 6; f++) tick({ confirm: f % 12 < 4 });
+  const aliveAfterDying = alive();
+
   return {
     ok:
       close.moves.includes('slamWind') &&
+      // It has to come back out of the slam. It used to land and stay there:
+      // the landing asked for a downward speed that the landing collision had
+      // already zeroed, so the state only ended when something shook it loose.
+      close.seen.includes('recover') &&
       mid.moves.includes('lungeWind') &&
       far.moves.includes('volleyWind') &&
       far.shots >= 3 &&
       taken > 0 &&
-      killed,
+      killed &&
+      aliveAfterWin === 0 &&
+      aliveAfterDying === 0 &&
+      g.state === 'playing',
     maxHp: warden.maxHp,
     close,
     mid,
     far,
     damageDealtToMasher: taken,
     killedByMasher: killed,
+    stayedDown: { afterWin: aliveAfterWin, afterDying: aliveAfterDying, state: g.state },
   };
 });
 
@@ -176,7 +204,10 @@ await browser.close();
 server.close();
 
 if (!result.ok) {
-  console.error('FAIL: the warden no longer picks its move by range, no longer answers a masher, or cannot be killed.');
+  console.error(
+    'FAIL: the warden no longer picks its move by range, no longer answers a masher, cannot be ' +
+      'killed, hangs in its own slam, or comes back on its feet after the hero dies.',
+  );
   process.exit(1);
 }
-console.log('OK: the warden slams up close, lunges at mid range, throws shards from afar, and still dies.');
+console.log('OK: the warden slams up close, lunges at mid range, throws shards from afar, dies, and stays dead.');

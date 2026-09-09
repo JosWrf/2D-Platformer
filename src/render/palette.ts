@@ -109,7 +109,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'ruins',
-    start: 5120,
+    start: 6400,
     skyTop: '#0a0716',
     skyBottom: '#140f22',
     hillFar: '#2a2140',
@@ -124,7 +124,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'caverns',
-    start: 8960,
+    start: 10240,
     skyTop: '#03080d',
     skyBottom: '#071620',
     hillFar: '#0f2634',
@@ -140,7 +140,7 @@ export const ZONES: Zone[] = [
   {
     name: 'drowned',
     // Between the caves and the castle: a hall that the water took.
-    start: 12800,
+    start: 14080,
     skyTop: '#03080e',
     skyBottom: '#08202c',
     hillFar: '#0e3040',
@@ -155,7 +155,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'castle',
-    start: 16640,
+    start: 17920,
     skyTop: '#0d0710',
     skyBottom: '#1a0c14',
     hillFar: '#2c1620',
@@ -170,7 +170,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'throne',
-    start: 20480,
+    start: 21760,
     skyTop: '#0c040a',
     skyBottom: '#1e0710',
     hillFar: '#340d18',
@@ -185,7 +185,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'rift',
-    start: 22080,
+    start: 23360,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',
@@ -201,7 +201,7 @@ export const ZONES: Zone[] = [
   {
     name: 'crystalworld',
     // Behind the rift, reached only by teleport. Nothing walks in here.
-    start: 29888,
+    start: 31168,
     // This colour is also the rim light along every ledge. Cyan carries a lot
     // of luminance, so it is pulled down until the floor stops outshining the
     // hero walking on it.

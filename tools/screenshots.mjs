@@ -159,7 +159,7 @@ await open('?x=6');
 const marken = await page.evaluate(() => {
   const spawns = window.game.level.spawns;
   const at = (kind) => spawns.find((s) => s.kind === kind)?.tx ?? 0;
-  return { boss: at('boss'), thalassa: at('thalassa'), portal: at('portal') };
+  return { boss: at('boss'), gallert: at('gallert'), thalassa: at('thalassa'), portal: at('portal') };
 });
 await step(30);
 await step(50, { right: true });
@@ -272,6 +272,49 @@ await page.evaluate(() => {
 });
 results['20-tier'] = await page.evaluate(() => window.game.player.beamTier);
 await shot('20-flutklinge');
+
+/* 21 — Gallert in the bog ----------------------------------------------- */
+// The first boss, caught mid-spit: his three blobs on the way over are the
+// picture, because batting them out of the air is what he is there to teach.
+await open(`?x=${marken.gallert - 12}`);
+await step(20);
+await step(40, { right: true });
+await release('right');
+results['21-gallert'] = await page.evaluate(() => {
+  const g = window.game;
+  const input = window.input;
+  const ctx = document.querySelector('canvas').getContext('2d');
+  const t = (a = {}) => {
+    for (const [k, v] of Object.entries({ left: false, right: false, attack: false, ...a })) {
+      input.forceDown(k, v);
+    }
+    g.update(1 / 60, input);
+    g.render(ctx);
+  };
+  for (let i = 0; i < 60 * 40; i++) {
+    const p = g.player;
+    const boss = g.enemies.find((e) => e.kind === 'gallert' && !e.dead);
+    if (!boss) break;
+    boss.engaged = true;
+    // Neither side ends the demo early.
+    if (p.hp <= 3) p.hp = p.maxHp;
+    if (boss.hp <= boss.maxHp * 0.55) boss.hp = boss.maxHp * 0.6;
+    const dx = boss.cx - p.cx;
+    t({ right: dx > 150, left: dx < 120, attack: Math.abs(dx) < 78 && i % 18 < 3 });
+    const blobs = g.projectiles.filter((q) => !q.friendly && q.kind === 'blob');
+    // Out in the open between the two of them, or the picture is just his glow.
+    if (
+      blobs.length >= 3 &&
+      blobs.every((q) => Math.abs(q.cx - p.cx) > 55 && Math.abs(q.cx - boss.cx) > 55)
+    ) {
+      for (const a of ['left', 'right', 'attack']) input.forceDown(a, false);
+      return { blobs: blobs.length, state: boss.state, seconds: +(i / 60).toFixed(1) };
+    }
+  }
+  return { blobs: 0 };
+});
+await shot('21-gallert');
+
 
 /* 12 — castle ------------------------------------------------------------- */
 await open(`?x=${marken.boss - 146}`);

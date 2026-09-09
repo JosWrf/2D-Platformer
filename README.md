@@ -42,10 +42,11 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
 ## Das Level
 
-Ein durchgehendes Level aus 934 Kacheln (29 888 px) in sieben Zonen, plus eine
+Ein durchgehendes Level aus 974 Kacheln (31 168 px) in sieben Zonen, plus eine
 achte hinter der Welt, die man sich verdienen muss:
 
-1. **Nebelwald** — Einstieg, Abgründe, Schleime
+1. **Nebelwald** — Einstieg, Abgründe, Schleime, und am Ende das Moor mit
+   Gallert darin
 2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
 3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
 4. **Die Ertrunkene Halle** — was das Wasser geholt hat: Algenkanten, Korallen,
@@ -79,6 +80,7 @@ statt Stimmung zu machen.
 | | |
 | --- | --- |
 | ![Nebelwald](screenshots/02-nebelwald.png) | ![Schwertkampf](screenshots/03-schwertkampf.png) |
+| ![Gallert](screenshots/21-gallert.png) | ![Sprünge](screenshots/04-spruenge.png) |
 | ![Lava](screenshots/06-lava.png) | ![Ruinen](screenshots/07-ruinen.png) |
 | ![Kristallhöhlen](screenshots/09-kristallhoehlen.png) | ![Ertrunkene Halle](screenshots/10-ertrunkene-halle.png) |
 | ![Thalassa](screenshots/11-thalassa.png) | ![Burg](screenshots/12-burg-nachtfall.png) |
@@ -94,6 +96,62 @@ statt Stimmung zu machen.
 Jeder Angriff wird vorher telegrafiert; nach genug Treffern wird der Ritter
 kurz benommen und ist offen für eine volle Kombo. Sein Gefolge bleibt
 überschaubar: mehr als zwei Skelette stehen nie gleichzeitig in der Arena.
+
+#### Nicht festhalten lassen
+
+Mit der geworfenen Klinge ließ sich der Ritter **stunlocken**. Gemessen, ein
+Bot, der nur die Angriffstaste hält:
+
+| | Anteil benommen | Züge im ganzen Kampf | kassierte Herzen |
+| --- | --- | --- | --- |
+| ohne Klinge | 15 % | 30 | 52 |
+| Flutklinge, **vorher** | **42 %** | **2** | 4 |
+| Klingenwelle, **vorher** | **46 %** | **2** | 4 |
+| Flutklinge, jetzt | 16–19 % | 9–26 | 11–44 |
+| Klingenwelle, jetzt | 14–20 % | 5–26 | 5–44 |
+
+Dauer und Tode stehen nicht in der Tabelle, weil sie über einzelne Läufe wild
+schwanken: ein Tod des Helden füllt die Leiste des Ritters wieder, und ob ein
+Bot einmal stirbt oder nicht, entscheidet über 13 gegen 120 Sekunden. Belastbar
+sind der Anteil benommener Zeit und die Zahl der Züge, die er überhaupt
+anfängt — und die sagen dasselbe: **mit der Klinge kam er im ganzen Kampf
+zweimal zum Zug und stand fast die Hälfte der Zeit benommen da.**
+
+Der Grund: 14 Schaden mitten im Zug werfen ihn um, und mit der Klinge macht ein
+Spieler die 14 schneller, als eine Benommenheit dauert. Jede Erholung lief
+direkt in die nächste. Jetzt hält er nach einer Benommenheit **2,6 Sekunden**
+die Füße still, was blinden Schaden angeht. Eine **Parade** wirft ihn weiter
+jedes Mal um — die kommt nur, wenn er wirklich zuschlägt, also begrenzt sein
+eigener Takt sie.
+
+#### Bosse nehmen die Klinge zur Kenntnis
+
+Wer mit einer geworfenen Klinge ankommt, trifft auf mehr Boss. Das Upgrade ist
+etwa zwei Schaden pro Sekunde ohne jedes Risiko, und die Bosse waren gegen ein
+Schwert gebaut. Beim Aufwachen sieht sich jeder Boss einmal an, was auf ihn
+zukommt — mitten im Kampf verschiebt sich nichts, und wer das Upgrade nie
+gefunden hat, trifft genau den Boss, der für ihn eingestellt wurde:
+
+| Klinge | Leben | Schaden bis zur Benommenheit |
+| --- | --- | --- |
+| nur Schwert | 64 | 14 |
+| Flutklinge | 78 | 19 |
+| Klingenwelle | 92 | 24 |
+
+Dasselbe gilt für Thalassa, den Splitterwächter, den Prismarchen und Gallert
+(+22 % Leben und +35 % Poise je Stufe). Auf Distanz stehen bleiben hilft
+seitdem auch nicht mehr: der Ritter wählt weit draußen zweimal so oft den
+Sturmangriff wie das Hinterherlaufen, und ein Bot, der auf 150 px kampierte und
+die Klinge schickte, verliert jetzt statt in 30 s zu gewinnen.
+
+#### Und sie bleiben tot
+
+Ein gefallener Boss kam bisher mit dem nächsten Kontrollpunkt zurück: der
+Kontrollpunkt baut die Gegnerliste neu auf, und Thalassa, der Splitterwächter
+und der Prismarch stehen in dieser Liste. Ein Tod irgendwo in der Welt stellte
+sie wieder hin, mit voller Leiste. Gemessen und behoben — nur der komplette
+Neustart (`R`) bringt sie zurück, und der nimmt einem auch die Klinge und den
+Herzkern wieder ab.
 
 ## Die Gegner
 
@@ -125,6 +183,41 @@ Der **Klingenläufer** ist der einzige, den das Level selbst erledigt: er gräbt
 sich ein, stürmt los, und wer sich vor einer Wand wegdreht, sieht ihn dagegen
 laufen. Danach steht er anderthalb Sekunden benommen da und nimmt doppelten
 Schaden.
+
+### Der erste Boss: Gallert, der Aufgequollene
+
+22 Trefferpunkte, zwei Phasen, drei Züge — und der Lehrer des Spiels. Jeder
+seiner Züge ist die einfache Form von etwas, das ein späterer Kampf härter
+macht:
+
+* **Klatschsprung** (aus der Nähe) — er flacht sich gegen den Boden, springt,
+  und landet mit einem Ring: 2 Schaden, aber nur dort, wo er aufkommt (74 px).
+  Derselbe Zug wie der Sprungschlag des Splitterwächters, nur langsamer
+  angekündigt. Er trägt bis zu 230 px, ist also auch sein Weg zu einem, der
+  Abstand hält.
+* **Spucke** (auf Distanz) — drei Klumpen auf kurzer Bahn, einer auf den Helden
+  und zwei daneben. **Ein Hieb schlägt sie aus der Luft**, und das ist der Sinn
+  des Kampfes: die Regel, die Thalassas Flutwelle später verweigert, muss man
+  vorher gelernt haben, sonst ist die Ausnahme keine.
+* **Teilung** (zweite Hälfte, höchstens zweimal) — er kneift zwei gewöhnliche
+  Schleime von sich ab. Erst die wegräumen, dann weiter.
+
+Angekündigt wird alles über den Kern, der vor jedem Zug aufleuchtet; die
+Silhouette sagt den Rest, weil er sich vor dem Sprung platt macht und in der
+Luft streckt. Sein Schatten bleibt dabei unten am Boden und schrumpft — daran
+sieht man, wie hoch er ist.
+
+Poise 14, gemessen und nicht geraten: bei 8 warf ihn ein Dauerangreifer aus
+jedem Zug, den er anfing, und kassierte im ganzen Kampf **keinen einzigen
+Treffer**. Jetzt kostet derselbe Bot 5 von 6 Herzen und braucht 9 Sekunden; mit
+aufgefüllter Bossleiste gemessen — sonst ist der Kampf vorbei, bevor er dreimal
+zum Zug kam — landet Gallert 7 bis 18 Treffer in 25 Sekunden. Eine Parade
+schüttelt ihn immer los. Vorbeilaufen geht auch hier: das Moor hat kein Tor.
+
+Wer ihn schlägt, bekommt den **Herzkern**: sechs Herzen werden sieben, für den
+ganzen Rest des Laufs, und die Leiste ist sofort wieder voll. Das ist die
+einzige Belohnung im Spiel, die nicht die Klinge betrifft — nach der ersten
+Stunde soll etwas anderes dastehen als eine größere Zahl auf einem Hieb.
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
@@ -216,7 +309,7 @@ Kanone: eine je Hieb, und sie ist nach einem knappen halben Herzschlag weg.
 | | woher | Reichweite | Schaden |
 | --- | --- | --- | --- |
 | Schwert allein | von Anfang an | 40 px | 1 / 2 in der Kombo / 3 geladen |
-| **Flutklinge** | Thalassa fällt — bei 43 % des Levels | 145 px | 1, geladen 2 |
+| **Flutklinge** | Thalassa fällt — bei knapp der Hälfte des Levels | 145 px | 1, geladen 2 |
 | **Klingenwelle** | Prismarch fällt — hinter allen 157 Edelsteinen | 273 px | 1 / 2 / 3 wie der Hieb |
 
 ![Flutklinge](screenshots/20-flutklinge.png)
@@ -279,6 +372,13 @@ Er lässt sich nicht mit gehaltener Angriffstaste erledigen: einen begonnenen Zu
 zieht er durch. Erst fünf Schadenspunkte am Stück oder eine Parade bringen ihn
 aus dem Gleichgewicht.
 
+Sein Sprungschlag blieb lange hängen: die Landung fragte nach einer
+Abwärtsgeschwindigkeit, die die Kollision im Landebild schon auf null gesetzt
+hatte. Er kam also auf und stand dann in diesem Zustand, bis ihn eine Parade
+oder genug Schaden herausriss. `verify:warden` zeigte es die ganze Zeit, wenn
+man genau hinsah — der Nahkampflauf ging *stalk, slamWind, slam* und kam nie
+zurück. Beides ist gerichtet, und beides wird jetzt geprüft.
+
 Die Vorwarnung ist auch die Einladung zur Parade: Wer im richtigen Moment `E`
 drückt, fängt den Schlag ab, statt ihn zu kassieren — der Ritter taumelt und
 steht offen. Geschosse fliegen dabei zurück. Die Parade wirkt nur nach vorn und
@@ -312,7 +412,7 @@ horizontal aneinandergehängt:
 ^  Stacheln      L/l Lava        G  Fallgitter   P  Startpunkt
 S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
-z  Zunder        w  Schildwache  r  Klingenläufer
+z  Zunder        w  Schildwache  r  Klingenläufer   Q  Gallert (Boss)
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
 W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
@@ -335,6 +435,7 @@ Alle Skripte fahren das gebaute Spiel in einem echten Chromium hoch:
 npm run verify:level   # Erreichbarkeitsanalyse: kommt man vom Start zum Boss?
 npm run verify:arena   # kommt man nach einem Tod am Tor zurück in die Bossarena?
 npm run verify:combat  # fängt die Parade den Schlag, trifft der Ladeschlag härter?
+npm run verify:gallert # Züge, Spucke zum Abschlagen, Herzkern — und bleibt er tot?
 npm run verify:thalassa # ihre Züge, die Springflut, ihr Fall und die Flutklinge danach
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
@@ -363,6 +464,14 @@ wieder drin ist.
 `verify:combat` prüft Parade und Ladeschlag am Boss. Die Parade hängt an einem
 Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
 verloren, fühlt sich das nicht schwer an, sondern kaputt.
+
+`verify:gallert` prüft den ersten Boss: Zugwahl nach Entfernung; dass ein
+blinder Hieb seine Spucke **abschlägt** und dass Dastehen ein Herz kostet; dass
+sein Sprung dort trifft, wo er landet, und 420 px weiter eben nicht; dass die
+Teilung genau zwei Schleime bringt und nur zweimal; dass eine Parade ihn
+losschüttelt; dass ein Draufhauer zahlt und trotzdem gewinnt; dass sein Fall
+die sechs Herzen auf sieben setzt und die Leiste füllt; dass er nach einem Tod
+des Helden **nicht wieder aufsteht**; und dass man an ihm vorbeikommt.
 
 `verify:thalassa` prüft ihren Kampf Eigenschaft für Eigenschaft: die Zugwahl auf
 zwei Entfernungen; zwei Wellen in Phase eins und vier in Phase zwei, ein Anker

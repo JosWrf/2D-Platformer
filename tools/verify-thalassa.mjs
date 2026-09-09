@@ -486,6 +486,18 @@ const result = await page.evaluate(() => {
   const beamNear = swingReach(120);
   const beamFar = swingReach(250);
 
+  /*
+   * And her fall is final. This used to be wrong: a checkpoint rebuilds the
+   * enemy roster, and she lives in it, so dying anywhere in the world put her
+   * back on her feet with a full bar and her arena music again.
+   */
+  const alive = () => g.enemies.filter((e) => e.kind === 'thalassa' && !e.dead).length;
+  const aliveAfterWin = alive();
+  p.invuln = 0;
+  p.hurt(99, 1, g, true);
+  for (let f = 0; f < 60 * 6; f++) tick({ confirm: f % 12 < 4 });
+  const stayedDown = { afterWin: aliveAfterWin, afterDying: alive(), state: g.state };
+
   return {
     ok:
       near.moves.includes('surgeWind') &&
@@ -514,6 +526,9 @@ const result = await page.evaluate(() => {
       killed &&
       rewardDialogue &&
       tier === 1 &&
+      stayedDown.afterWin === 0 &&
+      stayedDown.afterDying === 0 &&
+      stayedDown.state === 'playing' &&
       beamNear.crescents === 1 &&
       beamNear.allFriendly &&
       beamNear.hurtAtGap > 0 &&
@@ -539,6 +554,7 @@ const result = await page.evaluate(() => {
     killed,
     killSeconds: +(killFrames / 60).toFixed(1),
     reward: { dialogue: rewardDialogue, beamTier: tier, at120px: beamNear, at250px: beamFar },
+    stayedDown,
     walkPast: passHp,
   };
 });
@@ -553,12 +569,13 @@ if (!result.ok) {
       'spring tide no longer answers a squatter (or no longer spares someone who steps aside), or ' +
       'the crown no longer calls, or a parry no longer breaks her, or she no longer answers a ' +
       'masher, or she cannot be killed or walked past, or her fall no longer hands over the ' +
-      'Flutklinge.',
+      'Flutklinge, or she is back on her feet at the next checkpoint.',
   );
   process.exit(1);
 }
 console.log(
   'OK: Thalassa surges up close, throws the anchor from afar, opens the floor under a squatter, ' +
     'answers twice in her second phase, calls the crown once for her last third, breaks to a ' +
-    'parry, makes a masher pay, can be walked past, drowns - and leaves the Flutklinge behind.',
+    'parry, makes a masher pay, can be walked past, drowns for good - and leaves the Flutklinge ' +
+    'behind.',
 );

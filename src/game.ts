@@ -3,10 +3,19 @@ import { Camera } from './core/camera';
 import { Input } from './core/input';
 import { clamp, rand } from './core/math';
 import { Boss } from './entities/boss';
-import { Enemy, EnemyKind, Prismarch, Thalassa, Warden, createEnemy } from './entities/enemy';
+import {
+  BOSS_KINDS,
+  Enemy,
+  EnemyKind,
+  Gallert,
+  Prismarch,
+  Thalassa,
+  Warden,
+  createEnemy,
+} from './entities/enemy';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
-import { Player } from './entities/player';
+import { PLAYER_MAX_HP, Player } from './entities/player';
 import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
 import { Particles } from './fx/particles';
@@ -97,6 +106,8 @@ export class Game implements World {
   private currentZone = '';
   private titlePulse = 0;
   private readonly enemySpawns: SpawnRecord[] = [];
+  /** Spawn keys of the bosses that have been beaten. They do not come back. */
+  private readonly felledBosses = new Set<string>();
   private readonly collected = new Set<string>();
   private checkpointX: number;
   private checkpointY: number;
@@ -141,6 +152,7 @@ export class Game implements World {
         case 'bomber':
         case 'shieldman':
         case 'charger':
+        case 'gallert':
         case 'warden':
         case 'thalassa':
         case 'prismarch':
@@ -212,10 +224,21 @@ export class Game implements World {
     return null;
   }
 
+  /**
+   * The level's roster, built from scratch. Ordinary enemies come back with
+   * every checkpoint - that is what a checkpoint is - but a boss that has
+   * fallen stays fallen. It used to come back with them: dying anywhere in the
+   * world put Thalassa, the warden and the Prismarch back on their feet, boss
+   * bar and all, because this ran on every respawn. Only the knight was spared,
+   * and only because he is not in this list.
+   */
   private spawnEnemiesFresh(): void {
     this.enemies.length = 0;
     for (const rec of this.enemySpawns) {
+      const key = `${rec.kind}@${rec.x},${rec.y}`;
+      if (this.felledBosses.has(key)) continue;
       const enemy = createEnemy(rec.kind, rec.x, rec.y);
+      enemy.spawnKey = key;
       // Anchor ground-bound enemies on the floor of their tile.
       if (rec.kind !== 'bat' && rec.kind !== 'mage') enemy.y = rec.y + TILE - enemy.h;
       this.enemies.push(enemy);
@@ -307,6 +330,47 @@ export class Game implements World {
       index: 0,
       after: () => this.leaveCrystalWorld(),
     };
+  }
+
+  /**
+   * Gallert comes apart, at the end of the forest, and leaves the core that
+   * held him together. It is worth a heart: six become seven for the rest of
+   * the run, and the hero is topped up on the spot.
+   *
+   * He is the first boss in the game and the only reward that is not about the
+   * blade, which is the point - the run should have something to show for its
+   * first hour that is not a bigger number on a swing.
+   */
+  onMireBossDefeated(): void {
+    if (this.player.maxHp > PLAYER_MAX_HP || this.state !== 'playing') return;
+    this.flashWhite = 1;
+    this.camera.addShake(7);
+    audio.play('victory');
+    this.player.vx = 0;
+    if (this.dialogue) {
+      // Something is already being read. Skipping the words is fine; dropping
+      // the reward is not.
+      this.takeHeartCore();
+      return;
+    }
+    this.dialogue = {
+      speaker: 'DAS MOOR',
+      lines: [
+        'Was hier zusammengelaufen ist, war einmal alles, was in mir gestorben ist.',
+        'Du hast es auseinandergenommen. Der Kern gehört jetzt dir.',
+        'Er schlägt weiter — in deiner Brust, nicht in seiner.',
+      ],
+      index: 0,
+      after: () => this.takeHeartCore(),
+    };
+  }
+
+  /** One heart more, for good, and full again right away. */
+  private takeHeartCore(): void {
+    this.player.maxHp = PLAYER_MAX_HP + 1;
+    this.player.hp = this.player.maxHp;
+    this.zoneBanner = { text: 'HERZKERN — EIN HERZ MEHR', timer: 4.2 };
+    this.flashWhite = 0.7;
   }
 
   /**
@@ -592,7 +656,10 @@ export class Game implements World {
       enemy.touchPlayer(this);
     }
     for (let i = this.enemies.length - 1; i >= 0; i--) {
-      if (this.enemies[i].dead) this.enemies.splice(i, 1);
+      const enemy = this.enemies[i];
+      if (!enemy.dead) continue;
+      if (BOSS_KINDS.has(enemy.kind)) this.felledBosses.add(enemy.spawnKey);
+      this.enemies.splice(i, 1);
     }
 
     if (this.boss) {
@@ -730,6 +797,8 @@ export class Game implements World {
     this.returnTo = null;
     this.dialogue = null;
     this.player.beamTier = 0;
+    this.player.maxHp = PLAYER_MAX_HP;
+    this.felledBosses.clear();
     this.level.exitSealed = true;
     this.respawnAtCheckpoint();
   }
@@ -1173,6 +1242,24 @@ export class Game implements World {
           maxHp: prism.maxHp,
           ghost: prism.hp,
           phase: prism.phase,
+        },
+        0,
+      );
+      return;
+    }
+
+    const mire = this.enemies.find((e): e is Gallert => e instanceof Gallert && e.engaged && !e.dead);
+    if (mire) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `GALLERT   ·   DER AUFGEQUOLLENE   ·   PHASE ${mire.phase}`,
+          hp: mire.hp,
+          maxHp: mire.maxHp,
+          ghost: mire.hp,
+          phase: mire.phase,
         },
         0,
       );

@@ -14,13 +14,50 @@ export type EnemyKind =
   | 'bomber'
   | 'shieldman'
   | 'charger'
+  | 'gallert'
   | 'warden'
   | 'thalassa'
   | 'prismarch';
 
+/**
+ * The kinds that are bosses rather than roster: announced, with a health bar,
+ * and once beaten they stay beaten - the checkpoint rebuilds the roster around
+ * them, not them.
+ */
+export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
+  'gallert',
+  'thalassa',
+  'warden',
+  'prismarch',
+]);
+
+/**
+ * What a boss becomes when the hero turns up with a blade that throws.
+ *
+ * The upgrade is worth roughly two damage a second at no risk at all - most of
+ * a sword's output without a sword's danger - and the bosses were built against
+ * a sword. Measured on the knight before this: a bot that only held the attack
+ * key used to lose the fight eight times over, and with the blade it killed him
+ * in fourteen seconds while he got a single move off.
+ *
+ * So every boss takes stock of the blade in front of it, once, when it wakes:
+ * more health, and more punishment absorbed before it loses its footing.
+ * Nothing shifts mid-fight, and a hero who never found the upgrade meets
+ * exactly the boss that was tuned for him.
+ */
+export function bossScale(beamTier: number): { hp: number; poise: number } {
+  const tier = clamp(beamTier, 0, 2);
+  return { hp: 1 + 0.22 * tier, poise: 1 + 0.35 * tier };
+}
+
 export abstract class Enemy extends Body {
   hp = 2;
   maxHp = 2;
+  /**
+   * Which spawn in the level this one came out of. The game uses it to keep a
+   * boss that has fallen from being built again at the next checkpoint.
+   */
+  spawnKey = '';
   facing: 1 | -1 = -1;
   flash = 0;
   stun = 0;
@@ -101,6 +138,17 @@ export abstract class Enemy extends Body {
    */
   onParried(world: World): void {
     void world;
+  }
+
+  /**
+   * Takes stock of the hero's blade, once, at the moment of waking: more
+   * health, and a poise figure scaled the same way. See bossScale.
+   */
+  protected sizeUpFor(world: World, poiseBase: number): number {
+    const scale = bossScale(world.player.beamTier);
+    this.maxHp = Math.round(this.maxHp * scale.hp);
+    this.hp = this.maxHp;
+    return Math.round(poiseBase * scale.poise);
   }
 
   /**
@@ -1240,6 +1288,8 @@ export class Warden extends Enemy {
   private hitThisMove = false;
   /** Damage it can absorb mid-move before it is thrown off balance. */
   private poise = POISE;
+  /** That figure, once it has seen the blade coming. */
+  private poiseMax = POISE;
   /** True once the player has come close enough to wake it. */
   engaged = false;
 
@@ -1276,7 +1326,7 @@ export class Warden extends Enemy {
     const committed = this.state !== 'wait' && this.state !== 'stalk' && this.state !== 'recover';
     if (!committed) this.vx = fromDir * 130;
     if (this.poise <= 0 && this.poiseLock <= 0) {
-      this.poise = POISE;
+      this.poise = this.poiseMax;
       this.poiseLock = 2.0;
       this.stun = 0.5;
       this.vx = fromDir * 150;
@@ -1294,6 +1344,7 @@ export class Warden extends Enemy {
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
         this.engaged = true;
+        this.poise = this.poiseMax = this.sizeUpFor(world, POISE);
         this.state = 'recover';
         this.timer = 0.9;
         world.camera.addShake(5);
@@ -1396,7 +1447,15 @@ export class Warden extends Enemy {
         break;
 
       case 'slam':
-        if (this.vy > 0 && this.onGround) {
+        /*
+         * The landing has to be read as "on the ground and no longer rising".
+         * It used to ask for a downward speed as well, and a collision zeroes
+         * that in the very frame the feet touch: measured, the warden never
+         * finished a slam at all - it stood in the state until a parry or a
+         * poise break shook it out, and verify:warden's close-range run showed
+         * it plainly, going stalk, slamWind, slam and never coming back.
+         */
+        if (this.onGround && this.vy >= 0) {
           world.camera.addShake(9);
           world.hitStop(0.05);
           audio.play('slam');
@@ -1407,6 +1466,10 @@ export class Warden extends Enemy {
           }
           this.state = 'recover';
           this.timer = 1.3;
+        } else if (this.timer <= 0) {
+          // Belt and braces: a move can never be a place to get stuck.
+          this.state = 'recover';
+          this.timer = 0.9;
         }
         break;
     }
@@ -1511,6 +1574,371 @@ export class Warden extends Enemy {
   }
 }
 
+/* ----------------------------------------------------------------- gallert */
+
+/**
+ * Damage he shrugs off mid-move. Fourteen, and measured rather than picked: at
+ * eight, a player who simply held the attack key threw him out of every move he
+ * began and took not a single scratch in the whole fight. He is the first boss
+ * in the game, not a sandbag.
+ */
+const GALLERT_POISE = 14;
+
+/**
+ * Gallert, der Aufgequollene - what the bog at the end of the forest made out
+ * of every slime that ever died in it. The first boss of the game, and
+ * therefore its teacher: each of his three moves is the plain form of something
+ * a later fight does harder, and none of them can kill a careful player.
+ *
+ *   Klatschsprung  - flattens, leaps, lands with a ring. Get out from under it.
+ *                    (The warden's slam, slower and with a longer warning.)
+ *   Spucke         - three blobs on a short arc, and a blob is the first thing
+ *                    in the game that a swing of the blade bats out of the air.
+ *                    (Which is exactly what Thalassa's flood wave later
+ *                    refuses to be, and that only reads as a rule if the player
+ *                    has learned the rule first.)
+ *   Teilung        - he pinches two small slimes off himself, at most twice.
+ *                    Clear the adds, then get back to him.
+ *
+ * He is worth a heart: the Herzkern he leaves behind takes the hero from six to
+ * seven, for the whole rest of the run.
+ */
+export class Gallert extends Enemy {
+  private state:
+    | 'wait'
+    | 'stalk'
+    | 'hopWind'
+    | 'hop'
+    | 'spitWind'
+    | 'splitWind'
+    | 'recover' = 'wait';
+  private timer = 0;
+  /** The tell: his core lights before every move. */
+  private core = 0;
+  /** -1 flattened, +1 stretched. Drives the squash of the leap. */
+  private squash = 0;
+  private poise = GALLERT_POISE;
+  private poiseMax = GALLERT_POISE;
+  private lastMove = '';
+  private hitThisMove = false;
+  /** How many small slimes he has pinched off himself. */
+  private spawned = 0;
+  /** Last floor he stood on, so his shadow stays down there when he leaps. */
+  private groundY = 0;
+  engaged = false;
+
+  constructor(x: number, y: number) {
+    super('gallert', x, y);
+    this.w = 74;
+    this.h = 52;
+    /*
+     * Twenty-two. The knight has sixty-four and Thalassa sixty; this one comes
+     * before either, against a hero who has nothing but a sword, so it is the
+     * short fight that teaches the vocabulary.
+     */
+    this.hp = this.maxHp = 22;
+    this.scoreValue = 700;
+    this.aggroRange = 300;
+    this.contactDamage = 1;
+  }
+
+  get phase(): 1 | 2 {
+    return this.hp <= this.maxHp / 2 ? 2 : 1;
+  }
+
+  protected override deathColor(): string {
+    return '#8fd45c';
+  }
+
+  override hurt(amount: number, fromDir: number, world: World): void {
+    if (this.dead) return;
+    this.hp -= amount;
+    this.flash = 1;
+    this.poise -= amount;
+    this.squash = Math.min(1, this.squash + 0.35);
+    if (this.hp <= 0) {
+      this.die(world);
+      return;
+    }
+    audio.play('bossHit');
+    if (this.poise <= 0 && this.poiseLock <= 0) this.wobble(world, fromDir, 2.0);
+  }
+
+  /** A parry always shakes him loose, whatever he has absorbed. */
+  override onParried(world: World): void {
+    if (this.dead || this.stun > 0) return;
+    this.wobble(world, -this.facing, 1.1);
+  }
+
+  private wobble(world: World, fromDir: number, lock: number): void {
+    this.poise = this.poiseMax;
+    this.poiseLock = lock;
+    this.stun = 0.5;
+    this.squash = 1;
+    this.vx = fromDir * 90;
+    world.particles.burst(this.cx, this.cy, 18, '#b6f08a', { speed: 190, gravity: 260 });
+  }
+
+  protected override die(world: World): void {
+    super.die(world);
+    // The core he was holding together goes to whoever took him apart.
+    world.onMireBossDefeated();
+  }
+
+  override update(dt: number, world: World): void {
+    this.updateCommon(dt);
+    const player = world.player;
+    const dx = player.cx - this.cx;
+    const dist = Math.abs(dx);
+    this.core = Math.max(0, this.core - dt * 2);
+    this.squash = approach(this.squash, 0, dt * 2.4);
+    if (this.onGround) this.groundY = this.bottom;
+
+    if (!this.engaged) {
+      if (dist < this.aggroRange && !player.dead) {
+        this.engaged = true;
+        this.poise = this.poiseMax = this.sizeUpFor(world, GALLERT_POISE);
+        this.state = 'recover';
+        this.timer = 1.2;
+        this.squash = 1;
+        world.camera.addShake(5);
+      }
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.stun > 0) {
+      if (this.state !== 'recover') {
+        this.state = 'recover';
+        this.timer = 0.8;
+        this.core = 0;
+      }
+      this.vx = approach(this.vx, 0, 500 * dt);
+      this.vy += 1400 * dt;
+      this.moveAndCollide(world.level, dt);
+      return;
+    }
+
+    if (this.state !== 'hop') this.facing = dx > 0 ? 1 : -1;
+    this.timer -= dt;
+    const quick = this.phase === 2 ? 0.85 : 1;
+
+    switch (this.state) {
+      case 'wait':
+      case 'recover':
+        this.vx = approach(this.vx, 0, 600 * dt);
+        if (this.timer <= 0) {
+          this.state = 'stalk';
+          this.timer = rand(0.5, 0.85) * quick;
+        }
+        break;
+
+      case 'stalk': {
+        // A waddle, not a charge: he has to be readable at a walk.
+        const want = dist > 120 ? sign(dx) * 52 : 0;
+        this.vx = approach(this.vx, want, 380 * dt);
+        this.holdBackAtEdges(world);
+        if (this.timer <= 0) {
+          const options = dist < 150 ? ['hopWind', 'spitWind'] : ['spitWind', 'hopWind'];
+          if (this.phase === 2 && this.spawned < 2) options.push('splitWind');
+          const pick = options.filter((o) => o !== this.lastMove);
+          const move = pick[Math.floor(Math.random() * pick.length)] ?? options[0];
+          this.lastMove = move;
+          this.state = move as typeof this.state;
+          // The longest warnings in the game, because he is the first thing in
+          // it that announces anything at all: seven tenths of a second before
+          // the leap, six before the spit.
+          this.timer = move === 'hopWind' ? 0.7 : 0.6;
+          this.core = 1;
+          this.hitThisMove = false;
+          audio.play('shoot', 0.5);
+        }
+        break;
+      }
+
+      case 'hopWind':
+        // Flattens against the floor. Everything about the shape says up.
+        this.vx = approach(this.vx, 0, 700 * dt);
+        this.core = 1;
+        this.squash = -1;
+        if (this.timer <= 0) {
+          this.state = 'hop';
+          this.timer = 1.4;
+          this.vy = -560;
+          this.vx = clamp(dx / 0.6, -300, 300);
+          this.squash = 1;
+          audio.play('jump', 0.7);
+        }
+        break;
+
+      case 'hop':
+        // In the air he keeps his heading; landing is the dangerous part. On
+        // the ground and no longer rising is the landing - asking for a
+        // downward speed as well never fires, because the collision that puts
+        // his feet down zeroes it in the same frame.
+        if (this.onGround && this.vy >= 0) {
+          this.squash = -1;
+          audio.play('slam');
+          world.camera.addShake(6);
+          world.particles.burst(this.cx, this.bottom, 24, '#8fd45c', { speed: 250, gravity: 520 });
+          if (
+            !this.hitThisMove &&
+            !player.dead &&
+            Math.abs(player.cx - this.cx) < 74 &&
+            Math.abs(player.bottom - this.bottom) < 44
+          ) {
+            this.hitThisMove = true;
+            player.hurt(2, sign(player.cx - this.cx) || 1, world);
+          }
+          // A long breath afterwards: this is the first boss in the game and
+          // the window to answer him has to be unmissable.
+          this.state = 'recover';
+          this.timer = 1.4 * quick;
+        } else if (this.timer <= 0) {
+          this.state = 'recover';
+          this.timer = 0.9;
+        }
+        break;
+
+      case 'spitWind':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          // Three blobs on arcs that land around the hero rather than on him:
+          // the middle one is aimed, the outer two straddle it.
+          const flight = 0.75;
+          const originY = this.cy - 14;
+          for (const spread of [-64, 0, 64]) {
+            const vx = (dx + spread) / flight;
+            const vy = (player.cy - originY) / flight - 0.5 * 1150 * flight;
+            world.spawnProjectile(new Projectile('blob', this.cx - 8, originY, vx, vy));
+          }
+          this.squash = 0.6;
+          audio.play('shoot');
+          this.state = 'recover';
+          this.timer = 1.25 * quick;
+        }
+        break;
+
+      case 'splitWind':
+        this.vx = approach(this.vx, 0, 700 * dt);
+        this.core = 1;
+        if (this.timer <= 0) {
+          // Two of him, pinched off and dropped either side. They are ordinary
+          // slimes: the point is that they are in the way, not that they are
+          // dangerous.
+          for (const side of [-1, 1]) {
+            const spawn = createEnemy('slime', this.cx + side * 34, this.bottom - 26);
+            spawn.y = this.bottom - spawn.h;
+            spawn.active = true;
+            world.spawnEnemy(spawn);
+            world.particles.burst(spawn.cx, spawn.cy, 14, '#8fd45c', { speed: 200, gravity: 300 });
+          }
+          this.spawned += 2;
+          this.squash = -0.6;
+          audio.play('slam', 0.6);
+          world.camera.addShake(4);
+          this.state = 'recover';
+          this.timer = 1.25 * quick;
+        }
+        break;
+    }
+
+    this.vy += 1400 * dt;
+    this.moveAndCollide(world.level, dt);
+    if (this.touchesHazard(world)) this.hurt(3, 0, world);
+  }
+
+  /** Contact hurts less than the landing, which does its own, heavier hit. */
+  override touchPlayer(world: World): void {
+    if (this.state === 'hop') return;
+    super.touchPlayer(world);
+  }
+
+  override draw(ctx: CanvasRenderingContext2D): void {
+    withHitFlash(ctx, this.flash, () => {
+      ctx.save();
+      ctx.translate(this.cx, this.bottom);
+      // The shadow belongs to the floor, not to him: while he is up there it
+      // stays down and shrinks, which is what says how high he is.
+      const rise = clamp((this.groundY - this.bottom) / 150, 0, 1);
+      shadow(ctx, 0, this.groundY - this.bottom, this.w * 0.55 * (1 - rise * 0.45), 0.32 * (1 - rise * 0.5));
+      // The squash: flattened when he is about to go up or has just come down,
+      // stretched while he is in the air. One slow wobble on top of it, so he
+      // is never quite still without ever flickering.
+      const wob = Math.sin(this.anim * 2.2) * 0.04;
+      const sx = 1 - this.squash * 0.18 + wob;
+      const sy = 1 + this.squash * 0.22 - wob;
+      ctx.scale(sx, sy);
+
+      const w = this.w / 2;
+      const h = this.h;
+      const body = ctx.createLinearGradient(0, -h, 0, 0);
+      body.addColorStop(0, 'rgba(178,236,126,0.92)');
+      body.addColorStop(0.55, 'rgba(120,196,80,0.92)');
+      body.addColorStop(1, 'rgba(58,120,52,0.95)');
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.moveTo(-w, 0);
+      ctx.quadraticCurveTo(-w * 0.96, -h * 0.92, 0, -h);
+      ctx.quadraticCurveTo(w * 0.96, -h * 0.92, w, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // Skin: a bright rim along the top, and a wet highlight.
+      ctx.strokeStyle = 'rgba(214,255,168,0.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.9, -h * 0.2);
+      ctx.quadraticCurveTo(-w * 0.85, -h * 0.9, 0, -h + 1);
+      ctx.quadraticCurveTo(w * 0.85, -h * 0.9, w * 0.9, -h * 0.2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(235,255,210,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(-w * 0.34, -h * 0.66, w * 0.22, h * 0.14, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Swallowed things, because a bog slime is made of what it ate.
+      ctx.fillStyle = 'rgba(48,92,54,0.7)';
+      for (let i = -2; i <= 2; i++) {
+        const bx = i * w * 0.3;
+        const by = -h * 0.28 - Math.abs(i) * 3;
+        ctx.fillRect(bx - 3, by, 6, 4);
+      }
+
+      // The core: the tell. It fills before every move and it is the only
+      // thing on him that changes brightness.
+      const heat = 0.3 + this.core * 0.7;
+      const cy = -h * 0.42;
+      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 30 * heat);
+      halo.addColorStop(0, `rgba(226,255,150,${(0.6 * heat).toFixed(2)})`);
+      halo.addColorStop(1, 'rgba(226,255,150,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(-30, cy - 30, 60, 60);
+      ctx.fillStyle = `rgba(238,255,180,${(0.5 + heat * 0.5).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(0, cy, 7 + this.core * 2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eyes, floating a little apart from each other.
+      ctx.fillStyle = 'rgba(24,40,26,0.85)';
+      for (const ex of [-11, 11]) {
+        ctx.beginPath();
+        ctx.ellipse(ex, -h * 0.66, 4.2, 5.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(240,255,230,0.9)';
+      for (const ex of [-11, 11]) {
+        ctx.beginPath();
+        ctx.arc(ex + this.facing * 1.4, -h * 0.7, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+}
+
 /* ---------------------------------------------------------------- thalassa */
 
 /**
@@ -1590,6 +2018,8 @@ export class Thalassa extends Enemy {
   private timer = 0;
   private crown = 0;
   private poise = THALASSA_POISE;
+  /** Her poise figure, once she has seen what she is up against. */
+  private poiseMax = THALASSA_POISE;
   private lastMove = '';
   /** Which move the crown is filling for - the draw code reads this. */
   private tell: 'none' | 'surge' | 'anchor' | 'undertow' | 'tide' = 'none';
@@ -1679,7 +2109,7 @@ export class Thalassa extends Enemy {
 
   /** Thrown off balance: whatever she was doing is dropped. */
   private stagger(world: World, fromDir: number, lock: number): void {
-    this.poise = THALASSA_POISE;
+    this.poise = this.poiseMax;
     this.poiseLock = lock;
     this.stun = 0.5;
     this.vx = fromDir * 130;
@@ -1724,6 +2154,7 @@ export class Thalassa extends Enemy {
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
         this.engaged = true;
+        this.poise = this.poiseMax = this.sizeUpFor(world, THALASSA_POISE);
         this.state = 'recover';
         this.timer = 1.1;
         world.camera.addShake(5);
@@ -2280,6 +2711,8 @@ export class Prismarch extends Enemy {
   private timer = 0;
   private core = 0;
   private poise = PRISM_POISE;
+  /** That figure, once it has seen the blade coming. */
+  private poiseMax = PRISM_POISE;
   private rainLeft = 0;
   private rainTimer = 0;
   private hitThisMove = false;
@@ -2316,7 +2749,7 @@ export class Prismarch extends Enemy {
     }
     audio.play('bossHit');
     if (this.poise <= 0 && this.poiseLock <= 0) {
-      this.poise = PRISM_POISE;
+      this.poise = this.poiseMax;
       this.poiseLock = 2.0;
       this.stun = 0.55;
       this.vx = fromDir * 120;
@@ -2340,6 +2773,7 @@ export class Prismarch extends Enemy {
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
         this.engaged = true;
+        this.poise = this.poiseMax = this.sizeUpFor(world, PRISM_POISE);
         this.state = 'recover';
         this.timer = 1.2;
         world.camera.addShake(6);
@@ -2567,6 +3001,8 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Charger(x, y);
     case 'warden':
       return new Warden(x, y);
+    case 'gallert':
+      return new Gallert(x, y);
     case 'thalassa':
       return new Thalassa(x, y);
     case 'prismarch':

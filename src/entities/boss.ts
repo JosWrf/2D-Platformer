@@ -4,13 +4,24 @@ import { PALETTE } from '../render/palette';
 import { glow, shadow, slashArc, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
-import { Skeleton } from './enemy';
+import { Skeleton, bossScale } from './enemy';
 import { Projectile } from './projectile';
 
 export const BOSS_MAX_HP = 64;
 
 /** How many summoned skeletons may stand in the arena at once. */
 const MAX_MINIONS = 2;
+
+/** Damage he takes mid-action before he loses his footing. */
+const STAGGER_DAMAGE = 14;
+/**
+ * And how long he keeps it afterwards, whatever else lands on him. Without this
+ * the knight could be held on the floor for a whole fight: a hero with the
+ * blade upgrade deals fourteen damage in less time than one stagger lasts, so
+ * every recovery ran straight into the next one. Measured, he spent 46 % of the
+ * fight benommen and answered with one move in thirteen seconds.
+ */
+const STAGGER_REST = 2.6;
 
 type BossState =
   | 'dormant'
@@ -40,6 +51,14 @@ export class Boss extends Body {
 
   private timer = 0;
   private damageSinceStagger = 0;
+  /** Punishment needed for the next stagger - grows with the hero's blade. */
+  private staggerAt = STAGGER_DAMAGE;
+  /** Time before blind damage may put him down again. */
+  private damageLock = 0;
+  /** Time before another parry may, which is a much shorter leash. */
+  private parryLock = 0;
+  /** Set once when he wakes, so the blade is only taken stock of once. */
+  private scaled = false;
   private swordAngle = -0.6;
   private targetSwordAngle = -0.6;
   private hitPlayerThisAction = false;
@@ -83,6 +102,8 @@ export class Boss extends Body {
     this.timer = 0;
     this.deathTimer = 0;
     this.damageSinceStagger = 0;
+    this.damageLock = 0;
+    this.parryLock = 0;
     this.hitPlayerThisAction = false;
     this.lastAction = '';
     this.swordAngle = -0.6;
@@ -114,6 +135,14 @@ export class Boss extends Body {
   engage(world: World): void {
     if (this.engaged) return;
     this.engaged = true;
+    // He sizes up the blade coming at him, once. See bossScale.
+    if (!this.scaled) {
+      this.scaled = true;
+      const scale = bossScale(world.player.beamTier);
+      this.maxHp = Math.round(BOSS_MAX_HP * scale.hp);
+      this.hp = this.maxHp;
+      this.staggerAt = Math.round(STAGGER_DAMAGE * scale.poise);
+    }
     this.state = 'intro';
     this.timer = 2.2;
     audio.play('bossRoar');
@@ -133,7 +162,7 @@ export class Boss extends Body {
       this.beginDeath(world);
       return;
     }
-    if (this.damageSinceStagger >= 14) {
+    if (this.damageSinceStagger >= this.staggerAt && this.damageLock <= 0) {
       this.stagger(world);
       this.vx = fromDir * 90;
     }
@@ -149,8 +178,22 @@ export class Boss extends Body {
     this.state = 'stagger';
     this.timer = duration;
     this.vx = 0;
+    // Whatever put him down, he keeps his feet for a while afterwards.
+    this.damageLock = duration + STAGGER_REST;
     world.camera.addShake(6);
     world.particles.text(this.cx, this.y - 12, 'BENOMMEN!', '#ffd166');
+  }
+
+  /**
+   * A parry always puts him down, whatever he has absorbed - that is what the
+   * parry is for, and it can only come while he is actually swinging, so his
+   * own rhythm limits it. The short leash is only there so a held parry through
+   * a multi-hit action cannot chain two staggers out of one swing.
+   */
+  onParried(world: World): void {
+    if (this.parryLock > 0) return;
+    this.parryLock = 1.95;
+    this.stagger(world);
   }
 
   private beginDeath(world: World): void {
@@ -170,6 +213,8 @@ export class Boss extends Body {
     this.swordAngle += (this.targetSwordAngle - this.swordAngle) * Math.min(1, dt * 9);
 
     const player = world.player;
+    this.damageLock = Math.max(0, this.damageLock - dt);
+    this.parryLock = Math.max(0, this.parryLock - dt);
 
     if (this.state === 'dormant') {
       this.vy = Math.min(700, this.vy + 1800 * dt);
@@ -385,7 +430,9 @@ export class Boss extends Body {
   private chooseAction(dist: number): void {
     const phase = this.phase;
     const options: string[] = [];
-    if (dist > 150) options.push('walk', 'dash');
+    // Twice as likely to close the gap as to walk it: a player who parks at the
+    // far end and chips away has to be reached, not followed.
+    if (dist > 150) options.push('dash', 'dash', 'walk');
     if (dist <= 150) options.push('slam', 'slam', 'dash');
     if (phase >= 2) options.push('cast');
     if (phase >= 2 && dist > 110 && this.livingMinions() < MAX_MINIONS) options.push('summon');

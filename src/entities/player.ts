@@ -525,7 +525,7 @@ export class Player extends Body {
     // thrown back.
     const boss = world.boss;
     if (boss && !boss.dead && boss.engaged && Math.abs(boss.cx - this.cx) < 120) {
-      boss.stagger(world);
+      boss.onParried(world);
     }
     for (const enemy of world.enemies) {
       if (enemy.dead) continue;

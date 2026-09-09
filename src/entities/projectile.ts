@@ -4,7 +4,7 @@ import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
 
-export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam';
+export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob';
 
 export class Projectile extends Body {
   friendly = false;
@@ -69,6 +69,15 @@ export class Projectile extends Body {
         this.life = 0.62;
         this.damage = 1;
         break;
+      case 'blob':
+        // Slime, spat on an arc. Slower and fatter than a bone, and worth one
+        // heart: it is the first thing in the game a player learns to bat out
+        // of the air with the blade.
+        this.w = 16;
+        this.h = 16;
+        this.life = 3;
+        this.damage = 1;
+        break;
     }
   }
 
@@ -116,6 +125,21 @@ export class Projectile extends Body {
       }
     } else if (this.kind === 'bone' || this.kind === 'rock') {
       this.vy += 900 * dt;
+    } else if (this.kind === 'blob') {
+      // Heavier than it looks, so the arc is short and readable.
+      this.vy += 1150 * dt;
+      if (world.time % 0.06 < dt) {
+        world.particles.spawn({
+          x: this.cx + rand(-4, 4),
+          y: this.cy + rand(-4, 4),
+          vx: -this.vx * 0.05,
+          vy: rand(-10, 20),
+          color: 'rgba(150,220,110,0.55)',
+          size: 2.5,
+          life: 0.3,
+          shape: 'circle',
+        });
+      }
     } else if (this.kind === 'beam') {
       // Flies flat and thins out as it goes, so its reach can be read.
       if (world.time % 0.03 < dt) {
@@ -164,6 +188,8 @@ export class Projectile extends Body {
         return '#8a7460';
       case 'beam':
         return '#bff0ff';
+      case 'blob':
+        return this.friendly ? '#bdf0a0' : '#8fd45c';
       case 'shockwave':
         return this.water ? '#9fe4dc' : '#ff9a5c';
       default:
@@ -212,6 +238,26 @@ export class Projectile extends Body {
           ctx.fill();
         }
         ctx.globalAlpha = 1;
+        ctx.restore();
+        break;
+      }
+      case 'blob': {
+        // A wobbling drop of slime, squashed along the way it is flying, with a
+        // brighter skin on top so it reads as wet rather than as a rock.
+        const wob = Math.sin(this.spin * 1.6) * 0.14;
+        glow(ctx, cx, cy, 16, 'rgba(150,225,110,0.4)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.atan2(this.vy, this.vx) * 0.35);
+        ctx.scale(1.15 + wob, 0.85 - wob);
+        ctx.fillStyle = this.friendly ? '#bdf0a0' : '#77c246';
+        ctx.beginPath();
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(220,255,190,0.75)';
+        ctx.beginPath();
+        ctx.ellipse(-2, -2.5, 3.4, 2.2, -0.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
         break;
       }
