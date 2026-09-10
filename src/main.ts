@@ -11,13 +11,24 @@ const game = new Game();
 const input = new Input();
 input.attach(window);
 
-/** Fit the canvas into the window while keeping the 16:9 logical resolution. */
+/**
+ * Fit the canvas into the window while keeping the 16:9 logical resolution.
+ *
+ * The floor used to be 0.4, which is 384 px of picture, and on anything
+ * narrower than that the canvas simply hung over both edges of the window -
+ * measured at 320 px wide, 32 px off each side, with the hearts on the left and
+ * the progress bar on the right cut away. A phone held upright is exactly that
+ * case. A small picture is worse than a big one; a cut-off picture is worse
+ * than both, so it shrinks all the way down now, and the side padding gives way
+ * first on narrow screens.
+ */
 function resize(): void {
   const frame = document.getElementById('frame') as HTMLElement;
   const legendHeight = window.innerHeight > 620 ? 70 : 24;
-  const maxW = window.innerWidth - 32;
+  const pad = window.innerWidth < 520 ? 8 : 32;
+  const maxW = window.innerWidth - pad;
   const maxH = window.innerHeight - legendHeight;
-  const scale = Math.max(0.4, Math.min(maxW / VIEW_W, maxH / VIEW_H));
+  const scale = Math.max(0.2, Math.min(maxW / VIEW_W, maxH / VIEW_H));
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   canvas.width = Math.round(VIEW_W * dpr);
   canvas.height = Math.round(VIEW_H * dpr);

@@ -3,6 +3,8 @@ import { Input } from '../core/input';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
 import { glow, shadow, slashCrescent, withHitFlash } from '../render/sprites';
+import { TILE } from '../world/tiles';
+import type { Level } from '../world/level';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
@@ -134,6 +136,12 @@ export class Player extends Body {
   chargeReady = false;
   parryTimer = 0;
   private parryCooldown = 0;
+  /**
+   * Runs while he is sinking through a one-way platform, so a tap of down and
+   * jump is enough - the platform has to stay ignored for a few frames after
+   * the keys come back up, or he lands on the same board he just left.
+   */
+  private dropTimer = 0;
   /** Decays after a successful parry, drives the flash ring. */
   parryFlash = 0;
   private attackQueued = false;
@@ -208,6 +216,7 @@ export class Player extends Body {
     this.flash = Math.max(0, this.flash - dt * 6);
     this.invuln = Math.max(0, this.invuln - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.dropTimer = Math.max(0, this.dropTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.sheathTimer = Math.max(0, this.sheathTimer - dt);
     this.parryTimer = Math.max(0, this.parryTimer - dt);
@@ -281,7 +290,37 @@ export class Player extends Body {
       if (this.vy < -280) this.vy = -280;
     }
 
-    if (!stunned && this.jumpBuffer > 0 && !this.isDashing) {
+    /*
+     * Down and jump on a one-way platform means down, not up.
+     *
+     * The control is documented and it did not work: ignorePlatforms was set
+     * correctly, but the jump fired in the same frame and carried him up
+     * through the boards above instead - measured with real key presses, the
+     * hero ended 107 px higher than he started. So on a wooden platform with
+     * down held, the jump press becomes a drop, and the platform stays ignored
+     * for a fifth of a second afterwards so a tap is enough.
+     */
+    const droppingThrough =
+      !stunned &&
+      !this.isDashing &&
+      this.jumpBuffer > 0 &&
+      input.isDown('down') &&
+      this.onGround &&
+      this.standingOnPlatform(level);
+    if (droppingThrough) {
+      this.jumpBuffer = 0;
+      this.dropTimer = 0.2;
+      this.vy = 80;
+      this.coyote = 0;
+      audio.play('jump', 0.6);
+      world.particles.burst(this.cx, this.bottom, 6, 'rgba(200,220,255,0.5)', {
+        speed: 70,
+        gravity: 200,
+        size: 3,
+      });
+    }
+
+    if (!stunned && !droppingThrough && this.jumpBuffer > 0 && !this.isDashing) {
       const grounded = this.onGround || this.coyote > 0;
       if (grounded) {
         this.vy = -JUMP_VELOCITY;
@@ -416,7 +455,7 @@ export class Player extends Body {
     }
 
     /* --------------------------------------------------------- physics */
-    this.ignorePlatforms = input.isDown('down') && input.isDown('jump');
+    this.ignorePlatforms = (input.isDown('down') && input.isDown('jump')) || this.dropTimer > 0;
     const wasFalling = this.vy;
     this.moveAndCollide(level, dt);
     if (this.touching.down && wasFalling > 420) {
@@ -483,6 +522,18 @@ export class Player extends Body {
     world.spawnProjectile(beam);
     audio.play('shoot', this.charged ? 0.8 : 1.25);
     world.particles.burst(hand.x, hand.y, 6, sharp ? '#cdf3ff' : '#a6ecdf', { speed: 120, shape: 'spark' });
+  }
+
+  /**
+   * True while his feet are on a one-way platform rather than on rock. Both
+   * questions are asked across his whole width, because a foot on stone is
+   * enough to make a drop the wrong answer.
+   */
+  private standingOnPlatform(level: Level): boolean {
+    const foot = Math.floor((this.bottom + 2) / TILE);
+    const columns = [this.x + 4, this.cx, this.x + this.w - 4].map((x) => Math.floor(x / TILE));
+    if (columns.some((tx) => level.solidAt(tx, foot))) return false;
+    return columns.some((tx) => level.platformAt(tx, foot));
   }
 
   /** Blows turned aside during the parry window fly back at their owner. */

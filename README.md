@@ -35,10 +35,24 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `J` / `K` / `X` halten | Ladeschlag — nach kurzem Aufladen ein schwerer Hieb mit dreifachem Schaden; Laufen, Springen und Rollen gehen dabei weiter |
 | `E` / `I` | Parade — fängt einen Schlag ab, wenn sie im richtigen Moment kommt |
 | `Shift` / `L` | Ausweichrolle, während der Rolle unverwundbar |
-| `↓` + Sprung | Durch eine Holzplattform nach unten fallen |
+| `↓` + Sprung | Durch eine Holzplattform nach unten fallen (auf festem Boden springt er normal) |
 | `P` / `Esc` | Pause |
 | `R` | Neustart |
 | `B` | Bildwackeln aus/an |
+
+Die Belegung wird mit **echten Tastendrücken** geprüft, nicht über die
+Eingabeschicht: `verify:combat` fährt Parade, Ladeschlag und das Durchfallen
+über dieselbe Kette, die ein Spieler benutzt. Dabei kam heraus, dass `↓` +
+Sprung nicht funktionierte — die Plattform wurde korrekt ignoriert, aber der
+Sprung feuerte im selben Bild und trug den Helden 107 px in die falsche
+Richtung. Jetzt fällt er drei Kacheln tief durch, und auf Stein springt er
+weiter.
+
+Das Bild passt sich dem Fenster an und wird dabei **kleiner statt
+abgeschnitten**. Vorher stand eine Untergrenze von 0,4 in der Skalierung: in
+einem Fenster unter 416 px Breite — ein Handy im Hochformat — hing die Leinwand
+32 px über jeden Rand hinaus, mitsamt der Herzen links und der Fortschrittsleiste
+rechts. Geprüft von 320×240 bis 2560×1440, dazu Hochformat 500×900.
 
 ## Das Level
 
@@ -510,7 +524,8 @@ unerreichbar sein, sonst wäre der Erwerb umsonst.
 locken, sterben, zurücklaufen. Das Gitter muss offen bleiben, bis der Spieler
 wieder drin ist.
 
-`verify:combat` prüft Parade und Ladeschlag am Boss. Die Parade hängt an einem
+`verify:combat` prüft Parade, Ladeschlag, was der Ritter gegen die Sichel tut,
+und das Durchfallen durch Holzplattformen. Die Parade hängt an einem
 Fenster von einer Sechstelsekunde — geht auf dem Weg dorthin ein Tastendruck
 verloren, fühlt sich das nicht schwer an, sondern kaputt.
 

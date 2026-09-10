@@ -183,6 +183,65 @@ const result = await page.evaluate(() => {
   const crescentOnGuard = crescentRun('idle');
   const crescentWhileCommitted = crescentRun('stagger');
 
+  /**
+   * Down and jump on a one-way platform: the control the README documents as
+   * "fall through a wooden platform".
+   *
+   * It did not work, and no tool had ever asked. ignorePlatforms was set from
+   * the two keys correctly, but the jump fired in the same frame and carried
+   * him up through the boards above instead - measured with real key presses,
+   * 107 px in the wrong direction. So both halves are checked here: a tap of
+   * down and jump on a platform puts him below it, and the same two keys on
+   * rock still jump, because crouching must not cost the jump.
+   */
+  const dropRun = (onPlatform) => {
+    const spot = (() => {
+      const columns = Math.ceil(g.level.pixelWidth / 32);
+      for (let tx = 6; tx < columns - 6; tx++) {
+        for (let ty = 8; ty < 18; ty++) {
+          if (onPlatform) {
+            if (!g.level.platformAt(tx, ty) || g.level.solidAt(tx, ty + 1)) continue;
+            return { tx, ty };
+          }
+        }
+        if (!onPlatform && g.level.solidAt(tx, 18) && !g.level.hazardAt(tx, 17)) return { tx, ty: 18 };
+      }
+      return null;
+    })();
+    if (!spot) return { spot: null };
+    g.state = 'playing';
+    p.x = spot.tx * 32 + 6;
+    p.y = spot.ty * 32 - p.h - 2;
+    p.vx = 0;
+    p.vy = 0;
+    p.hp = p.maxHp;
+    p.dead = false;
+    p.invuln = 9999;
+    p.hurtTimer = 0;
+    g.camera.snapTo(p.cx, p.cy);
+    for (let i = 0; i < 20; i++) tick();
+    const from = p.y;
+    let highest = p.y;
+    // A tap, not a hold: down stays down for a few frames, jump for two.
+    for (let i = 0; i < 40; i++) {
+      p.invuln = 9999;
+      tick({ down: i < 8, jump: i >= 2 && i < 4 });
+      highest = Math.min(highest, p.y);
+    }
+    // Both numbers are needed: a drop is measured by where he ends up, a jump
+    // by how high he got - after forty frames he is back on the ground and the
+    // net displacement of a jump is zero.
+    return {
+      spot,
+      from: Math.round(from),
+      to: Math.round(p.y),
+      moved: Math.round(p.y - from),
+      rose: Math.round(from - highest),
+    };
+  };
+  const droppedThroughPlatform = dropRun(true);
+  const jumpedFromRock = dropRun(false);
+
   const unparried = parryRun(false);
   const parried = parryRun(true);
   const plain = hitRun(false);
@@ -197,13 +256,20 @@ const result = await page.evaluate(() => {
       charged > plain &&
       crescentOnGuard.thrown >= 6 &&
       crescentOnGuard.damage === 0 &&
-      crescentWhileCommitted.damage > 0,
+      crescentWhileCommitted.damage > 0 &&
+      droppedThroughPlatform.moved > 24 &&
+      droppedThroughPlatform.rose < 8 &&
+      // Twenty is plenty: the two-frame tap is a cut-short jump by design
+      // (letting go early clips the rise), and it measures 39 px.
+      jumpedFromRock.rose > 20,
     unparriedDamage: unparried.damage,
     parriedDamage: parried.damage,
     knightStaggered: parried.staggered,
     plainDamage: plain,
     chargedDamage: charged,
     crescent: { onGuard: crescentOnGuard, whileCommitted: crescentWhileCommitted },
+    droppedThroughPlatform,
+    jumpedFromRock,
   };
 });
 
@@ -219,5 +285,5 @@ if (!result.ok) {
   process.exit(1);
 }
 console.log('OK: the parry turns the blow aside and staggers the knight, the charged strike hits harder, ' +
-    'and the knight bats the blade crescent out of the air while he is open but eats it while he ' +
-    'is committed.');
+    'the knight bats the blade crescent out of the air while he is open but eats it while he is ' +
+    'committed, and down plus jump drops through a plank while still jumping off rock.');
