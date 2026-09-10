@@ -156,9 +156,16 @@ const result = await page.evaluate(() => {
   p.hp = p.maxHp;
   p.dead = false;
   g.camera.snapTo(p.cx, p.cy);
+  /*
+   * Thirty seconds of being mashed with its health floored, to see whether it
+   * answers at all. Measuring that on the way to its death made it a coin toss:
+   * a fast enough player ends the fight before it has landed anything, and the
+   * check "it hurt the player at least once" then fails on luck rather than on
+   * behaviour - which is exactly what it did, one run in four.
+   */
   let sawPhaseTwo = false;
   let hurtThePlayer = 0;
-  for (let f = 0; f < 60 * 180 && !boss.dead; f++) {
+  for (let f = 0; f < 60 * 30; f++) {
     if (g.state !== 'playing') {
       tick({ confirm: true });
       continue;
@@ -168,6 +175,21 @@ const result = await page.evaluate(() => {
       p.hp = p.maxHp;
       p.dead = false;
     }
+    boss.hp = Math.max(boss.hp, 12);
+    boss.dead = false;
+    if (boss.phase === 2) sawPhaseTwo = true;
+    const d = boss.cx - p.cx;
+    tick({ right: d > 44, left: d < -44, attack: Math.abs(d) < 74 && f % 11 < 4 });
+  }
+
+  // And then, separately, it is actually fought down.
+  for (let f = 0; f < 60 * 180 && !boss.dead; f++) {
+    if (g.state !== 'playing') {
+      tick({ confirm: true });
+      continue;
+    }
+    p.hp = p.maxHp;
+    p.dead = false;
     if (boss.phase === 2) sawPhaseTwo = true;
     const d = boss.cx - p.cx;
     tick({ right: d > 44, left: d < -44, attack: Math.abs(d) < 74 && f % 11 < 4 });
@@ -187,19 +209,6 @@ const result = await page.evaluate(() => {
   // restart puts the blade back to being a sword.
   const beamTierAfterWin = p.beamTier;
 
-  // One crescent per swing, friendly, and it reaches something out of arm's
-  // reach - which is the whole point of the upgrade.
-  g.projectiles.length = 0;
-  p.attackTimer = 0;
-  p.attackCombo = 0;
-  p.facing = 1;
-  let beams = 0;
-  for (let i = 0; i < 30; i++) {
-    tick({ attack: i < 3 });
-    beams = Math.max(beams, g.projectiles.filter((q) => q.kind === 'beam').length);
-  }
-  const allFriendly = g.projectiles.filter((q) => q.kind === 'beam').every((q) => q.friendly);
-
   // Measured on the flat floor of the warden's arena: wherever the hero
   // happens to land, a wall in front of him would eat the crescent and the
   // test would be measuring the terrain instead of the upgrade.
@@ -211,8 +220,52 @@ const result = await page.evaluate(() => {
   p.facing = 1;
   g.camera.snapTo(p.cx, p.cy);
   for (let i = 0; i < 20; i++) tick();
+  /*
+   * One crescent per swing, friendly, and it reaches something out of arm's
+   * reach - which is the whole point of the upgrade.
+   *
+   * Counted as they are created rather than as they stand in the air: a
+   * crescent lives two thirds of a second, so "how many are on screen" also
+   * counts one left over from a moment ago, and the check came out at two often
+   * enough to fail on nothing.
+   */
+  g.projectiles.length = 0;
+  g.state = 'playing';
+  p.hp = p.maxHp;
+  p.dead = false;
+  p.invuln = 9999;
+  p.attackTimer = 0;
+  p.attackCombo = 0;
+  p.charged = false;
+  p.facing = 1;
+  // Let anything already in flight expire, and any hurt animation run out: a
+  // hero who is still flinching does not swing, and the count came out at zero.
+  for (let i = 0; i < 40; i++) {
+    p.invuln = 9999;
+    tick();
+  }
+  const seenBeams = new Set();
+  let beams = 0;
+  for (let i = 0; i < 30; i++) {
+    p.invuln = 9999;
+    tick({ attack: i < 3 });
+    for (const q of g.projectiles) {
+      if (q.kind !== 'beam' || seenBeams.has(q)) continue;
+      seenBeams.add(q);
+      beams++;
+    }
+  }
+  const allFriendly = [...seenBeams].every((q) => q.friendly);
+
   let sharpenedReachDamage = 0;
-  const target = g.enemies.find((e) => !e.dead && e.kind !== 'prismarch');
+  /*
+   * A skeleton put there on purpose, not whichever enemy happened to be first
+   * in the world's roster: that could be a bat, which flies off the line the
+   * crescent travels, and then the measurement was about the bat.
+   */
+  for (const e of g.enemies) if (e.kind !== 'prismarch') e.dead = true;
+  const target = g.spawnEnemyOfKind('skeleton', p.x + 130, 18 * 32);
+  target.active = true;
   const hitAtGap = (gap) => {
     target.hp = target.maxHp = 20;
     target.x = p.x + gap;
@@ -296,7 +349,7 @@ const result = await page.evaluate(() => {
       gateWithout.state === 'victory' &&
       killed &&
       sawPhaseTwo &&
-      hurtThePlayer > 0 &&
+      hurtThePlayer >= 1 &&
       true,
     dialogueLines: lines,
     worldHeldStill: heldStill,

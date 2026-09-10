@@ -177,6 +177,27 @@ export abstract class Enemy extends Body {
    * sees that. Only while standing - a knockback throws them airborne, and
    * being able to punt something into a pit is worth keeping.
    */
+  /**
+   * True when a hop of this reach would come down on nothing, or on something
+   * deadly.
+   *
+   * badStepAhead only looks at the very next step, which is the right question
+   * for a walker and the wrong one for anything that jumps: a slime passes that
+   * check standing at the rim and then lands in the pit behind it. Measured at
+   * its real place in the ruins, that is exactly what happened - three tiles of
+   * floor missing, spikes at the bottom, and one fewer slime in the level nine
+   * seconds after the run started.
+   */
+  protected badLandingAhead(world: World, dir: number, reach: number): boolean {
+    const level = world.level;
+    const x = this.cx + dir * reach;
+    if (x < 16 || x > level.pixelWidth - 16) return true;
+    if (level.groundBelow(x, this.bottom + 2, 4) > 64) return true;
+    const tx = Math.floor(x / 32);
+    const foot = Math.floor((this.bottom + 6) / 32);
+    return level.hazardAt(tx, foot) || level.hazardAt(tx, foot - 1) || level.hazardAt(tx, foot + 1);
+  }
+
   protected holdBackAtEdges(world: World): void {
     if (!this.onGround || this.vx === 0) return;
     if (this.badStepAhead(world, Math.sign(this.vx))) this.vx = 0;
@@ -246,16 +267,26 @@ export class Slime extends Enemy {
         if (this.hopTimer <= 0) {
           const chasing = Math.abs(distance) < this.aggroRange;
           this.dir = chasing ? (distance > 0 ? 1 : -1) : this.dir;
+          // Where the hop would land, not where the next step would fall: see
+          // badLandingAhead. If both ways are bad he hops on the spot.
+          const reach = chasing ? 92 : 58;
+          let vx = this.dir * (chasing ? 130 : 80);
+          if (this.badLandingAhead(world, this.dir, reach)) {
+            this.dir = (-this.dir) as 1 | -1;
+            vx = this.badLandingAhead(world, this.dir, reach) ? 0 : this.dir * 80;
+          }
           this.facing = this.dir;
           this.vy = -350;
-          this.vx = this.dir * (chasing ? 130 : 80);
+          this.vx = vx;
           this.hopTimer = chasing ? rand(0.6, 0.95) : rand(1.1, 1.8);
           world.particles.burst(this.cx, this.bottom, 5, PALETTE.slimeDark, { speed: 60, gravity: 300, size: 3 });
         }
       }
-      // Turn around at ledges and walls.
+      // Turn around at walls; the ledges are handled where the hop is decided,
+      // because that is the only place the landing spot is known.
       if (this.touching.left) this.dir = 1;
       if (this.touching.right) this.dir = -1;
+
     }
 
     this.moveAndCollide(world.level, dt);

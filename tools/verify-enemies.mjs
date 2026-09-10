@@ -274,20 +274,97 @@ const result = await page.evaluate(() => {
       other.hp = other.maxHp = 30;
     }
     for (let i = 0; i < 20; i++) tick();
+    /*
+     * Two numbers, not one: the same scene without the blast, and then with it.
+     * What this is guarding against is real - on the code it was written for,
+     * every sprite caught in the blast wore a canvas filter, and each filtered
+     * draw made the browser allocate a view-sized layer: 0.4 ms became 63.7.
+     *
+     * But it has to be measured properly, and the first version was not. The
+     * single worst frame of a six-thousand-frame headless run is a garbage
+     * collection pause, not a cost of the blast: measured, the same 60-90 ms
+     * outlier turned up in the quiet stretch just as often as in the loud one,
+     * and three identical explosions after a warm-up came out at 9 to 15 ms
+     * with a median under 7. So the second-worst frame is taken instead of the
+     * worst, which drops that one pause and keeps everything the blast does,
+     * and it is compared against the same figure from the quiet stretch.
+     */
+    const timedFrames = (frames) => {
+      const times = [];
+      for (let f = 0; f < frames; f++) {
+        p.invuln = 9999;
+        p.hp = p.maxHp;
+        const t0 = performance.now();
+        tick();
+        times.push(performance.now() - t0);
+      }
+      times.sort((a, b) => b - a);
+      return { worst: +times[0].toFixed(1), second: +times[1].toFixed(1), median: +times[Math.floor(frames / 2)].toFixed(1) };
+    };
+    timedFrames(90); // warm-up, thrown away
+    const quiet = timedFrames(60);
     z.hp = 1;
     z.hurt(5, 1, g);
-    let worst = 0;
-    for (let f = 0; f < 90; f++) {
-      p.invuln = 9999;
+    const burst = timedFrames(90);
+    out.quietFrameMs = quiet;
+    out.burstFrameMs = burst;
+    out.burstWorstFrameMs = burst.second;
+    out.burstFrameCostFactor = +(burst.second / Math.max(0.2, quiet.second)).toFixed(1);
+  }
+
+  /*
+   * And the oldest enemy in the game: a slime hops, and a hopper that only
+   * checks the step in front of it clears its own edge test and lands in the
+   * pit behind it. Measured at its real place in the ruins - three tiles of
+   * floor missing, spikes at the bottom - one slime was gone from the level
+   * nine seconds into the run, before the player could ever have met it. So it
+   * is put on the rim of a real hole here, facing it, and has to still be there
+   * afterwards.
+   */
+  {
+    const hole = (() => {
+      // A tile with floor whose neighbour two along has none: the rim of
+      // something a hop would end in.
+      for (let tx = 8; tx < Math.ceil(g.level.pixelWidth / 32) - 8; tx++) {
+        const solid = (x, y) => g.level.solidAt(x, y);
+        if (!solid(tx, 18) || solid(tx - 2, 18) || solid(tx - 3, 18)) continue;
+        if (!solid(tx + 1, 18)) continue;
+        return tx;
+      }
+      return null;
+    })();
+    out.slimeOnTheRim = { rimTile: hole, survived: false, drifted: 0 };
+    if (hole !== null) {
+      for (const e of g.enemies) e.dead = true;
+      g.enemies.length = 0;
+      g.projectiles.length = 0;
+      g.state = 'playing';
+      // The hero stands well clear and untouchable: this measures the slime.
+      p.x = (hole + 8) * 32;
+      p.y = 17 * 32 - p.h;
+      p.vx = 0;
+      p.vy = 0;
       p.hp = p.maxHp;
-      const t0 = performance.now();
-      tick();
-      worst = Math.max(worst, performance.now() - t0);
+      p.dead = false;
+      p.invuln = 9999;
+      g.camera.snapTo(p.cx, p.cy);
+      const slime = g.spawnEnemyOfKind('slime', hole * 32, 18 * 32);
+      slime.active = true;
+      slime.dir = -1;
+      const startX = slime.x;
+      for (let i = 0; i < 60 * 9 && !slime.dead; i++) {
+        p.invuln = 9999;
+        slime.dir = slime.dir;
+        tick();
+      }
+      out.slimeOnTheRim.survived = !slime.dead;
+      out.slimeOnTheRim.drifted = Math.round((slime.x - startX) / 32);
     }
-    out.burstWorstFrameMs = +worst.toFixed(1);
   }
 
   out.ok =
+    out.slimeOnTheRim.rimTile !== null &&
+    out.slimeOnTheRim.survived &&
     out.bomberWalksAndBursts.litItself &&
     out.bomberWalksAndBursts.exploded &&
     out.bomberWalksAndBursts.heartsLost > 0 &&
@@ -305,7 +382,11 @@ const result = await page.evaluate(() => {
     out.chargerRuns.heartsLost > 0 &&
     out.chargerDazedOnWall.dazed &&
     out.chargerDazedOnWall.damageFromTwo === 4 &&
-    out.burstWorstFrameMs < 16.67;
+    // Inside the frame budget, and no worse than twice a quiet frame - the
+    // second condition is what still catches the fault on a machine so busy
+    // that 16.67 ms means nothing.
+    out.burstWorstFrameMs < 16.67 &&
+    out.burstFrameCostFactor < 2.5;
   return out;
 });
 

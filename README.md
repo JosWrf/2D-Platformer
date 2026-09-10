@@ -218,6 +218,15 @@ Angriffstaste nicht schafft. Von vorn stirbt jeder Hieb im Schild, die
 Klingenwelle inbegriffen. Hinten herum trifft alles — und ein parierter
 Lanzenstoß reißt ihm den Schild für knapp zwei Sekunden herunter.
 
+Der **Schleim** hüpft stur geradeaus, dreht aber an Kanten um. Diese zweite
+Hälfte fehlte lange: sein Kommentar behauptete sie, geprüft wurde nur auf
+Wände, und ein Kantencheck auf den nächsten Schritt ist für einen Springer die
+falsche Frage — er besteht ihn am Rand stehend und landet in der Grube dahinter.
+Gemessen an seinem echten Platz in den Ruinen (drei Kacheln Boden fehlen,
+Stacheln darunter) war einer neun Sekunden nach Laufbeginn weg, bevor der
+Spieler ihn je gesehen hätte. Jetzt wird der **Landeplatz** geprüft, und wenn es
+in beide Richtungen schlecht aussieht, hüpft er auf der Stelle.
+
 Der **Klingenläufer** ist der einzige, den das Level selbst erledigt: er gräbt
 sich ein, stürmt los, und wer sich vor einer Wand wegdreht, sieht ihn dagegen
 laufen. Danach steht er anderthalb Sekunden benommen da und nimmt doppelten
@@ -480,6 +489,7 @@ npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wa
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
+npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
@@ -530,6 +540,18 @@ die andere Hälfte, und die gehört dem Prismarchen. Und der Held läuft einmal 
 ihr vorbei, ohne zu kämpfen — das muss gehen, und es darf höchstens drei Herzen
 kosten.
 
+`verify:chain` läuft die ganze Belohnungskette in **einem** Lauf durch, ohne
+Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 157
+Edelsteine → Kristallhort → Prismarch → Klingenwelle → zurück in die Welt →
+der Ritter (92 TP, pariert die Sicheln) → Siegel → Tor → Sieg. Jedes Glied
+prüft ein anderes Werkzeug für sich; dieses prüft die **Gelenke**, und die sieht
+sonst niemand an: dass das siebte Herz einen Tod und einen Teleport übersteht,
+dass die Klinge ihre Stufe dabei behält, dass ein gefallener Boss liegen bleibt
+während der Lauf weitergeht, dass der Held den Hort dort verlässt, wo er
+weggeholt wurde, und dass der Lauf danach noch zu beenden ist. Gelaufen wird
+darin nicht — dafür sind `verify:level` und `verify:ending` da —, gekämpft
+schon, denn die Belohnungen hängen an den Kämpfen.
+
 `verify:enemies` stellt die drei neuen Typen einzeln auf ebenen Boden und prüft
 je die Sache, für die sie da sind: der Zunder zündet von selbst **und** beim
 Erschlagen aus einem Meter (2 Herzen), aus der Ferne erschlagen kostet nichts,
@@ -538,11 +560,23 @@ und Nachbarn nimmt er mit (3 Schaden). Am Schild von vorn kommt 0 an, von hinten
 an der Wand benommen — wo zwei Schaden zu vier werden. Die Wandprobe steht in der
 Kristallhalle, weil das die einzige Stelle mit einer Wand vom Boden bis zur
 Decke ist; die Arenen sind offener Boden, und ein Sturm über offenen Boden
-landet nie. Zuletzt: eine Explosion darf kein Bild kosten. Der Treffer-Blitz ist
-ein Canvas-Filter, jeder Gegner in der Druckwelle trägt einen, und jeder
-gefilterte Zug lässt den Browser eine Ebene in voller Bildgröße anlegen —
-gemessen 97 ms je Bild, sechs hintereinander, bei jeder Explosion. Erlaubt sind
-16,67 ms, gemessen werden 5,7.
+landet nie. Und der Schleim muss auf der Kante einer echten Grube stehen bleiben
+können, statt hineinzuhüpfen.
+
+Zuletzt: eine Explosion darf kein Bild kosten. Der Treffer-Blitz ist ein
+Canvas-Filter, jeder Gegner in der Druckwelle trägt einen, und jeder gefilterte
+Zug lässt den Browser eine Ebene in voller Bildgröße anlegen — gemessen 97 ms je
+Bild, sechs hintereinander, bei jeder Explosion.
+
+Diese Messung war selbst falsch gebaut und ist nachgebessert: das **schlechteste**
+Bild eines Lauf über sechstausend Bilder ist eine Speicherbereinigung, keine
+Explosion. Der Ausschlag von 60–90 ms tauchte in der ruhigen Strecke genauso auf
+wie in der lauten, und drei identische Explosionen nach einem Warmlauf lagen bei
+9 bis 15 ms mit einem Median unter 7. Genommen wird jetzt das **zweitschlechteste**
+Bild, verglichen mit derselben Zahl aus der ruhigen Strecke: erlaubt sind
+16,67 ms und höchstens der doppelte Ruhewert, gemessen werden 8–14 ms und Faktor
+0,7 bis 1,3. Mit wieder eingebautem Fehler sind es 24 ms und Faktor 2,7 — das
+Werkzeug fällt also weiter durch, wenn der Fehler zurückkommt.
 
 `verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft
