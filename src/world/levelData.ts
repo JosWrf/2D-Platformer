@@ -147,7 +147,7 @@ const FOREST_LAVA = c(40, [
 /**
  * The bog at the end of the forest, and Gallert in it. Flat ground, two steps
  * to dodge onto, a checkpoint and a heart on the way in - and no gems, so the
- * count of 157 in the rest of the world stays the count it always was.
+ * count in the rest of the world stays the count it always was.
  */
 const FOREST_MIRE = c(40, [
   '........................................',
@@ -642,6 +642,73 @@ const RIFT_ASCENT = c(40, [
   '===========....==========....===========',
 ]);
 
+/**
+ * The mouth of her chamber: a checkpoint, a heart, and a long look at what is
+ * waiting. Nothing else - the fight behind it is long enough.
+ */
+const HYDRA_APPROACH = c(40, [
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '........................................',
+  '..............$$$.......................',
+  '............-------.....................',
+  '........................................',
+  '..C...H..T....................T.........',
+  '========================================',
+  '========================================',
+  '========================================',
+  '========================================',
+]);
+
+/**
+ * Her shaft. The floor is the arena for four of her five heads; the fifth
+ * withdraws to the top of the tower, and the only way to it is up.
+ *
+ * The steps wind back across the shaft and every one of them overlaps the one
+ * below, so the climb is a climb rather than a series of guesses - verify:level
+ * checks exactly that, and a tower of unreachable islands would fail it.
+ *
+ * The top step ends just short of her: the storm head hangs off its right edge,
+ * in blade reach from solid ground up there and from nowhere on the floor. It
+ * deliberately stops short rather than running under the head - a hole to stand
+ * beside is a hole to fall down, and from up there it is thirteen tiles deep.
+ */
+const HYDRA_SHAFT = c(44, [
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............--------........................',
+  '............................................',
+  '......-------...............................',
+  '............................................',
+  '...........-------..........................',
+  '............................................',
+  '................-------.....................',
+  '............................................',
+  '.....................-------................',
+  '............................................',
+  '..........................-------...........',
+  '............................................',
+  '..T.................Z..................T....',
+  '============================================',
+  '============================================',
+  '============================================',
+  '============================================',
+]);
+
 /** The climb to the gate home. */
 const RIFT_SHRINE = c(40, [
   '........................................',
@@ -722,6 +789,8 @@ export const LEVEL_CHUNKS: Chunk[] = [
   RIFT_HOLLOW,
   RIFT_WARDEN,
   RIFT_ASCENT,
+  HYDRA_APPROACH,
+  HYDRA_SHAFT,
   RIFT_SHRINE,
   CRYSTAL_HALL,
 ];

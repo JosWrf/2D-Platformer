@@ -302,6 +302,9 @@ const result = await page.evaluate(() => {
     g.level.exitSealed = false;
     g.bossDefeated = true;
     if (g.boss) g.boss.dead = true;
+    // The hydra in the shaft holds the gate shut; her fight is verify:hydra's
+    // business, and this run is about which door the gate opens.
+    for (const e of g.enemies) if (e.kind === 'hydra') e.dead = true;
     if (all) {
       for (const q of g.pickups.filter((x) => x.kind === 'gem')) {
         q.dead = true;

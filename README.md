@@ -56,7 +56,7 @@ rechts. Geprüft von 320×240 bis 2560×1440, dazu Hochformat 500×900.
 
 ## Das Level
 
-Ein durchgehendes Level aus 974 Kacheln (31 168 px) in sieben Zonen, plus eine
+Ein durchgehendes Level aus 1058 Kacheln (33 856 px) in sieben Zonen, plus eine
 achte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime, und am Ende das Moor mit
@@ -67,10 +67,10 @@ achte hinter der Welt, die man sich verdienen muss:
    dunkle Magier im Kirchenschiff, und im Chor Thalassa, die den Boden aufmacht
 5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
 6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
-7. **Der Riss** — was hinter dem Thron aufbricht: 244 Kacheln violettes Gestein
-   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, am Ende
-   das Tor nach Hause
-8. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 157 Edelsteine
+7. **Der Riss** — was hinter dem Thron aufbricht: 328 Kacheln violettes Gestein
+   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, danach der
+   Schacht der Fünfkronigen, und dahinter das Tor nach Hause
+8. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 160 Edelsteine
    eingesammelt sind. Acht leere Spalten trennen ihn vom Riss; kein Sprung
    überbrückt die, das ist Absicht.
 
@@ -79,7 +79,8 @@ bei vollem Leben bleiben sie liegen, statt sich an nichts zu verbrauchen.
 
 Der Fall des Ritters ist nicht das Ende: Er bricht das Siegel hinter dem Thron
 auf. Gewonnen ist der Lauf erst am Tor am anderen Ende des Risses — und dazwischen
-steht der Splitterwächter.
+stehen der Splitterwächter und, unmittelbar davor, die Fünfkronige. Das Tor
+bleibt zu, solange sie lebt, und sagt das auch, statt den Helden zu ignorieren.
 
 Wen das Bildwackeln bei Treffern stört, schaltet es mit `B` ab — jederzeit, auch
 im Titelbild und in der Pause. Das beruhigt zugleich das Sporenfeld in allen
@@ -372,11 +373,11 @@ Kanone: eine je Hieb, und sie ist nach einem knappen halben Herzschlag weg.
 | --- | --- | --- | --- |
 | Schwert allein | von Anfang an | 40 px | 1 / 2 in der Kombo / 3 geladen |
 | **Flutklinge** | Thalassa fällt — bei knapp der Hälfte des Levels | 145 px | 1, geladen 2 |
-| **Klingenwelle** | Prismarch fällt — hinter allen 157 Edelsteinen | 273 px | 1 / 2 / 3 wie der Hieb |
+| **Klingenwelle** | Prismarch fällt — hinter allen 160 Edelsteinen | 273 px | 1 / 2 / 3 wie der Hieb |
 
 ![Flutklinge](screenshots/20-flutklinge.png)
 
-Vorher hing das ganze Upgrade am Prismarchen. Das heißt: man musste alle 157
+Vorher hing das ganze Upgrade am Prismarchen. Das heißt: man musste alle 160
 Edelsteine finden, um es überhaupt zu sehen — und hatte dann nur noch den letzten
 Rest der Welt, um damit zu spielen. Die Hälfte kommt jetzt zur Halbzeit, der
 Prismarch schärft, was schon da ist. Die zwei Stufen sehen auch verschieden aus:
@@ -398,7 +399,7 @@ Belohnung, für die man die ganze Welt abgesucht hat.
 
 ### Der Bonusboss: Prismarch, Herz des Kristalls
 
-Wer alle 157 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
+Wer alle 160 Edelsteine findet, hält an Ort und Stelle an: eine Stimme aus dem
 Stein meldet sich, fünf Zeilen lang, und wer sie zu Ende gelesen hat, steht im
 Kristallhort. Es gibt zwei Türen dorthin — der volle Zähler öffnet sie sofort,
 und wer trotzdem am Tor im Riss ankommt, wird dort hinübergeschickt statt den
@@ -422,6 +423,49 @@ einen anderen Satz.
 
 Das Tor im Riss beendet den Lauf wie immer — der Siegbildschirm nennt dann das
 wahre Ende, wenn das Herz gefallen ist.
+
+### Der Endboss: Die Fünfkronige
+
+Am Ende des Risses, im Schacht vor dem Tor. Fünf Köpfe, fünf Phasen, und ein
+Kopf nach dem anderen: 70 Trefferpunkte, gleichmäßig auf die fünf verteilt —
+mehr, wenn die Klinge schon wirft, siehe *Bosse nehmen die Klinge zur Kenntnis*.
+Was die Leiste zeigt, ist immer nur der lebende; fällt er, kommt der nächste
+hoch, und erst der fünfte beendet sie.
+
+Getroffen wird auch nur er. Ihr Leib und die Köpfe, die noch warten, sind keine
+Ziele, in beide Richtungen: In sie hineinzulaufen kostet nichts.
+
+| Kopf | Was er fragt |
+| --- | --- |
+| **GIFT** | Wirft drei Gallen, die als Pfützen liegen bleiben und weiterfressen. Am Boden kämpfen, aber nicht stehen bleiben. |
+| **FLAMME** | Ein Atem die Bodenreihe entlang, knapp elf Kacheln weit. Die Antwort ist Höhe. |
+| **STURM** | Sie zieht sich auf die Spitze ihres Turms zurück — 430 px hoch. |
+| **STEIN** | Die Umkehrung: Sie kommt herunter und fegt den Boden, während die Stufen Geröll abbekommen. |
+| **KRONE** | Der letzte Kopf hängt so hoch, dass ein Hieb aus dem Stand darunter durchgeht. Er benutzt die anderen vier, schneller hintereinander. |
+
+Die dritte Phase ist der Grund, warum der Schacht so aussieht, wie er aussieht.
+430 px sind außer Reichweite — für das Schwert ohnehin, aber auch für die
+Klingenwelle, die waagerecht fliegt. Gemessen statt geschätzt: Zwanzig Sekunden
+lang springt und wirft ein unverwundbarer Held mit der schärfsten Klinge des
+Spiels vom Boden aus auf sie ein, und die Klinge kommt 373 px zu kurz. Der Kopf
+verliert nichts. Der einzige Weg dorthin sind die sechs Stufen, die quer durch
+den Schacht nach oben führen, durch das Geröll und die Böen, die schieben,
+solange der Held in der Luft ist.
+
+Die oberste Stufe hört **kurz vor** ihr auf, statt unter ihr durchzulaufen: Der
+Sturmkopf hängt über der Kante, in Reichweite vom festen Boden aus. Ein Loch,
+neben dem man stehen muss, ist ein Loch, in das man fällt, und von dort oben
+geht es dreizehn Kacheln tief.
+
+| | |
+| --- | --- |
+| ![Die Fünfkronige](screenshots/23-fuenfkronige.png) | ![Der Aufstieg](screenshots/24-der-aufstieg.png) |
+
+`verify:hydra` fährt das alles ab: fünf Köpfe der Reihe nach, Leib und wartende
+Köpfe als Nicht-Ziele, jede Ankündigung mindestens 0,6 s lang, der Sturmkopf
+unerreichbar von unten und in Sekunden erledigt von oben, jede der sechs Stufen
+auf echter Physik erklommen, eine Parade, die sie bricht, und ein Lauf, der sie
+am Ende wirklich umlegt.
 
 ### Der Miniboss: Splitterwächter
 
@@ -478,6 +522,7 @@ z  Zunder        w  Schildwache  r  Klingenläufer   Q  Gallert (Boss)
 $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
 W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
+Z  Die Fünfkronige (Endboss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
@@ -502,9 +547,11 @@ npm run verify:thalassa # ihre Züge, die Springflut, ihr Fall und die Flutkling
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
+npm run verify:hydra   # fünf Köpfe, fünf Phasen — und ist der Sturmkopf nur oben zu erreichen?
 npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
 npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
+npm run suite          # breite Reihe: Zustände, Eingabe, Pickups, Bildzeit je Zone
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
@@ -556,7 +603,7 @@ ihr vorbei, ohne zu kämpfen — das muss gehen, und es darf höchstens drei Her
 kosten.
 
 `verify:chain` läuft die ganze Belohnungskette in **einem** Lauf durch, ohne
-Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 157
+Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 160
 Edelsteine → Kristallhort → Prismarch → Klingenwelle → zurück in die Welt →
 der Ritter (92 TP, pariert die Sicheln) → Siegel → Tor → Sieg. Jedes Glied
 prüft ein anderes Werkzeug für sich; dieses prüft die **Gelenke**, und die sieht
@@ -596,11 +643,24 @@ Werkzeug fällt also weiter durch, wenn der Fehler zurückkommt.
 `verify:ending` fährt den letzten Abschnitt ab: ein Bot reist mit echter Physik
 durch den Riss bis zum Tor, und danach berührt der Held das Tor und läuft
 weiter. Beides muss im Sieg enden. Der Riss stand vorher nur im statischen
-Modell von `verify:level`, das keine Sprungbögen kennt.
+Modell von `verify:level`, das keine Sprungbögen kennt. Und davor die
+Gegenprobe: Solange die Fünfkronige lebt, muss das Tor den Helden abweisen und
+ihm auch sagen, warum — eine Tür, die einen ignoriert, liest sich als kaputt.
 
 `verify:warden` stellt den Splitterwächter auf drei Entfernungen und prüft, dass
 er jeweils den passenden Zug wählt — und dass er gegen jemanden, der nur die
 Angriffstaste hält, überhaupt zum Zug kommt.
+
+`verify:hydra` ist das Werkzeug für den letzten Kampf, und die Prüfung, an der
+der ganze Entwurf hängt, ist eine Messung: Der Sturmkopf muss vom Boden aus
+unerreichbar sein und von der obersten Stufe aus in Sekunden fallen. Dazwischen
+klettert derselbe Bot die sechs Stufen mit echter Physik hoch — nicht als
+Sichtprüfung der ASCII-Kunst, sondern als Landung auf jeder einzelnen.
+
+`npm run suite` ist die breite Reihe daneben: Zustandsautomat, Tastenbelegung,
+Pickups, Gefahren, Bildzeit in jeder Zone (inzwischen auch im Schacht der
+Fünfkronigen) und zwei Minuten Dauerkampf, in denen weder die Gegnerliste noch
+die Partikel noch die Projektile wachsen dürfen.
 
 `verify:bonus` fährt den ganzen Bonusweg ab: den letzten Edelstein wirklich
 aufsammeln, den Dialog lesen (und prüfen, dass die Welt dabei steht), im Hort

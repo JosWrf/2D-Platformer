@@ -35,6 +35,7 @@ export type SpawnKind =
   | 'shieldman'
   | 'charger'
   | 'gallert'
+  | 'hydra'
   | 'warden'
   | 'thalassa'
   | 'prismarch'
@@ -78,6 +79,7 @@ export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
   w: 'shieldman',
   r: 'charger',
   Q: 'gallert',
+  Z: 'hydra',
   W: 'warden',
   K: 'prismarch',
   Y: 'thalassa',

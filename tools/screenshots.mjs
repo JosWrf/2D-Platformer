@@ -159,7 +159,13 @@ await open('?x=6');
 const marken = await page.evaluate(() => {
   const spawns = window.game.level.spawns;
   const at = (kind) => spawns.find((s) => s.kind === kind)?.tx ?? 0;
-  return { boss: at('boss'), gallert: at('gallert'), thalassa: at('thalassa'), portal: at('portal') };
+  return {
+    boss: at('boss'),
+    gallert: at('gallert'),
+    thalassa: at('thalassa'),
+    hydra: at('hydra'),
+    portal: at('portal'),
+  };
 });
 await step(30);
 await step(50, { right: true });
@@ -417,10 +423,92 @@ await release('right');
 await step(10);
 await shot('17-der-riss');
 
-/* 17 — the gate home ------------------------------------------------------ */
-await open(`?x=${marken.portal - 135}`);
+/* 16b — Die Fünfkronige, mid-breath --------------------------------------- */
+await open(`?x=${marken.hydra - 9}`);
+await step(30);
+results.hydraBreath = await page.evaluate(() => {
+  const g = window.game;
+  const p = g.player;
+  const h = g.enemies.find((e) => e.kind === 'hydra');
+  p.x = h.cx - 230;
+  p.y = h.bottom - p.h;
+  p.vx = 0;
+  p.vy = 0;
+  g.camera.snapTo(p.cx + 90, p.cy - 40);
+  h.engaged = true;
+  // The flame head, halfway down a breath: the picture that says what she is.
+  h.head = 1;
+  h.heads[0].dead = true;
+  h.heads[0].hp = 0;
+  h.state = 'act';
+  h.timer = 3;
+  h.glow = 1;
+  h.breathDir = -1;
+  h.breath = 0.62;
+  p.invuln = 999;
+  return { head: h.living.kind, phase: h.phase };
+});
+await step(2);
+await shot('23-fuenfkronige');
+
+/* 16c — the climb, during the storm phase --------------------------------- */
+await open(`?x=${marken.hydra - 9}`);
+await step(30);
+results.hydraClimb = await page.evaluate(() => {
+  const g = window.game;
+  const p = g.player;
+  const TILE = 32;
+  const h = g.enemies.find((e) => e.kind === 'hydra');
+  h.engaged = true;
+  h.head = 2;
+  for (let i = 0; i < 2; i++) {
+    h.heads[i].dead = true;
+    h.heads[i].hp = 0;
+  }
+  h.state = 'recover';
+  h.timer = 3;
+  h.glow = 0.8;
+  // Third step from the bottom, read out of the level rather than assumed.
+  const spans = [];
+  for (let ty = 1; ty < g.level.height; ty++) {
+    let run = null;
+    for (let tx = Math.floor((h.cx - 700) / TILE); tx <= Math.floor((h.cx + 700) / TILE); tx++) {
+      if (g.level.platformAt(tx, ty)) {
+        if (!run) run = { ty, x0: tx, x1: tx };
+        else run.x1 = tx;
+      } else if (run) {
+        spans.push(run);
+        run = null;
+      }
+    }
+    if (run) spans.push(run);
+  }
+  spans.sort((a, b) => b.ty - a.ty);
+  const step3 = spans[2];
+  p.x = (step3.x0 + 1) * TILE;
+  p.y = step3.ty * TILE - p.h;
+  p.vx = 0;
+  p.vy = 0;
+  p.invuln = 999;
+  g.camera.snapTo(p.cx + 40, p.cy);
+  h.markDrops(g, [p.cx + 30, h.cx - 120, h.cx + 150], 1.6);
+  return { head: h.living.kind, row: step3.ty };
+});
 await step(40);
-await step(46, { right: true });
+await shot('24-der-aufstieg');
+
+/* 17 — the gate home ------------------------------------------------------ */
+// Within sight of the gate rather than a hundred tiles short of it: the view is
+// 960 px wide, so nine tiles back puts the door in frame with room to walk at
+// it - and not so close that the shot walks into it and ends the run.
+await open(`?x=${marken.portal - 9}`);
+// The gate is hers until the last head falls; these two shots are about the
+// door, so she is taken off the board rather than fought here.
+await page.evaluate(() => {
+  for (const e of window.game.enemies) if (e.kind === 'hydra') e.dead = true;
+});
+await step(40);
+await step(20, { right: true });
 await release('right');
 await step(10);
 await shot('18-das-tor');
@@ -428,6 +516,7 @@ await shot('18-das-tor');
 /* 18 — victory ------------------------------------------------------------ */
 await page.evaluate(() => {
   const g = window.game;
+  for (const e of g.enemies) if (e.kind === 'hydra') e.dead = true;
   g.player.x = g.portal.cx - 8;
   g.player.y = g.portal.y + 10;
 });

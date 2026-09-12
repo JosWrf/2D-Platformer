@@ -8,6 +8,7 @@ import {
   Enemy,
   EnemyKind,
   Gallert,
+  Hydra,
   Prismarch,
   Thalassa,
   Warden,
@@ -52,6 +53,15 @@ interface SpawnRecord {
   x: number;
   y: number;
 }
+
+/** What each of her heads is called on the health bar. */
+const HEAD_NAMES: Record<string, string> = {
+  venom: 'GIFT',
+  flame: 'FLAMME',
+  storm: 'STURM',
+  stone: 'STEIN',
+  crown: 'KRONE',
+};
 
 export class Game implements World {
   readonly level = new Level();
@@ -153,6 +163,7 @@ export class Game implements World {
         case 'shieldman':
         case 'charger':
         case 'gallert':
+        case 'hydra':
         case 'warden':
         case 'thalassa':
         case 'prismarch':
@@ -332,6 +343,25 @@ export class Game implements World {
     };
   }
 
+  /** The one fight on the road that cannot be walked past - see the portal. */
+  private get hydraStillGuarding(): boolean {
+    return this.enemies.some((e) => e instanceof Hydra && !e.dead);
+  }
+
+  /**
+   * The hydra's last head comes off, and the gate home unseals. She is the end
+   * of the road rather than an optional fight, so instead of a portcullis
+   * behind the hero she holds the one thing he came for.
+   */
+  onHydraDefeated(): void {
+    if (this.state !== 'playing') return;
+    this.score += 3000;
+    this.flashWhite = 1;
+    this.camera.addShake(10);
+    audio.play('victory');
+    this.zoneBanner = { text: 'DAS TOR IST OFFEN', timer: 4.2 };
+  }
+
   /**
    * Gallert comes apart, at the end of the forest, and leaves the core that
    * held him together. It is worth a heart: six become seven for the rest of
@@ -378,9 +408,9 @@ export class Game implements World {
    * blade: from here every swing throws a short crescent of water ahead of it.
    *
    * The upgrade used to hang entirely off the Prismarch, which meant a player
-   * had to find all 157 gems to ever see it - and then had the last stretch of
-   * the world left to use it on. Half of it now comes at the halfway mark, and
-   * the Prismarch sharpens what is already there.
+   * had to find every gem in the world to ever see it - and then had the last
+   * stretch of the world left to use it on. Half of it now comes at the halfway
+   * mark, and the Prismarch sharpens what is already there.
    */
   onDrownedCrownDefeated(): void {
     if (this.player.beamTier > 0 || this.state !== 'playing') return;
@@ -486,6 +516,15 @@ export class Game implements World {
   /** Reaching the gate home is what actually finishes the run. */
   onPortalReached(): void {
     if (this.victoryTimer > 0 || this.state !== 'playing') return;
+    if (this.hydraStillGuarding) {
+      // The gate is shut while she lives, and it says so rather than simply
+      // doing nothing - a door that ignores you reads as broken.
+      if (this.zoneBanner.timer <= 0) {
+        this.zoneBanner = { text: 'VERSIEGELT, SOLANGE DIE FÜNFKRONIGE LEBT', timer: 2.6 };
+        audio.play('hurt', 0.6);
+      }
+      return;
+    }
     // A second door into the crystal hall. The gate is where a player who has
     // everything goes looking for the reward, so it has to lead there too -
     // and it means the whole bonus never hangs on one trigger firing.
@@ -1242,6 +1281,25 @@ export class Game implements World {
           maxHp: prism.maxHp,
           ghost: prism.hp,
           phase: prism.phase,
+        },
+        0,
+      );
+      return;
+    }
+
+    const hydra = this.enemies.find((e): e is Hydra => e instanceof Hydra && e.engaged && !e.dead);
+    if (hydra) {
+      const head = hydra.living;
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `DIE FÜNFKRONIGE   ·   KOPF ${hydra.phase} VON 5   ·   ${HEAD_NAMES[head.kind]}`,
+          hp: head.hp,
+          maxHp: head.maxHp,
+          ghost: head.hp,
+          phase: hydra.phase,
         },
         0,
       );

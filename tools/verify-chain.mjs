@@ -154,7 +154,40 @@ const out = await page.evaluate(() => {
   for (let i = 0; i < 60 * 5; i++) t();
   melde('Siegel', { ritterTot: g.boss.dead, siegelOffen: !g.level.exitSealed, sekunden: +(f2 / 60).toFixed(1), zustand: g.state });
 
-  /* 8. Tor */
+  /* 8. Die Fünfkronige: sie hält das Tor zu, bis der letzte Kopf fällt */
+  const hydraKachel = spawnKachel('hydra');
+  hinsetzen(hydraKachel - 5, 17);
+  for (let f = 0; f < 60 * 3; f++) { p.hp = p.maxHp; t(); }
+  const hydra = () => g.enemies.find((e) => e.kind === 'hydra' && !e.dead);
+  const geweckt = !!hydra()?.engaged;
+  // Am Tor stehen, solange sie lebt: der Lauf darf hier nicht enden.
+  const tor0 = spawnKachel('portal');
+  hinsetzen(tor0 - 1, 17);
+  for (let f = 0; f < 60 * 3 && g.state === 'playing'; f++) { p.hp = p.maxHp; t(); }
+  const torZuBeiIhr = g.state === 'playing' && g.victoryTimer === 0;
+  // Die Köpfe der Reihe nach: der Kampf selbst steht in verify:hydra, hier zählt
+  // nur, dass ihr Fall das Tor aufmacht.
+  hinsetzen(hydraKachel - 5, 17);
+  let koepfe = 0, hf = 0;
+  for (; hf < 60 * 40 && hydra(); hf++) {
+    p.hp = p.maxHp; p.dead = false; p.invuln = 999;
+    const h = hydra();
+    const vorher = h.phase;
+    h.hurt(4, 1, g);
+    if (h.phase !== vorher) koepfe++;
+    t();
+  }
+  melde('Fünfkronige', {
+    geweckt,
+    torZuBeiIhr,
+    gefallen: !hydra(),
+    koepfe,
+    sekunden: +(hf / 60).toFixed(1),
+    herzen: p.maxHp,
+    stufe: p.beamTier,
+  });
+
+  /* 9. Tor */
   const tor = spawnKachel('portal');
   hinsetzen(tor - 4, 17);
   for (let f = 0; f < 60 * 12 && g.state === 'playing'; f++) { p.hp = p.maxHp; t({ right: true }); }
@@ -173,6 +206,7 @@ const hall = step('Kristallhort');
 const prismarch = step('Prismarch');
 const knight = step('Ritter');
 const seal = step('Siegel');
+const hydra = step('Fünfkronige');
 const gate = step('Tor');
 
 const ok =
@@ -210,6 +244,13 @@ const ok =
   // And the run can still be finished.
   seal.ritterTot === true &&
   seal.siegelOffen === true &&
+  // Und das Tor gehört ihr, bis der fünfte Kopf fällt.
+  hydra.geweckt === true &&
+  hydra.torZuBeiIhr === true &&
+  hydra.gefallen === true &&
+  hydra.koepfe === 4 &&
+  hydra.herzen === 7 &&
+  hydra.stufe === 2 &&
   gate.zustand === 'victory' &&
   gate.wahresEnde === true &&
   gate.herzen === 7 &&

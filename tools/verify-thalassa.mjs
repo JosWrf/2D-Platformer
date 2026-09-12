@@ -437,8 +437,8 @@ const result = await page.evaluate(() => {
 
   /*
    * The Flutklinge, the first tier of the blade upgrade. It used to hang
-   * entirely off the Prismarch, which meant finding all 157 gems and then
-   * having only the last stretch of the world left to use it on. Half of it
+   * entirely off the Prismarch, which meant finding every gem in the world and
+   * then having only the last stretch of it left to use the blade on. Half of it
    * comes from her now, at the middle of the run.
    */
   const rewardDialogue = !!g.dialogue;

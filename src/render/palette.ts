@@ -201,7 +201,7 @@ export const ZONES: Zone[] = [
   {
     name: 'crystalworld',
     // Behind the rift, reached only by teleport. Nothing walks in here.
-    start: 31168,
+    start: 33856,
     // This colour is also the rim light along every ledge. Cyan carries a lot
     // of luminance, so it is pulled down until the floor stops outshining the
     // hero walking on it.

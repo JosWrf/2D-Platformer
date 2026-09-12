@@ -17,9 +17,11 @@
     "verify:enemies": "node tools/verify-enemies.mjs",
     "verify:ending": "node tools/verify-ending.mjs",
     "verify:warden": "node tools/verify-warden.mjs",
+    "verify:hydra": "node tools/verify-hydra.mjs",
     "verify:bonus": "node tools/verify-bonus.mjs",
     "verify:chain": "node tools/verify-chain.mjs",
     "verify:motion": "node tools/verify-motion.mjs",
+    "suite": "node tools/suite.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"
   },

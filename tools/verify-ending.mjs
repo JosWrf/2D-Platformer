@@ -10,9 +10,12 @@
  *  - the rift itself was only ever checked by the static reachability model in
  *    verify-level.mjs, which knows nothing about jump arcs.
  *
+ * It also pins the third thing the gate has to get right: it is shut while the
+ * hydra in the shaft still lives, and it says so instead of ignoring the hero.
+ *
  * Usage: node tools/verify-ending.mjs
- * Exits non-zero if the gate can be lost by walking on, or if a bot can no
- * longer travel the rift and reach it.
+ * Exits non-zero if the gate can be lost by walking on, if it opens while she
+ * lives, or if a bot can no longer travel the rift and reach it.
  */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -66,11 +69,47 @@ const result = await page.evaluate(() => {
     g.render(ctx);
   };
   // The rift is only open once the knight has fallen; skip the fight itself.
+  // The hydra in the shaft holds the gate shut on top of that, and this tool
+  // is about the road and the door rather than her fight - verify:hydra is.
+  const fellTheHydra = () => {
+    for (const e of g.enemies) if (e.kind === 'hydra') e.dead = true;
+  };
   const openTheWay = () => {
     g.level.exitSealed = false;
     g.bossDefeated = true;
     if (g.boss) g.boss.dead = true;
+    fellTheHydra();
   };
+
+  /*
+   * First, the opposite: while she lives the gate is not a gate. A hero
+   * standing in it for three seconds is still playing, and the refusal says so
+   * out loud rather than silently doing nothing. He is put back where the warp
+   * left him afterwards, so the travel run below still starts at the rift.
+   */
+  g.level.exitSealed = false;
+  g.bossDefeated = true;
+  if (g.boss) g.boss.dead = true;
+  const home = { x: p.x, y: p.y };
+  p.x = (g.portal.cx - p.w / 2) | 0;
+  p.y = g.portal.y + g.portal.h - p.h;
+  p.vx = 0;
+  p.vy = 0;
+  g.zoneBanner = { text: '', timer: 0 };
+  let toldWhy = false;
+  for (let f = 0; f < 240; f++) {
+    tick();
+    if (g.zoneBanner && /FÜNFKRONIGE/.test(g.zoneBanner.text)) toldWhy = true;
+    if (g.state !== 'playing') break;
+  }
+  const sealedByHer = { state: g.state, victoryTimer: g.victoryTimer, toldWhy };
+  p.x = home.x;
+  p.y = home.y;
+  p.vx = 0;
+  p.vy = 0;
+  p.hp = p.maxHp;
+  g.camera.snapTo(p.cx, p.cy);
+
   openTheWay();
 
   /**
@@ -141,7 +180,14 @@ const result = await page.evaluate(() => {
   }
 
   return {
-    ok: reached && g.state === 'victory' && touchedAt >= 0,
+    ok:
+      reached &&
+      g.state === 'victory' &&
+      touchedAt >= 0 &&
+      sealedByHer.state === 'playing' &&
+      sealedByHer.victoryTimer === 0 &&
+      sealedByHer.toldWhy,
+    sealedByHer,
     rift: { ...run, gateTile: Math.round(g.portal.cx / 32), reachedGate: reached },
     walkingOn: { touchedAtFrame: touchedAt, endState: g.state, endTile: Math.round(p.cx / 32) },
   };
@@ -152,7 +198,13 @@ await browser.close();
 server.close();
 
 if (!result.ok) {
-  console.error('FAIL: the rift no longer leads to the gate, or the gate can be walked past into a death.');
+  console.error(
+    'FAIL: the rift no longer leads to the gate, the gate can be walked past into a death, or it ' +
+      'no longer stays shut - and says why - while the hydra lives.',
+  );
   process.exit(1);
 }
-console.log('OK: the rift is travelled on real physics, and the gate ends the run even when the key stays down.');
+console.log(
+  'OK: the gate refuses while the hydra lives and says so, the rift is travelled on real physics, ' +
+    'and the gate ends the run even when the key stays down.',
+);
