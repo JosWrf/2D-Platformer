@@ -7,13 +7,13 @@ import { Body } from './entity';
 import { Skeleton, bossScale } from './enemy';
 import { Projectile } from './projectile';
 
-export const BOSS_MAX_HP = 64;
+export const BOSS_MAX_HP = 68;
 
 /** How many summoned skeletons may stand in the arena at once. */
 const MAX_MINIONS = 2;
 
 /** Damage he takes mid-action before he loses his footing. */
-const STAGGER_DAMAGE = 14;
+const STAGGER_DAMAGE = 18;
 /**
  * How long his blade needs between batting two crescents out of the air.
  *
@@ -65,6 +65,12 @@ export class Boss extends Body {
   private damageSinceStagger = 0;
   /** Punishment needed for the next stagger - grows with the hero's blade. */
   private staggerAt = STAGGER_DAMAGE;
+  /**
+   * Set when a blow lands while he is winding up, cleared when the action ends.
+   * See hurt: hitting a knight mid-swing makes the swing arrive sooner, not
+   * later, and it can only be provoked once per action.
+   */
+  private provoked = false;
   /** Time before blind damage may put him down again. */
   private damageLock = 0;
   /** Time before another parry may, which is a much shorter leash. */
@@ -118,6 +124,7 @@ export class Boss extends Body {
     this.timer = 0;
     this.deathTimer = 0;
     this.damageSinceStagger = 0;
+    this.provoked = false;
     this.damageLock = 0;
     this.parryLock = 0;
     this.guardLock = 0;
@@ -183,6 +190,30 @@ export class Boss extends Body {
     if (this.damageSinceStagger >= this.staggerAt && this.damageLock <= 0) {
       this.stagger(world);
       this.vx = fromDir * 90;
+      return;
+    }
+
+    /*
+     * Hit him while he is drawing back and he lets it fly early.
+     *
+     * Measured, and the reason this exists: a hero who simply stood in his face
+     * with the attack button held took him from full to nothing in seventeen
+     * seconds and lost six hit points doing it, because the wind-up was a free
+     * window he could stand inside and out-trade. The wind-up was already the
+     * announcement - this only makes ignoring it cost something. A player who
+     * reads the tell and backs off never sees it, it can be provoked once per
+     * action, and a parry still breaks him out of the swing.
+     */
+    if (!this.provoked && (this.state === 'slamWindup' || this.state === 'dashWindup') && this.timer > 0.14) {
+      this.provoked = true;
+      this.timer = 0.18;
+      this.flash = 1;
+      audio.play('parry', 0.55);
+      world.particles.text(this.cx, this.y - 12, 'GEREIZT!', '#ff9a5c');
+      world.particles.burst(this.cx + this.facing * 18, this.cy - 6, 14, '#ffd166', {
+        speed: 230,
+        shape: 'spark',
+      });
     }
   }
 
@@ -530,10 +561,12 @@ export class Boss extends Body {
       case 'slam':
         this.state = 'slamWindup';
         this.timer = phase === 3 ? 0.52 : 0.62;
+        this.provoked = false;
         break;
       case 'dash':
         this.state = 'dashWindup';
         this.timer = phase === 3 ? 0.44 : 0.5;
+        this.provoked = false;
         break;
       case 'cast':
         this.state = 'cast';

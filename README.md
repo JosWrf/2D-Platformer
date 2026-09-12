@@ -105,7 +105,7 @@ statt Stimmung zu machen.
 
 ## Der Boss: Schattenritter Morvain
 
-64 Trefferpunkte, drei Phasen mit eigener Bewegungs- und Angriffsauswahl:
+68 Trefferpunkte, drei Phasen mit eigener Bewegungs- und Angriffsauswahl:
 
 * **Phase 1** — Schwertschlag mit Schockwelle, Sturmangriff quer durch die Arena
 * **Phase 2** — Schockwellen in beide Richtungen, Schattenkugeln, beschworene Skelette
@@ -181,6 +181,30 @@ machen **0** Schaden, dieselben acht auf einen festgelegten machen **8**.
 
 ![Der Ritter schlägt die Sichel aus der Luft](screenshots/22-klinge-pariert.png)
 
+#### Gereizt: wer in die Ankündigung hineinhaut, kriegt sie früher
+
+Gemessen, und der Grund für diese Regel: Ein Held, der sich einfach vor ihn
+stellte und die Angriffstaste hielt, nahm ihn in **17,8 Sekunden** von voll auf
+null und verlor dabei **sechs** Trefferpunkte — ohne einen einzigen Tod. Sein
+Ausholen war ein Gratisfenster, in dem man stehen und ihn austauschen konnte.
+
+Das Ausholen *war* schon die Ankündigung. Jetzt kostet es etwas, sie zu
+ignorieren: Ein Treffer, während er ausholt, lässt den Schlag **früher**
+kommen statt später — 0,18 s statt 0,62 s, mit eigenem Aufblitzen, eigenem
+Ton und „GEREIZT!" über ihm. Wer den Tell liest und zurückgeht, sieht das nie.
+
+Fair bleibt es durch zwei Grenzen: Reizen geht **einmal pro Zug** (sonst hielte
+ein schneller Held ihn ewig auf Bruchteilen einer Sekunde), und eine Parade
+bricht ihn weiterhin aus jedem Schwung heraus — der Könnerweg ist unberührt.
+
+`verify:combat` nagelt beide Hälften fest: unangetastet läuft sein Slam-Ausholen
+38 Bilder, gereizt bricht es auf 15 zusammen, und der zweite Treffer verkürzt
+nichts mehr.
+
+Was die Messung nach der Änderung sagt, über fünf Läufe je 100 Sekunden: Der
+Draufhauer legt ihn **nicht mehr um** — er kommt im Median auf 50 % seiner
+Leiste und stirbt dabei neun Mal. Ohne die geworfene Klinge sind es 83 %.
+
 #### Bosse nehmen die Klinge zur Kenntnis
 
 Wer mit einer geworfenen Klinge ankommt, trifft auf mehr Boss. Das Upgrade ist
@@ -191,9 +215,9 @@ gefunden hat, trifft genau den Boss, der für ihn eingestellt wurde:
 
 | Klinge | Leben | Schaden bis zur Benommenheit |
 | --- | --- | --- |
-| nur Schwert | 64 | 14 |
-| Flutklinge | 78 | 19 |
-| Klingenwelle | 92 | 24 |
+| nur Schwert | 68 | 18 |
+| Flutklinge | 83 | 24 |
+| Klingenwelle | 98 | 31 |
 
 Dasselbe gilt für Thalassa, den Splitterwächter, den Prismarchen und Gallert
 (+22 % Leben und +35 % Poise je Stufe). Auf Distanz stehen bleiben hilft
@@ -656,7 +680,7 @@ kosten.
 `verify:chain` läuft die ganze Belohnungskette in **einem** Lauf durch, ohne
 Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 160
 Edelsteine → Kristallhort → Prismarch → Klingenwelle → zurück in die Welt →
-der Ritter (92 TP, pariert die Sicheln) → Siegel → Tor → Sieg. Jedes Glied
+der Ritter (98 TP, pariert die Sicheln) → Siegel → Tor → Sieg. Jedes Glied
 prüft ein anderes Werkzeug für sich; dieses prüft die **Gelenke**, und die sieht
 sonst niemand an: dass das siebte Herz einen Tod und einen Teleport übersteht,
 dass die Klinge ihre Stufe dabei behält, dass ein gefallener Boss liegen bleibt

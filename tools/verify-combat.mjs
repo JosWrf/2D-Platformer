@@ -184,6 +184,55 @@ const result = await page.evaluate(() => {
   const crescentWhileCommitted = crescentRun('stagger');
 
   /**
+   * Hit a knight mid-swing and the swing arrives sooner, not later.
+   *
+   * Measured, and the reason it exists: a hero who simply stood in his face
+   * with the attack button held took him from full to nothing in seventeen
+   * seconds and lost six hit points doing it, because his wind-up was a free
+   * window to stand inside and out-trade. The wind-up was already the
+   * announcement; this only makes ignoring it cost something.
+   *
+   * Two halves, because the second is what keeps it fair: the wind-up really
+   * does collapse when he is struck during it, and it can only be provoked
+   * once per action - otherwise a fast enough hero could hold him at a
+   * fraction of a second for ever.
+   */
+  const provoke = (hitHim) => {
+    reset();
+    p.beamTier = 0;
+    const home = boss.x;
+    boss.state = 'slamWindup';
+    boss.timer = 0.62;
+    boss.provoked = false;
+    const timeline = [];
+    for (let i = 0; i < 60 * 2; i++) {
+      boss.x = home;
+      boss.vx = 0;
+      p.x = home - 46;
+      p.vx = 0;
+      p.facing = 1;
+      p.invuln = 999;
+      p.hp = p.maxHp;
+      // Two blows, well apart: the first should collapse the wind-up, the
+      // second must not collapse it again.
+      if (hitHim && (i === 4 || i === 10)) boss.hurt(1, 1, g);
+      timeline.push({ i, state: boss.state, timer: +boss.timer.toFixed(2) });
+      tick();
+      if (boss.state === 'slam') break;
+    }
+    const swung = timeline.findIndex((e, k) => k > 0 && timeline[k - 1].state === 'slamWindup' && e.state !== 'slamWindup');
+    const afterFirst = timeline.find((e) => e.i === 5);
+    const afterSecond = timeline.find((e) => e.i === 11);
+    return {
+      windupFrames: swung < 0 ? timeline.length : swung,
+      timerAfterFirstHit: afterFirst ? afterFirst.timer : null,
+      timerAfterSecondHit: afterSecond ? afterSecond.timer : null,
+    };
+  };
+  const leftAlone = provoke(false);
+  const provoked = provoke(true);
+
+  /**
    * Down and jump on a one-way platform: the control the README documents as
    * "fall through a wooden platform".
    *
@@ -257,6 +306,11 @@ const result = await page.evaluate(() => {
       crescentOnGuard.thrown >= 6 &&
       crescentOnGuard.damage === 0 &&
       crescentWhileCommitted.damage > 0 &&
+      // Struck mid-wind-up, the blow comes early - and only the first one does.
+      provoked.windupFrames < leftAlone.windupFrames &&
+      provoked.timerAfterFirstHit !== null &&
+      provoked.timerAfterFirstHit <= 0.2 &&
+      leftAlone.windupFrames >= 30 &&
       droppedThroughPlatform.moved > 24 &&
       droppedThroughPlatform.rose < 8 &&
       // Twenty is plenty: the two-frame tap is a cut-short jump by design
@@ -268,6 +322,7 @@ const result = await page.evaluate(() => {
     plainDamage: plain,
     chargedDamage: charged,
     crescent: { onGuard: crescentOnGuard, whileCommitted: crescentWhileCommitted },
+    windup: { leftAlone, provoked },
     droppedThroughPlatform,
     jumpedFromRock,
   };

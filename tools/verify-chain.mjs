@@ -245,7 +245,7 @@ const ok =
   prismarch.stufe === 2 &&
   prismarch.herzen === 7 &&
   // The knight sizes up the sharpened blade, and answers its crescents.
-  knight.maxHp === 92 &&
+  knight.maxHp === 98 &&
   knight.sichelnPariert >= 4 &&
   knight.schadenAusDerFerne === 0 &&
   // And the run can still be finished.
