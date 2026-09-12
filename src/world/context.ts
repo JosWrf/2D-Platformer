@@ -25,5 +25,6 @@ export interface World {
   onCrystalBossDefeated(): void;
   onDrownedCrownDefeated(): void;
   onMireBossDefeated(): void;
+  onHydraEngaged(): void;
   onHydraDefeated(): void;
 }

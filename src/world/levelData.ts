@@ -672,12 +672,16 @@ const HYDRA_APPROACH = c(40, [
 ]);
 
 /**
- * Her shaft. The floor is the arena for four of her five heads; the fifth
- * withdraws to the top of the tower, and the only way to it is up.
+ * Her lair. A room rather than a stretch of corridor: walls, a ceiling, and her
+ * own portcullis at both ends, which comes down when she wakes and goes up when
+ * her last head comes off. The knight's arena works the same way, and two
+ * bosses in one level need two doors - see Tile.LairGate.
  *
- * The steps wind back across the shaft and every one of them overlaps the one
- * below, so the climb is a climb rather than a series of guesses - verify:level
- * checks exactly that, and a tower of unreachable islands would fail it.
+ * The floor is the arena for four of her five heads; the fifth withdraws to the
+ * top of the tower, and the only way to it is up. The steps wind back across
+ * the shaft and every one of them overlaps the one below, so the climb is a
+ * climb rather than a series of guesses - verify:level checks exactly that, and
+ * a tower of unreachable islands would fail it.
  *
  * The top step ends just short of her: the storm head hangs off its right edge,
  * in blade reach from solid ground up there and from nowhere on the floor. It
@@ -685,24 +689,24 @@ const HYDRA_APPROACH = c(40, [
  * beside is a hole to fall down, and from up there it is thirteen tiles deep.
  */
 const HYDRA_SHAFT = c(44, [
-  '............................................',
-  '............................................',
-  '............................................',
-  '............................................',
-  '............................................',
-  '............--------........................',
-  '............................................',
-  '......-------...............................',
-  '............................................',
-  '...........-------..........................',
-  '............................................',
-  '................-------.....................',
-  '............................................',
-  '.....................-------................',
-  '............................................',
-  '..........................-------...........',
-  '............................................',
-  '..T.................Z..................T....',
+  '############################################',
+  '##........................................##',
+  '##....T........T............T........T....##',
+  '##........................................##',
+  '##........................................##',
+  '##..........--------......................##',
+  '##........................................##',
+  '##....-------.............................##',
+  '##........................................##',
+  '##T........-------.......................T##',
+  '####....................................####',
+  '##..............-------...................##',
+  '##........................................##',
+  'ggT..................-------.............Tgg',
+  'gg##....................................##gg',
+  'gg........................-------.........gg',
+  'gg........................................gg',
+  'gg..T...............Z.................T...gg',
   '============================================',
   '============================================',
   '============================================',

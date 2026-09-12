@@ -24,6 +24,13 @@
  *     one after another, and from the top the same head is cut in seconds. A
  *     mortal hero on seven hearts makes the same climb with her storm phase
  *     live - a way up that kills him on the way is not a way up.
+ *   - Her lair is a room: waking her shuts it at both ends the way the throne
+ *     shuts behind the knight, her last head opens it again, and a death in
+ *     there leaves it open so the hero can walk back in.
+ *   - Nothing she does crosses that room. She used to solve the venom arc
+ *     straight at the hero wherever he stood, so a hero at the far wall was
+ *     shelled from forty tiles away; now she waits instead, and the same thirty
+ *     seconds up close still cost him.
  *   - A parry breaks her whatever the head has absorbed.
  *   - She sizes up the blade coming at her, like every other boss here.
  *   - She stays down: felled once, a death and a respawn do not rebuild her.
@@ -71,6 +78,8 @@ await page.evaluate(() => window.loop.stop());
 
 const result = await page.evaluate(() => {
   const TILE = 32;
+  /** Tile.LairGate - her own portcullis, as the tile map stores it. */
+  const LAIR_GATE = 9;
   const g = window.game;
   const input = window.input;
   const p = g.player;
@@ -154,6 +163,64 @@ const result = await page.evaluate(() => {
       if (h.stun > 0) broke = true;
     }
     return broke;
+  })();
+
+  /* ------------------------------------ her door, and the length of her arm */
+
+  const theRoom = (() => {
+    const boss = setUp(1, 130);
+    const closedOnWaking = g.level.lairClosed;
+    // The inside face of her left-hand door, read out of the level rather than
+    // counted in tiles: the room can be rebuilt without rewriting this.
+    const floorTy = Math.round(boss.bottom / TILE);
+    let doorTx = Math.floor(boss.cx / TILE);
+    while (doorTx > 1 && g.level.tileAt(doorTx, floorTy - 1) !== LAIR_GATE) doorTx--;
+    const farX = (doorTx + 2) * TILE;
+
+    p.maxHp = 12;
+    p.hp = p.maxHp;
+    p.invuln = 0;
+    let closestThrow = Infinity;
+    let poolsNearHim = 0;
+    for (let f = 0; f < 60 * 20; f++) {
+      // Pinned against the far wall: this measures her arm, not his footwork.
+      p.x = farX;
+      p.y = boss.bottom - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.dead = false;
+      tick();
+      for (const q of g.projectiles) {
+        if (q.friendly) continue;
+        closestThrow = Math.min(closestThrow, Math.abs(q.cx - p.cx));
+      }
+      for (const pool of boss.pools) if (Math.abs(pool.x - p.cx) < 140) poolsNearHim++;
+    }
+    const atTheWall = {
+      tilesAway: Math.round(Math.abs(boss.cx - p.cx) / TILE),
+      hp: p.hp,
+      closestThrow: Number.isFinite(closestThrow) ? Math.round(closestThrow) : null,
+      poolsNearHim,
+    };
+
+    // The control, so "she cannot reach him" is not just "she is broken":
+    // the same twenty seconds within her reach have to cost him.
+    p.hp = p.maxHp;
+    p.invuln = 0;
+    let hurtClose = 0;
+    for (let f = 0; f < 60 * 20 && hurtClose === 0; f++) {
+      p.x = boss.cx - 150;
+      p.y = boss.bottom - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.dead = false;
+      if (p.hp < p.maxHp) {
+        hurtClose = p.maxHp - p.hp;
+        p.hp = p.maxHp;
+      }
+      tick();
+    }
+    return { closedOnWaking, atTheWall, hurtClose };
   })();
 
   /* ------------------------------- and the climb is a climb, not a gauntlet */
@@ -365,36 +432,45 @@ const result = await page.evaluate(() => {
   }
   const rows = [...new Set(spans.map((s) => s.ty))].sort((a, b) => b - a);
 
-  const climbed = [];
-  let top = null;
-  for (const ty of rows) {
-    const centreOf = (s) => ((s.x0 + s.x1 + 1) / 2) * TILE;
-    const step = spans
-      .filter((s) => s.ty === ty)
-      .sort((a, b) => Math.abs(centreOf(a) - p.cx) - Math.abs(centreOf(b) - p.cx))[0];
-    top = step;
-    const topY = ty * TILE;
-    const onIt = () =>
-      p.onGround &&
-      Math.abs(p.bottom - topY) <= 2 &&
-      p.cx > step.x0 * TILE - 8 &&
-      p.cx < (step.x1 + 1) * TILE + 8;
-    let hold = 0;
-    let f = 0;
-    for (; f < 60 * 12 && !onIt(); f++) {
-      frames++;
-      p.hp = p.maxHp;
-      p.dead = false;
-      const target = Math.max(step.x0 * TILE + 12, Math.min(p.cx, (step.x1 + 1) * TILE - 12));
-      const dx = target - p.cx;
-      if (p.onGround && p.bottom > topY + 4 && Math.abs(dx) < 100) hold = 16;
-      if (hold > 0) hold--;
-      tick({ left: dx < -6, right: dx > 6, jump: hold > 0 });
-      watch();
+  const centreOf = (q) => ((q.x0 + q.x1 + 1) / 2) * TILE;
+  const standingOn = (step) =>
+    p.onGround &&
+    Math.abs(p.bottom - step.ty * TILE) <= 2 &&
+    p.cx > step.x0 * TILE - 8 &&
+    p.cx < (step.x1 + 1) * TILE + 8;
+
+  /** One step at a time, on real physics, from wherever he is standing now. */
+  const climbTheSteps = () => {
+    const log = [];
+    let last = null;
+    for (const ty of rows) {
+      if (p.bottom <= ty * TILE + 2) continue;
+      const step = spans
+        .filter((q) => q.ty === ty)
+        .sort((a, b) => Math.abs(centreOf(a) - p.cx) - Math.abs(centreOf(b) - p.cx))[0];
+      last = step;
+      let hold = 0;
+      let f = 0;
+      for (; f < 60 * 12 && !standingOn(step); f++) {
+        frames++;
+        p.hp = p.maxHp;
+        p.dead = false;
+        const target = Math.max(step.x0 * TILE + 12, Math.min(p.cx, (step.x1 + 1) * TILE - 12));
+        const dx = target - p.cx;
+        if (p.onGround && p.bottom > step.ty * TILE + 4 && Math.abs(dx) < 100) hold = 16;
+        if (hold > 0) hold--;
+        tick({ left: dx < -6, right: dx > 6, jump: hold > 0 });
+        watch();
+      }
+      log.push({ row: ty, landed: standingOn(step), seconds: +(f / 60).toFixed(1) });
+      if (!standingOn(step)) break;
     }
-    climbed.push({ row: ty, landed: onIt(), seconds: +(f / 60).toFixed(1) });
-    if (!onIt()) break;
-  }
+    return { log, top: last };
+  };
+
+  const firstClimb = climbTheSteps();
+  const climbed = firstClimb.log;
+  const top = firstClimb.top;
   const climbedEvery = climbed.length === rows.length && climbed.every((c) => c.landed);
 
   // From up there the same head answers to the same blade.
@@ -405,7 +481,15 @@ const result = await page.evaluate(() => {
     // a bot that strolls off the end is measuring the drop, not the reach.
     const edgeL = top.x0 * TILE + 4;
     const edgeR = (top.x1 + 1) * TILE - p.w - 4;
+    let fellOff = 0;
     for (; f < 60 * 30 && h.living.kind === 'storm'; f++) {
+      // A gust can carry him off the end of the step. A player climbs back up,
+      // so the bot does too - otherwise one shove decides the measurement.
+      if (p.bottom > top.ty * TILE + 4 && p.onGround) {
+        fellOff++;
+        climbTheSteps();
+        continue;
+      }
       frames++;
       p.hp = p.maxHp;
       p.dead = false;
@@ -415,13 +499,28 @@ const result = await page.evaluate(() => {
       tick({ left: dx < -3, right: dx > 3, attack: f % 2 === 0 });
       watch();
     }
-    return { hpBefore: before, cut: h.living.kind !== 'storm', seconds: +(f / 60).toFixed(1) };
+    const box = p.swordRect();
+    const hr = h.headRect();
+    return {
+      hpBefore: before,
+      hpAfter: h.living.kind === 'storm' ? h.living.hp : null,
+      cut: h.living.kind !== 'storm',
+      seconds: +(f / 60).toFixed(1),
+      fellOff,
+      stoodAt: Math.round(p.x),
+      edgeR: Math.round(edgeR),
+      onGround: p.onGround,
+      inTheRoster: g.enemies.includes(h),
+      blade: [Math.round(box.x), Math.round(box.x + box.w), Math.round(box.y), Math.round(box.y + box.h)],
+      head: [Math.round(hr.x), Math.round(hr.x + hr.w), Math.round(hr.y), Math.round(hr.y + hr.h)],
+    };
   })();
 
   /* -------------------------------------------------- and down again, to the end */
 
   chase(60 * 90);
   const felled = h.dead;
+  const doorAfterHerFall = !g.level.lairClosed;
   const secondsToFell = +(frames / 60).toFixed(1);
 
   /* ------------------------------------------------------- and she stays down */
@@ -434,6 +533,7 @@ const result = await page.evaluate(() => {
     afterWin: aliveAfterWin,
     afterDying: g.enemies.filter((e) => e.kind === 'hydra' && !e.dead).length,
     state: g.state,
+    doorOpen: !g.level.lairClosed,
   };
 
   return {
@@ -442,6 +542,13 @@ const result = await page.evaluate(() => {
       sharp.maxHp > soft.maxHp &&
       sharp.poise > soft.poise &&
       parryBroke &&
+      theRoom.closedOnWaking &&
+      theRoom.atTheWall.hp === 12 &&
+      theRoom.atTheWall.poolsNearHim === 0 &&
+      (theRoom.atTheWall.closestThrow === null || theRoom.atTheWall.closestThrow > 260) &&
+      theRoom.hurtClose > 0 &&
+      doorAfterHerFall &&
+      stayedDown.doorOpen &&
       targets.livingHead &&
       !targets.waitingHead &&
       !targets.body &&
@@ -463,6 +570,8 @@ const result = await page.evaluate(() => {
       shortestWind >= 36,
     scaling: { tier0: soft, tier2: sharp },
     parryBroke,
+    theRoom,
+    doorAfterHerFall,
     targets,
     contact,
     phases,
@@ -484,13 +593,16 @@ server.close();
 if (!result.ok) {
   console.error(
     'FAIL: the hydra no longer answers head by head, her body or a waiting head can be hit, a move ' +
-      'lands without a warning, a parry no longer breaks her, the storm head can be reached from ' +
-      'the floor or no longer from the steps, she cannot be climbed to, felled, or she comes back.',
+      'lands without a warning, her lair no longer shuts behind the hero or no longer opens again, ' +
+      'she reaches across the room (or no longer reaches at all), a parry no longer breaks her, the ' +
+      'storm head can be reached from the floor or no longer from the steps, she cannot be climbed ' +
+      'to, felled, or she comes back.',
   );
   process.exit(1);
 }
 console.log(
   'OK: five heads fall one at a time, only the living one is a target, every move is announced, ' +
+    'her lair shuts behind the hero and opens on her last head, nothing she throws crosses it, ' +
     'the storm head is out of reach from the floor and in reach from the steps he climbs to it, ' +
     'a parry breaks her, she sizes up the blade, and once felled she stays down.',
 );

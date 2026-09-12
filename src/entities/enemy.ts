@@ -2,6 +2,7 @@ import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
 import { shadow, withHitFlash } from '../render/sprites';
+import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
@@ -3036,6 +3037,12 @@ interface HydraHead {
   y: number;
   /** Where its neck leaves the body. */
   rootX: number;
+  /**
+   * Where the head coils while it waits its turn. Spread deliberately: five
+   * heads parked at the same height on her back read as one lump of colour.
+   */
+  restX: number;
+  restY: number;
   dead: boolean;
 }
 
@@ -3105,6 +3112,12 @@ export class Hydra extends Enemy {
   private drops: Drop[] = [];
   /** Top of the floor she sits on: pools and breath lie along it. */
   private floorY = 0;
+  /**
+   * Underside of her lair's ceiling, found once when she wakes. Her rocks come
+   * off it, so guessing a height would either bury them in the stone or start
+   * them outside the room.
+   */
+  private ceilingY = 0;
   private sway = 0;
   engaged = false;
 
@@ -3119,11 +3132,11 @@ export class Hydra extends Enemy {
    * that, from the floor and from the top step.
    */
   readonly heads: HydraHead[] = [
-    { kind: 'venom', hp: HEAD_HP, maxHp: HEAD_HP, x: -66, y: -104, rootX: -26, dead: false },
-    { kind: 'flame', hp: HEAD_HP, maxHp: HEAD_HP, x: 70, y: -116, rootX: -12, dead: false },
-    { kind: 'storm', hp: HEAD_HP, maxHp: HEAD_HP, x: -16, y: -430, rootX: 0, dead: false },
-    { kind: 'stone', hp: HEAD_HP, maxHp: HEAD_HP, x: 26, y: -92, rootX: 14, dead: false },
-    { kind: 'crown', hp: HEAD_HP, maxHp: HEAD_HP, x: -8, y: -150, rootX: 26, dead: false },
+    { kind: 'venom', hp: HEAD_HP, maxHp: HEAD_HP, x: -66, y: -104, rootX: -26, restX: -132, restY: -40, dead: false },
+    { kind: 'flame', hp: HEAD_HP, maxHp: HEAD_HP, x: 70, y: -116, rootX: -12, restX: -80, restY: -62, dead: false },
+    { kind: 'storm', hp: HEAD_HP, maxHp: HEAD_HP, x: -24, y: -430, rootX: 0, restX: -4, restY: -96, dead: false },
+    { kind: 'stone', hp: HEAD_HP, maxHp: HEAD_HP, x: 26, y: -92, rootX: 14, restX: 80, restY: -62, dead: false },
+    { kind: 'crown', hp: HEAD_HP, maxHp: HEAD_HP, x: -8, y: -150, rootX: 26, restX: 132, restY: -40, dead: false },
   ];
 
   constructor(x: number, y: number) {
@@ -3256,6 +3269,8 @@ export class Hydra extends Enemy {
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
         this.engaged = true;
+        this.measureTheRoom(world);
+        world.onHydraEngaged();
         this.poise = this.poiseMax = this.sizeUpFor(world, HYDRA_POISE);
         // sizeUpFor grows the whole of her; the heads carry that between them,
         // since each head is what the bar and the fight actually measure.
@@ -3316,6 +3331,19 @@ export class Hydra extends Enemy {
 
       case 'idle':
         if (this.timer <= 0) {
+          /*
+           * Nothing she does carries across the room. Her longest move is the
+           * breath at 340 px and the venom arc is shorter still, so out beyond
+           * her reach she simply waits instead of lobbing at a dot on the far
+           * wall. Measured as a real distance rather than a horizontal one:
+           * during the storm phase the hero is above her, not beside her, and
+           * she has to keep answering the climb.
+           */
+          if (Math.hypot(dx, player.cy - this.cy) > this.aggroRange) {
+            this.timer = 0.3;
+            this.glow = Math.max(this.glow, 0.15);
+            break;
+          }
           this.state = 'wind';
           this.glow = 1;
           this.hitThisMove = false;
@@ -3343,6 +3371,23 @@ export class Hydra extends Enemy {
     this.moveAndCollide(world.level, dt);
   }
 
+  /**
+   * Where her lair's floor and ceiling are. Both are read out of the level once
+   * she wakes: her rocks fall the height of the room, and the room is a room
+   * now rather than an open shaft.
+   */
+  private measureTheRoom(world: World): void {
+    const level = world.level;
+    this.floorY = this.bottom;
+    const tx = Math.floor(this.cx / TILE);
+    let ty = Math.floor((this.floorY - 1) / TILE);
+    while (ty > 0 && !level.solidAt(tx, ty - 1)) ty--;
+    this.ceilingY = ty * TILE;
+  }
+
+  /** How far from her middle anything she throws is allowed to land. */
+  private static readonly THROW_REACH = 300;
+
   /* ------------------------------------------------------------- her moves */
 
   private beginMove(world: World, dx: number, dist: number): void {
@@ -3355,13 +3400,17 @@ export class Hydra extends Enemy {
         // the glob to report back.
         const flight = 0.8;
         const from = this.headCentre();
+        // Clamped: the arc is solved towards where he is, but it never reaches
+        // further than she can throw. A hero on the far wall is out of it.
+        const aim = clamp(dx, -Hydra.THROW_REACH, Hydra.THROW_REACH);
+        const aimY = Math.min(player.cy, this.floorY - 8);
         for (const spread of [-72, 0, 72]) {
-          const vx = (dx + spread) / flight;
-          const vy = (player.cy - from.y) / flight - 0.5 * 1150 * flight;
+          const vx = (aim + spread) / flight;
+          const vy = (aimY - from.y) / flight - 0.5 * 1150 * flight;
           const glob = new Projectile('blob', from.x - 8, from.y, vx, vy);
           glob.damage = 1;
           world.spawnProjectile(glob);
-          this.pools.push({ x: this.cx + dx + spread, life: POOL_LIFE, wait: flight });
+          this.pools.push({ x: this.cx + aim + spread, life: POOL_LIFE, wait: flight });
         }
         audio.play('shoot');
         this.state = 'recover';
@@ -3405,12 +3454,14 @@ export class Hydra extends Enemy {
         if (pick === 0) {
           const flight = 0.75;
           const from = this.headCentre();
+          const aim = clamp(dx, -Hydra.THROW_REACH, Hydra.THROW_REACH);
+          const aimY = Math.min(player.cy, this.floorY - 8);
           for (const spread of [-60, 60]) {
-            const vx = (dx + spread) / flight;
-            const vy = (player.cy - from.y) / flight - 0.5 * 1150 * flight;
+            const vx = (aim + spread) / flight;
+            const vy = (aimY - from.y) / flight - 0.5 * 1150 * flight;
             const glob = new Projectile('blob', from.x - 8, from.y, vx, vy);
             world.spawnProjectile(glob);
-            this.pools.push({ x: this.cx + dx + spread, life: POOL_LIFE, wait: flight });
+            this.pools.push({ x: this.cx + aim + spread, life: POOL_LIFE, wait: flight });
           }
           audio.play('shoot');
           this.state = 'recover';
@@ -3432,11 +3483,15 @@ export class Hydra extends Enemy {
     }
   }
 
-  /** Marks on the ceiling that become falling rock. */
+  /**
+   * Marks on the ceiling that become falling rock. Clamped to her own stretch
+   * of ceiling: she brings the room down around herself, not across it.
+   */
   private markDrops(world: World, spots: number[], wind = 0.7): void {
     void world;
     for (const [i, x] of spots.entries()) {
-      this.drops.push({ x, wind: wind + i * 0.12, t: 0, fired: false });
+      const at = clamp(x, this.cx - Hydra.THROW_REACH - 120, this.cx + Hydra.THROW_REACH + 120);
+      this.drops.push({ x: at, wind: wind + i * 0.12, t: 0, fired: false });
     }
   }
 
@@ -3477,7 +3532,7 @@ export class Hydra extends Enemy {
         if (world.time % 0.06 < dt) {
           world.particles.spawn({
             x: drop.x + rand(-14, 14),
-            y: this.floorY - 560,
+            y: this.ceilingY + 8,
             vx: rand(-6, 6),
             vy: rand(20, 60),
             color: 'rgba(200,190,170,0.7)',
@@ -3490,7 +3545,7 @@ export class Hydra extends Enemy {
       }
       if (!drop.fired) {
         drop.fired = true;
-        const rock = new Projectile('rock', drop.x - 10, this.floorY - 600, 0, 120);
+        const rock = new Projectile('rock', drop.x - 10, this.ceilingY + 2, 0, 120);
         world.spawnProjectile(rock);
         audio.play('slam', 0.4);
       }
@@ -3557,165 +3612,462 @@ export class Hydra extends Enemy {
     this.drawBreath(ctx);
     withHitFlash(ctx, this.flash, () => {
       ctx.save();
-      shadow(ctx, this.cx, this.bottom, this.w * 0.6);
-      // Necks first, then the body over their roots, then the heads.
-      for (const [i, head] of this.heads.entries()) {
+      shadow(ctx, this.cx, this.bottom, this.w * 0.62);
+      // Back to front: the dead necks hang behind everything, then the waiting
+      // heads, then her body over all their roots, then whichever head is up.
+      const order = this.heads.map((head, i) => ({ head, i })).sort((a, b) => this.depth(a) - this.depth(b));
+      for (const { head, i } of order) {
         if (i === this.head && this.state === 'rise') continue;
-        this.drawNeck(ctx, head, i === this.head);
+        if (i === this.head) continue;
+        this.drawNeck(ctx, head, false);
+        this.drawHead(ctx, head, false);
       }
       this.drawBody(ctx);
-      for (const [i, head] of this.heads.entries()) {
-        if (i === this.head && this.state === 'rise') continue;
-        this.drawHead(ctx, head, i === this.head);
+      if (this.state !== 'rise' && !this.dead) {
+        this.drawNeck(ctx, this.living, true);
+        this.drawHead(ctx, this.living, true);
       }
       ctx.restore();
     });
   }
 
-  private neckEnd(head: HydraHead): { x: number; y: number } {
-    if (head.dead) {
-      // A cut neck hangs down the side of her.
-      return { x: this.cx + head.rootX * 2.2, y: this.bottom - 16 };
-    }
-    if (head === this.living) return this.headCentre();
-    // A head that has not had its turn yet keeps low and close.
-    return { x: this.cx + head.rootX * 1.6, y: this.bottom - 52 - Math.abs(head.rootX) * 0.2 };
+  /** Painting order for the sleeping heads: the outermost ones go behind. */
+  private depth(entry: { head: HydraHead; i: number }): number {
+    return entry.head.dead ? -200 : -Math.abs(entry.head.restX);
   }
 
-  private drawNeck(ctx: CanvasRenderingContext2D, head: HydraHead, alive: boolean): void {
-    const root = { x: this.cx + head.rootX, y: this.bottom - 30 };
+  private neckEnd(head: HydraHead): { x: number; y: number } {
+    if (head.dead) {
+      // A cut neck hangs down the side of her, slack.
+      return { x: this.cx + head.rootX * 2.4, y: this.bottom - 10 };
+    }
+    if (head === this.living) return this.headCentre();
+    // A head that has not had its turn yet keeps coiled, in its own spot.
+    const breathe = Math.sin(this.sway * 0.7 + head.rootX) * 3;
+    return { x: this.cx + head.restX, y: this.bottom + head.restY + breathe };
+  }
+
+  /**
+   * The spine of a neck, as points along a quadratic curve with a radius that
+   * tapers from the root to the skull.
+   */
+  private neckSpine(head: HydraHead, alive: boolean): { x: number; y: number; r: number }[] {
+    const root = { x: this.cx + head.rootX * 1.5, y: this.bottom - this.bulk.h * 0.5 };
     const end = this.neckEnd(head);
+    const span = Math.hypot(end.x - root.x, end.y - root.y);
+    const bow = alive ? Math.sin(this.sway * 1.1 + head.rootX) * Math.min(26, span * 0.08) : 0;
     const mid = {
-      x: (root.x + end.x) / 2 + (alive ? Math.sin(this.sway * 1.1 + head.rootX) * 16 : 0),
-      y: (root.y + end.y) / 2 - 40,
+      x: (root.x + end.x) / 2 + bow - (end.x - root.x) * 0.18,
+      y: (root.y + end.y) / 2 - Math.min(70, span * 0.3),
     };
-    // Enough beads that the neck reads as a neck: the storm head hangs 430 px
-    // up, and a fixed count leaves that one a dotted line rather than a body.
-    const span = Math.hypot(end.x - root.x, end.y - root.y) + Math.abs(mid.y - root.y);
-    const steps = Math.max(14, Math.min(80, Math.round(span / 11)));
+    // Enough samples that the neck reads as a body: the storm head hangs 430 px
+    // up, and a fixed count leaves that one a dotted line.
+    const steps = Math.max(16, Math.min(90, Math.round(span / 9)));
+    const out: { x: number; y: number; r: number }[] = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
-      const x = (1 - t) * (1 - t) * root.x + 2 * (1 - t) * t * mid.x + t * t * end.x;
-      const y = (1 - t) * (1 - t) * root.y + 2 * (1 - t) * t * mid.y + t * t * end.y;
-      const r = (13 - t * 6) * (head.dead ? 0.8 : 1);
-      ctx.fillStyle = head.dead
-        ? 'rgba(52,66,50,0.85)'
-        : alive
-          ? `rgba(${90 + this.glow * 60},${150 + this.glow * 50},${80},0.95)`
-          : 'rgba(70,104,66,0.9)';
+      const u = 1 - t;
+      out.push({
+        x: u * u * root.x + 2 * u * t * mid.x + t * t * end.x,
+        y: u * u * root.y + 2 * u * t * mid.y + t * t * end.y,
+        r: (16 - 9 * Math.pow(t, 0.65)) * (head.dead ? 0.7 : 1),
+      });
+    }
+    return out;
+  }
+
+  /**
+   * One neck: a tapered tube with a lit top edge and scutes down its length,
+   * rather than a string of beads. The living one runs warmer as she winds up.
+   */
+  private drawNeck(ctx: CanvasRenderingContext2D, head: HydraHead, alive: boolean): void {
+    const spine = this.neckSpine(head, alive);
+    const normals: { nx: number; ny: number }[] = [];
+    for (let i = 0; i < spine.length; i++) {
+      const a = spine[Math.max(0, i - 1)];
+      const b = spine[Math.min(spine.length - 1, i + 1)];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      normals.push({ nx: -dy / len, ny: dx / len });
+    }
+
+    const dark = head.dead ? '#26331f' : alive ? '#2c5a2c' : '#28492a';
+    const skin = head.dead ? '#3a4a33' : alive ? `rgb(${86 + this.glow * 70},${150 + this.glow * 46},${78})` : '#4b7a4c';
+
+    // The tube itself, as one outline so nothing seams.
+    ctx.beginPath();
+    for (let i = 0; i < spine.length; i++) {
+      const p = spine[i];
+      const n = normals[i];
+      const x = p.x + n.nx * p.r;
+      const y = p.y + n.ny * p.r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    for (let i = spine.length - 1; i >= 0; i--) {
+      const p = spine[i];
+      const n = normals[i];
+      ctx.lineTo(p.x - n.nx * p.r, p.y - n.ny * p.r);
+    }
+    ctx.closePath();
+    ctx.fillStyle = dark;
+    ctx.fill();
+
+    // Lit side: a second, narrower tube laid off-centre towards the light, so
+    // the neck has a top and an underside instead of reading as a flat tube.
+    ctx.fillStyle = skin;
+    for (let i = 0; i < spine.length; i++) {
+      const p = spine[i];
+      const n = normals[i];
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(p.x - n.nx * p.r * 0.34, p.y - n.ny * p.r * 0.34, p.r * 0.55, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    // Belly scutes: short bars across the tube every few samples.
+    ctx.strokeStyle = head.dead ? 'rgba(18,26,15,0.6)' : 'rgba(22,44,22,0.55)';
+    ctx.lineWidth = 2;
+    for (let i = 3; i < spine.length - 1; i += 4) {
+      const p = spine[i];
+      const n = normals[i];
+      ctx.beginPath();
+      ctx.moveTo(p.x + n.nx * p.r * 0.85, p.y + n.ny * p.r * 0.85);
+      ctx.lineTo(p.x - n.nx * p.r * 0.2, p.y - n.ny * p.r * 0.2);
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * The bulk she sits in: a coiled mass with a plated back, a pale belly and
+   * two clawed forelimbs dug into the floor. Every neck leaves from under the
+   * plates, so the roots are covered by this rather than floating over it.
+   */
+  /**
+   * How big she is drawn. Her hit box is the thing the physics walks her around
+   * on; nothing is ever hit on it (only the living head is a target), so the
+   * body she is painted as can be the size she ought to look.
+   */
+  private get bulk(): { w: number; h: number } {
+    return { w: this.w * 1.35, h: this.h * 1.5 };
   }
 
   private drawBody(ctx: CanvasRenderingContext2D): void {
-    const g = ctx.createLinearGradient(0, this.bottom - this.h, 0, this.bottom);
-    g.addColorStop(0, '#5e9a56');
-    g.addColorStop(0.6, '#3c6f3e');
-    g.addColorStop(1, '#1f3d26');
-    ctx.fillStyle = g;
+    const cx = this.cx;
+    const base = this.bottom;
+    const { w, h } = this.bulk;
+
+    // Coil behind her, so the silhouette is wider than the hit box suggests.
+    ctx.fillStyle = '#1b3520';
     ctx.beginPath();
-    ctx.ellipse(this.cx, this.bottom - this.h * 0.42, this.w * 0.5, this.h * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + w * 0.52, base - 15, w * 0.38, 16, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Plates along her back.
-    ctx.fillStyle = 'rgba(24,48,30,0.8)';
-    for (let i = -3; i <= 3; i++) {
-      const x = this.cx + i * 12;
-      const h = 10 - Math.abs(i) * 1.6;
+    ctx.beginPath();
+    ctx.ellipse(cx - w * 0.54, base - 13, w * 0.34, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const body = ctx.createLinearGradient(0, base - h, 0, base);
+    body.addColorStop(0, '#63a45a');
+    body.addColorStop(0.45, '#3d7440');
+    body.addColorStop(1, '#16301c');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(cx, base - h * 0.44, w * 0.5, h * 0.56, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Belly: a band of pale scutes rather than a lit blob.
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, base - h * 0.44, w * 0.5, h * 0.56, 0, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(196,218,152,0.3)';
+    ctx.lineWidth = 6;
+    for (let i = 0; i < 5; i++) {
       ctx.beginPath();
-      ctx.moveTo(x - 5, this.bottom - this.h * 0.7);
-      ctx.lineTo(x, this.bottom - this.h * 0.7 - h);
-      ctx.lineTo(x + 5, this.bottom - this.h * 0.7);
+      ctx.ellipse(cx, base - 2 - i * 9, w * (0.3 - i * 0.02), 8, 0, Math.PI * 1.05, Math.PI * 1.95, true);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Rim light along her back, so she is not a dark mass on a dark wall.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(170,226,140,0.35)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(cx, base - h * 0.44, w * 0.5 - 1, h * 0.56 - 1, 0, Math.PI * 1.12, Math.PI * 1.88);
+    ctx.stroke();
+    ctx.restore();
+
+    // Overlapping scutes up her back.
+    ctx.strokeStyle = 'rgba(20,42,24,0.75)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const y = base - h * (0.3 + i * 0.16);
+      const rx = w * (0.44 - i * 0.07);
+      ctx.beginPath();
+      ctx.ellipse(cx, y, rx, 9, 0, Math.PI * 1.06, Math.PI * 1.94);
+      ctx.stroke();
+    }
+
+    // Spines along the ridge, tallest in the middle.
+    const ridge = base - h * 0.82;
+    for (let i = -4; i <= 4; i++) {
+      const x = cx + i * 14;
+      const tall = 17 - Math.abs(i) * 2.4;
+      ctx.fillStyle = i % 2 === 0 ? '#c7d9a2' : '#9cb37e';
+      ctx.beginPath();
+      ctx.moveTo(x - 5.5, ridge + Math.abs(i) * 2.6);
+      ctx.lineTo(x, ridge + Math.abs(i) * 2.6 - tall);
+      ctx.lineTo(x + 5.5, ridge + Math.abs(i) * 2.6);
       ctx.closePath();
       ctx.fill();
     }
-  }
 
-  private headColours(kind: HeadKind): [string, string] {
-    switch (kind) {
-      case 'venom':
-        return ['#7fd45c', '#d8ff9f'];
-      case 'flame':
-        return ['#e07a3a', '#ffd39a'];
-      case 'storm':
-        return ['#79b8e0', '#dff1ff'];
-      case 'stone':
-        return ['#9a9384', '#e6e0d2'];
-      case 'crown':
-        return ['#d9b84a', '#fff0b8'];
-    }
-  }
-
-  private drawHead(ctx: CanvasRenderingContext2D, head: HydraHead, alive: boolean): void {
-    const at = this.neckEnd(head);
-    const [skin, bright] = this.headColours(head.kind);
-    const toward = alive ? this.facing : head.rootX > 0 ? 1 : -1;
-    ctx.save();
-    ctx.translate(at.x, at.y);
-    ctx.scale(toward, 1);
-    if (head.dead) ctx.rotate(1.1);
-
-    const heat = alive ? 0.3 + this.glow * 0.7 : 0.12;
-    if (alive && this.glow > 0.05) {
-      const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, 40 * heat);
-      halo.addColorStop(0, `rgba(255,255,220,${(0.35 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(255,255,220,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-40, -40, 80, 80);
-    }
-
-    // Skull: a wedge with a jaw.
-    ctx.fillStyle = head.dead ? '#3c4a3a' : skin;
-    ctx.beginPath();
-    ctx.moveTo(-16, -12);
-    ctx.lineTo(20, -6);
-    ctx.lineTo(26, 2);
-    ctx.lineTo(18, 8);
-    ctx.lineTo(-16, 12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = head.dead ? '#2c3a2c' : 'rgba(20,36,22,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(2, 6);
-    ctx.lineTo(22, 3);
-    ctx.lineTo(16, 13);
-    ctx.lineTo(0, 12);
-    ctx.closePath();
-    ctx.fill();
-
-    // Eye, and the crown on the last of them.
-    if (!head.dead) {
-      ctx.fillStyle = `rgba(255,255,240,${(0.5 + heat * 0.5).toFixed(2)})`;
+    // Forelimbs, dug in.
+    for (const side of [-1, 1]) {
+      const lx = cx + side * w * 0.36;
+      ctx.fillStyle = '#2d5730';
       ctx.beginPath();
-      ctx.ellipse(4, -4, 4.5, 3, 0, 0, Math.PI * 2);
+      ctx.moveTo(lx - side * 9, base - 30);
+      ctx.quadraticCurveTo(lx + side * 12, base - 22, lx + side * 10, base - 2);
+      ctx.lineTo(lx - side * 6, base - 2);
+      ctx.quadraticCurveTo(lx - side * 2, base - 18, lx - side * 12, base - 26);
+      ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = 'rgba(20,30,18,0.9)';
-      ctx.beginPath();
-      ctx.ellipse(5.5, -4, 1.8, 2.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    if (head.kind === 'crown' && !head.dead) {
-      ctx.fillStyle = bright;
-      for (let i = -1; i <= 1; i++) {
+      ctx.fillStyle = '#d8e6bb';
+      for (let c = 0; c < 3; c++) {
+        const clawX = lx + side * (4 + c * 5);
         ctx.beginPath();
-        ctx.moveTo(i * 7 - 2, -13);
-        ctx.lineTo(i * 7, -22);
-        ctx.lineTo(i * 7 + 2, -13);
+        ctx.moveTo(clawX, base - 6);
+        ctx.lineTo(clawX + side * 5, base - 1);
+        ctx.lineTo(clawX, base - 1);
         ctx.closePath();
         ctx.fill();
       }
     }
-    // Horns, so each head reads as its own thing even in silhouette.
-    if (!head.dead && head.kind !== 'crown') {
-      ctx.strokeStyle = bright;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(-8, -11);
-      ctx.lineTo(head.kind === 'storm' ? -18 : -14, head.kind === 'flame' ? -24 : -20);
-      ctx.stroke();
+  }
+
+  private headColours(kind: HeadKind): [string, string, string] {
+    switch (kind) {
+      case 'venom':
+        return ['#7fd45c', '#d8ff9f', '#2f5a25'];
+      case 'flame':
+        return ['#e07a3a', '#ffd39a', '#5f2a12'];
+      case 'storm':
+        return ['#79b8e0', '#dff1ff', '#22465f'];
+      case 'stone':
+        return ['#9a9384', '#e6e0d2', '#3f3b33'];
+      case 'crown':
+        return ['#d9b84a', '#fff0b8', '#5d4712'];
     }
+  }
+
+  /**
+   * A serpent skull rather than a wedge: a long snout with a hooked jaw, a brow
+   * over a slit eye, teeth, and a frill that says at a glance which head is up.
+   */
+  private drawHead(ctx: CanvasRenderingContext2D, head: HydraHead, alive: boolean): void {
+    const at = this.neckEnd(head);
+    const [skin, bright, shade] = this.headColours(head.kind);
+    const toward = alive ? this.facing : head.restX > 0 ? 1 : -1;
+    const heat = alive ? 0.3 + this.glow * 0.7 : 0.1;
+    // A waiting head is smaller and duller than the one that is up, so the eye
+    // goes to the target rather than to the four that are not.
+    const size = alive ? 1 : 0.78;
+
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.scale(toward * size, size);
+    if (!alive) ctx.globalAlpha *= 0.82;
+    if (head.dead) ctx.rotate(1.25);
+
+    if (alive && this.glow > 0.05) {
+      const halo = ctx.createRadialGradient(6, 0, 0, 6, 0, 54 * heat);
+      halo.addColorStop(0, `rgba(255,255,225,${(0.3 * heat).toFixed(2)})`);
+      halo.addColorStop(1, 'rgba(255,255,220,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(-54, -54, 108, 108);
+    }
+
+    // Frill behind the skull, so the head does not sit flush on the neck.
+    if (!head.dead) {
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.moveTo(-10, -16);
+      ctx.lineTo(-26, -24);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-26, 22);
+      ctx.lineTo(-10, 14);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Cranium and snout, one silhouette.
+    ctx.fillStyle = head.dead ? '#3c4a3a' : skin;
+    ctx.beginPath();
+    ctx.moveTo(-14, -13);
+    ctx.quadraticCurveTo(4, -17, 18, -10);
+    ctx.quadraticCurveTo(30, -6, 31, 0);
+    ctx.quadraticCurveTo(30, 5, 18, 8);
+    ctx.quadraticCurveTo(2, 14, -14, 13);
+    ctx.quadraticCurveTo(-19, 0, -14, -13);
+    ctx.closePath();
+    ctx.fill();
+
+    // Brow ridge, darker, and the shaded underside of the jaw.
+    ctx.fillStyle = head.dead ? '#2c3a2c' : shade;
+    ctx.beginPath();
+    ctx.moveTo(-13, -12);
+    ctx.quadraticCurveTo(2, -16, 16, -9);
+    ctx.quadraticCurveTo(2, -8, -12, -6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(12,24,14,0.45)';
+    ctx.beginPath();
+    ctx.moveTo(-12, 6);
+    ctx.quadraticCurveTo(4, 12, 20, 6);
+    ctx.quadraticCurveTo(4, 15, -12, 13);
+    ctx.closePath();
+    ctx.fill();
+
+    // Jaw line and teeth.
+    if (!head.dead) {
+      ctx.strokeStyle = 'rgba(16,28,16,0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-10, 4);
+      ctx.quadraticCurveTo(8, 9, 27, 1);
+      ctx.stroke();
+      ctx.fillStyle = '#f2f7de';
+      for (let i = 0; i < 4; i++) {
+        const x = 6 + i * 6;
+        const y = 6 - i * 1.4;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 1);
+        ctx.lineTo(x + 2.4, y + 4);
+        ctx.lineTo(x + 4.4, y - 1);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Eye: a slit under the brow, lit by whatever the head is about to do.
+    if (!head.dead) {
+      ctx.fillStyle = `rgba(255,252,226,${(0.55 + heat * 0.45).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(6, -4, 5.4, 3.4, -0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(14,22,12,0.92)';
+      ctx.beginPath();
+      ctx.ellipse(7.4, -4, 1.5, 3.1, -0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    this.drawHeadMark(ctx, head, bright, heat);
     ctx.restore();
+  }
+
+  /** What tells the five heads apart in silhouette. */
+  private drawHeadMark(ctx: CanvasRenderingContext2D, head: HydraHead, bright: string, heat: number): void {
+    if (head.dead) return;
+    ctx.fillStyle = bright;
+    ctx.strokeStyle = bright;
+    switch (head.kind) {
+      case 'crown': {
+        // A circlet of points, the only gold on her.
+        ctx.beginPath();
+        ctx.moveTo(-11, -13);
+        ctx.lineTo(11, -13);
+        ctx.lineTo(11, -17);
+        ctx.closePath();
+        ctx.fill();
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(i * 8 - 3, -15);
+          ctx.lineTo(i * 8, -27);
+          ctx.lineTo(i * 8 + 3, -15);
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      }
+      case 'storm': {
+        // Swept horns and a spark between them.
+        ctx.lineWidth = 3;
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(-6, -10 + s * 2);
+          ctx.quadraticCurveTo(-18, -20 + s * 6, -26, -14 + s * 12);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 0.4 + heat * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(-14, -18);
+        ctx.lineTo(-9, -9);
+        ctx.lineTo(-13, -9);
+        ctx.lineTo(-8, 1);
+        ctx.lineTo(-19, -8);
+        ctx.lineTo(-14, -8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'flame': {
+        // One tall horn and an ember in the throat.
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(-7, -11);
+        ctx.quadraticCurveTo(-13, -26, -3, -31);
+        ctx.stroke();
+        ctx.globalAlpha = 0.35 + heat * 0.65;
+        ctx.beginPath();
+        ctx.ellipse(17, 2, 6, 3.4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'stone': {
+        // Plates instead of horns, and a crack across the skull.
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-4 - i * 6, -12 - i * 2);
+          ctx.lineTo(-10 - i * 6, -20 - i * 3);
+          ctx.lineTo(-14 - i * 6, -10 - i * 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.lineWidth = 1.4;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(-2, -11);
+        ctx.lineTo(4, -4);
+        ctx.lineTo(1, 2);
+        ctx.lineTo(9, 7);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        break;
+      }
+      case 'venom': {
+        // Backswept horn, and fangs that drip when she is about to spit.
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(-7, -11);
+        ctx.quadraticCurveTo(-17, -19, -22, -12);
+        ctx.stroke();
+        ctx.globalAlpha = 0.4 + heat * 0.6;
+        for (const x of [12, 19]) {
+          ctx.beginPath();
+          ctx.moveTo(x, 7);
+          ctx.lineTo(x + 1.6, 15);
+          ctx.lineTo(x + 3.2, 7);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        break;
+      }
+    }
   }
 
   private drawPools(ctx: CanvasRenderingContext2D): void {
@@ -3746,11 +4098,12 @@ export class Hydra extends Enemy {
       if (drop.fired) continue;
       const p = clamp(drop.t / drop.wind, 0, 1);
       ctx.save();
-      const glow = ctx.createLinearGradient(drop.x, this.floorY - 640, drop.x, this.floorY);
+      const top = this.ceilingY;
+      const glow = ctx.createLinearGradient(drop.x, top, drop.x, this.floorY);
       glow.addColorStop(0, `rgba(235,215,175,${(0.05 + p * 0.1).toFixed(2)})`);
       glow.addColorStop(1, `rgba(235,215,175,${(0.16 + p * 0.34).toFixed(2)})`);
       ctx.fillStyle = glow;
-      ctx.fillRect(drop.x - 11, this.floorY - 640, 22, 640);
+      ctx.fillRect(drop.x - 11, top, 22, this.floorY - top);
       ctx.strokeStyle = `rgba(230,210,170,${(0.25 + p * 0.5).toFixed(2)})`;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -3765,7 +4118,10 @@ export class Hydra extends Enemy {
     const reach = 340 * this.breath;
     const x0 = this.breathDir > 0 ? this.cx : this.cx - reach;
     const stone = this.living.kind === 'stone';
-    const g = ctx.createLinearGradient(x0, 0, x0 + reach * this.breathDir, 0);
+    // From her mouth outwards, not from the leading edge: anchored at x0 the
+    // gradient ran the wrong way whenever she breathed to the left, and the
+    // whole sweep came out at full brightness with a hard edge at the far end.
+    const g = ctx.createLinearGradient(this.cx, 0, this.cx + reach * this.breathDir, 0);
     g.addColorStop(0, stone ? 'rgba(210,200,180,0.75)' : 'rgba(255,190,90,0.8)');
     g.addColorStop(1, stone ? 'rgba(150,140,125,0.05)' : 'rgba(255,90,40,0.05)');
     // Laid down in bands that thin out towards the top, so it reads as

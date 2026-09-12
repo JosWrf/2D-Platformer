@@ -11,10 +11,18 @@ export const enum Tile {
   Gate = 7,
   /** Seals the way past the throne until the knight has fallen. */
   Seal = 8,
+  /**
+   * The hydra's lair, at both ends of her shaft. Her own portcullis rather than
+   * the knight's: two bosses in one level need two doors, or waking one of them
+   * shuts the other one's room.
+   */
+  LairGate = 9,
 }
 
 export function isSolid(tile: Tile): boolean {
-  return tile === Tile.Solid || tile === Tile.Earth || tile === Tile.Gate || tile === Tile.Seal;
+  return (
+    tile === Tile.Solid || tile === Tile.Earth || tile === Tile.Gate || tile === Tile.Seal || tile === Tile.LairGate
+  );
 }
 
 export function isPlatform(tile: Tile): boolean {
@@ -67,6 +75,7 @@ export const CHAR_TO_TILE: Record<string, Tile> = {
   l: Tile.Lava,
   G: Tile.Gate,
   S: Tile.Seal,
+  g: Tile.LairGate,
 };
 
 export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {

@@ -349,12 +349,24 @@ export class Game implements World {
   }
 
   /**
-   * The hydra's last head comes off, and the gate home unseals. She is the end
-   * of the road rather than an optional fight, so instead of a portcullis
-   * behind the hero she holds the one thing he came for.
+   * She wakes, and her lair shuts at both ends - the same deal the throne room
+   * offers. Her door is her own (Tile.LairGate), not the knight's: waking one
+   * boss must not slam the other one's room.
+   */
+  onHydraEngaged(): void {
+    this.level.lairClosed = true;
+    this.zoneBanner = { text: 'DIE FÜNFKRONIGE', timer: 3.4 };
+    this.camera.addShake(8);
+  }
+
+  /**
+   * The hydra's last head comes off. Her lair opens again, and so does the gate
+   * home - she is the end of the road rather than an optional fight, so on top
+   * of the door behind the hero she holds the one thing he came for.
    */
   onHydraDefeated(): void {
     if (this.state !== 'playing') return;
+    this.level.lairClosed = false;
     this.score += 3000;
     this.flashWhite = 1;
     this.camera.addShake(10);
@@ -800,6 +812,9 @@ export class Game implements World {
     for (const pickup of this.pickups) {
       pickup.dead = this.collected.has(pickup.id);
     }
+    // Her door goes back up with her: a hero who died in there has to be able
+    // to walk back in, and one who died outside must not find it shut.
+    this.level.lairClosed = false;
     if (this.boss && !this.bossDefeated) {
       this.boss.reset();
       this.bossGhostHp = this.boss.maxHp;
@@ -839,6 +854,7 @@ export class Game implements World {
     this.player.maxHp = PLAYER_MAX_HP;
     this.felledBosses.clear();
     this.level.exitSealed = true;
+    this.level.lairClosed = false;
     this.respawnAtCheckpoint();
   }
 

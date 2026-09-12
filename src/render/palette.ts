@@ -62,6 +62,8 @@ export type ZoneName =
   | 'castle'
   | 'throne'
   | 'rift'
+  | 'lair'
+  | 'riftend'
   | 'crystalworld';
 
 export interface Zone {
@@ -186,6 +188,42 @@ export const ZONES: Zone[] = [
   {
     name: 'rift',
     start: 23360,
+    sporeRgb: '206,178,255',
+    darkness: 0.86,
+    darkTint: '#08040f',
+    skyTop: '#080312',
+    skyBottom: '#160a26',
+    hillFar: '#1d1030',
+    hillNear: '#130a20',
+    ambient: 'rgba(150,90,255,0.07)',
+    label: 'Der Riss',
+    interior: false,
+    calm: true,
+  },
+  {
+    /*
+     * Her lair, walled off inside the rift: the one stretch of the rift that is
+     * a room. Green where the rift is violet, so the door you just walked
+     * through reads as a threshold rather than more corridor.
+     */
+    name: 'lair',
+    start: 31168,
+    sporeRgb: '168,226,138',
+    darkness: 0.87,
+    darkTint: '#040b06',
+    skyTop: '#050c07',
+    skyBottom: '#0e1b0f',
+    hillFar: '#1b3520',
+    hillNear: '#112415',
+    ambient: 'rgba(120,220,110,0.07)',
+    label: 'Der Schlund der Fünfkronigen',
+    interior: true,
+    calm: true,
+  },
+  {
+    // Out the far door, back into the rift for the last stretch to the gate.
+    name: 'riftend',
+    start: 32576,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',

@@ -79,7 +79,7 @@ export class Scatter {
         // Hanging from a ceiling.
         if (level.tileAt(tx, ty + 1) === Tile.Empty && rng.next() < 0.2) {
           const kind: PropKind =
-            zone === 'caverns' || zone === 'rift' || zone === 'crystalworld'
+            zone === 'caverns' || zone === 'rift' || zone === 'riftend' || zone === 'crystalworld'
               ? 'stalactite'
               : zone === 'drowned'
                 ? 'vine'
@@ -138,7 +138,15 @@ export class Scatter {
         if (roll < 0.46) return 'stalagmite';
         if (roll < 0.54) return 'rubble';
         return null;
+      case 'lair':
+        // Her floor: what is left of everything that came in before the hero.
+        if (roll < 0.3) return 'bones';
+        if (roll < 0.44) return 'shroom';
+        if (roll < 0.54) return 'rubble';
+        if (roll < 0.6) return 'tuft';
+        return null;
       case 'rift':
+      case 'riftend':
         // As densely dressed as the forest floor: the rift used to be bare
         // stone with the odd crystal, which read as unfinished next to it.
         if (roll < 0.26) return 'riftshard';

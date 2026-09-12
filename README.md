@@ -56,8 +56,8 @@ rechts. Geprüft von 320×240 bis 2560×1440, dazu Hochformat 500×900.
 
 ## Das Level
 
-Ein durchgehendes Level aus 1058 Kacheln (33 856 px) in sieben Zonen, plus eine
-achte hinter der Welt, die man sich verdienen muss:
+Ein durchgehendes Level aus 1058 Kacheln (33 856 px) in acht Zonen, plus eine
+neunte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime, und am Ende das Moor mit
    Gallert darin
@@ -68,9 +68,12 @@ achte hinter der Welt, die man sich verdienen muss:
 5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
 6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
 7. **Der Riss** — was hinter dem Thron aufbricht: 328 Kacheln violettes Gestein
-   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter, danach der
-   Schacht der Fünfkronigen, und dahinter das Tor nach Hause
-8. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 160 Edelsteine
+   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter — und
+   hinter ihm wieder Riss bis zum Tor nach Hause
+8. **Der Schlund der Fünfkronigen** — grün statt violett, mit Decke und Wänden:
+   der einzige Abschnitt des Risses, der ein Raum ist. Ein Rippentor an jedem
+   Ende fällt zu, sobald sie wach wird
+9. **Der Kristallhort** — nur per Teleport erreichbar, wenn alle 160 Edelsteine
    eingesammelt sind. Acht leere Spalten trennen ihn vom Riss; kein Sprung
    überbrückt die, das ist Absicht.
 
@@ -426,7 +429,8 @@ wahre Ende, wenn das Herz gefallen ist.
 
 ### Der Endboss: Die Fünfkronige
 
-Am Ende des Risses, im Schacht vor dem Tor. Fünf Köpfe, fünf Phasen, und ein
+Am Ende des Risses, in ihrem eigenen Saal vor dem Tor. Fünf Köpfe, fünf Phasen,
+und ein
 Kopf nach dem anderen: 70 Trefferpunkte, gleichmäßig auf die fünf verteilt —
 mehr, wenn die Klinge schon wirft, siehe *Bosse nehmen die Klinge zur Kenntnis*.
 Was die Leiste zeigt, ist immer nur der lebende; fällt er, kommt der nächste
@@ -434,6 +438,25 @@ hoch, und erst der fünfte beendet sie.
 
 Getroffen wird auch nur er. Ihr Leib und die Köpfe, die noch warten, sind keine
 Ziele, in beide Richtungen: In sie hineinzulaufen kostet nichts.
+
+#### Ihr Saal
+
+Sie bekommt denselben Handel wie der Ritter: Wände, eine Decke und ein Rippentor
+an jedem Ende, das zufällt, sobald sie wach wird, und wieder hochgeht, wenn der
+fünfte Kopf fällt. Es ist **ihr** Tor, nicht das des Ritters — zwei Bosse in
+einem Level brauchen zwei Türen, sonst schließt das Aufwecken des einen den Raum
+des anderen. Wer darin stirbt, findet es offen: Der Kontrollpunkt liegt davor,
+und eine Tür, die einen aussperrt, ist ein Sackgassen-Spielstand.
+
+#### Ihr Arm reicht nicht über den Saal
+
+Sie hat die Giftgalle vorher auf den Helden gelöst, egal wo er stand — also auch
+quer durch den ganzen Raum. Das ist jetzt vorbei: Ihr längster Zug ist der Atem
+mit 340 px, der Giftbogen ist kürzer, und jenseits davon wartet sie, statt auf
+einen Punkt an der Gegenwand zu werfen. Gemessen wird beides, damit „sie kommt
+nicht heran" nicht heimlich „sie tut gar nichts mehr" bedeutet: zwanzig Sekunden
+an der Gegenwand kosten null Herzen und es landet nichts in seiner Nähe —
+dieselben zwanzig Sekunden in ihrer Reichweite kosten ihn Blut.
 
 | Kopf | Was er fragt |
 | --- | --- |
@@ -462,7 +485,8 @@ geht es dreizehn Kacheln tief.
 | ![Die Fünfkronige](screenshots/23-fuenfkronige.png) | ![Der Aufstieg](screenshots/24-der-aufstieg.png) |
 
 `verify:hydra` fährt das alles ab: fünf Köpfe der Reihe nach, Leib und wartende
-Köpfe als Nicht-Ziele, jede Ankündigung mindestens 0,6 s lang, der Sturmkopf
+Köpfe als Nicht-Ziele, das Tor zu beim Aufwachen und offen nach ihrem Fall,
+nichts, was quer durch den Saal fliegt, jede Ankündigung mindestens 0,6 s lang, der Sturmkopf
 unerreichbar von unten und in Sekunden erledigt von oben, jede der sechs Stufen
 auf echter Physik erklommen, eine Parade, die sie bricht, und ein Lauf, der sie
 am Ende wirklich umlegt.
@@ -517,6 +541,7 @@ horizontal aneinandergehängt:
 .  leer          #  Stein        =  Erde         -  Holzplattform
 ^  Stacheln      L/l Lava        G  Fallgitter   P  Startpunkt
 S  Siegel (öffnet sich, wenn der Ritter fällt)     O  Tor nach Hause (Ziel)
+g  Rippentor (schließt den Saal der Fünfkronigen, solange sie lebt)
 s  Schleim       b  Fledermaus   k  Skelett      m  Dunkler Magier
 z  Zunder        w  Schildwache  r  Klingenläufer   Q  Gallert (Boss)
 $  Edelstein     H  Herz         C  Kontrollpunkt

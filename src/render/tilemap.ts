@@ -84,7 +84,23 @@ function colorsForZone(x: number): ZoneTileColors {
         ledgeEdge: '#665a68',
         calm,
       };
+    case 'lair':
+      // Her room, cut out of the same rift stone but grown over: the crust is
+      // measured down the same way as everywhere else, so the floor never comes
+      // out brighter than the hero standing on it.
+      return {
+        body: '#22301f',
+        bodyDark: '#121a10',
+        top: '#33562c',
+        topLight: '#4d7a41',
+        edge: '#22401f',
+        stoneLedges: true,
+        ledge: '#2a3a24',
+        ledgeEdge: '#5c8049',
+        calm,
+      };
     case 'rift':
+    case 'riftend':
       return {
         body: '#2b2140',
         bodyDark: '#180f28',
@@ -165,6 +181,9 @@ export function drawTilemap(
           break;
         case Tile.Seal:
           if (level.exitSealed) drawSeal(ctx, px, py, time, ty);
+          break;
+        case Tile.LairGate:
+          if (level.lairClosed) drawLairGate(ctx, px, py, time, ty);
           break;
         case Tile.Platform:
           drawPlatform(ctx, px, py, colors, noise);
@@ -328,6 +347,38 @@ function drawGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: n
   // Cursed glow seeping between the bars.
   const pulse = 0.35 + Math.sin(time * 2.2 + ty) * 0.15;
   glow(ctx, px + TILE / 2, py + TILE / 2, 26, `rgba(200,40,40,${pulse.toFixed(2)})`);
+}
+
+/**
+ * The hydra's door: ribs of grown bone rather than the knight's forged iron, so
+ * a player can tell at a glance which of the two shut behind them.
+ */
+function drawLairGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
+  ctx.fillStyle = '#0a100b';
+  ctx.fillRect(px, py, TILE, TILE);
+  // Three ribs, thicker where they knot together.
+  for (let i = 0; i < 3; i++) {
+    const x = px + 4 + i * 10;
+    const swell = 1 + Math.sin(ty * 1.3 + i * 2.1) * 0.35;
+    ctx.fillStyle = '#3d4a35';
+    ctx.fillRect(x, py, 6, TILE);
+    ctx.fillStyle = '#6b7d55';
+    ctx.fillRect(x, py, 2, TILE);
+    ctx.fillStyle = '#2a331f';
+    ctx.fillRect(x - 1, py + TILE / 2 - 3 * swell, 8, 6 * swell);
+  }
+  // A knuckle every other tile, where the ribs are lashed together.
+  if (ty % 2 === 0) {
+    ctx.fillStyle = '#4e5c3d';
+    ctx.fillRect(px, py + 12, TILE, 7);
+    ctx.fillStyle = '#8ea070';
+    ctx.fillRect(px, py + 12, TILE, 2);
+    ctx.fillStyle = '#1d2415';
+    ctx.fillRect(px + 5, py + 14, 3, 3);
+    ctx.fillRect(px + TILE - 8, py + 14, 3, 3);
+  }
+  const pulse = 0.3 + Math.sin(time * 1.8 + ty * 0.7) * 0.14;
+  glow(ctx, px + TILE / 2, py + TILE / 2, 26, `rgba(130,220,90,${pulse.toFixed(2)})`);
 }
 
 function drawPlatform(

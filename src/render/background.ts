@@ -3,6 +3,15 @@ import { Rng } from '../core/math';
 import { Zone, mixHex, zoneBlend } from './palette';
 
 /** Procedural parallax backdrop: near-black sky, two hill layers and motes. */
+/** Which hall the interior backdrop should paint. */
+type InteriorKind = 'throne' | 'lair' | 'cave';
+
+function interiorKind(zone: Zone): InteriorKind {
+  if (zone.name === 'throne') return 'throne';
+  if (zone.name === 'lair') return 'lair';
+  return 'cave';
+}
+
 export class Background {
 
   constructor(
@@ -44,14 +53,20 @@ export class Background {
     ctx: CanvasRenderingContext2D,
     camera: Camera,
     time: number,
-    throne: boolean,
+    variant: InteriorKind,
   ): void {
     const { viewW, viewH } = this;
+    const throne = variant === 'throne';
+    const lair = variant === 'lair';
     const base = ctx.createLinearGradient(0, 0, 0, viewH);
     if (throne) {
       base.addColorStop(0, '#120610');
       base.addColorStop(0.55, '#2a0a14');
       base.addColorStop(1, '#160610');
+    } else if (lair) {
+      base.addColorStop(0, '#060d07');
+      base.addColorStop(0.55, '#11220f');
+      base.addColorStop(1, '#050b06');
     } else {
       base.addColorStop(0, '#06101a');
       base.addColorStop(0.55, '#0d2233');
@@ -65,7 +80,11 @@ export class Background {
     const brickH = 48;
     const scroll = camera.x * 0.18;
     const scrollY = camera.y * 0.1;
-    ctx.strokeStyle = throne ? 'rgba(255,150,150,0.05)' : 'rgba(150,210,255,0.05)';
+    ctx.strokeStyle = throne
+      ? 'rgba(255,150,150,0.05)'
+      : lair
+        ? 'rgba(180,235,150,0.05)'
+        : 'rgba(150,210,255,0.05)';
     ctx.lineWidth = 2;
     for (let row = -1; row * brickH - scrollY < viewH + brickH; row++) {
       const y = row * brickH - (scrollY % brickH);
@@ -86,16 +105,26 @@ export class Background {
     // Colonnade: pillars / stalagmite columns at a nearer parallax.
     const pillarScroll = camera.x * 0.4;
     const spacing = 220;
-    ctx.fillStyle = throne ? 'rgba(28,8,14,0.85)' : 'rgba(6,20,30,0.85)';
+    const shaftColor = throne ? 'rgba(28,8,14,0.85)' : lair ? 'rgba(10,22,12,0.85)' : 'rgba(6,20,30,0.85)';
+    const litColor = throne ? 'rgba(60,16,26,0.7)' : lair ? 'rgba(46,74,42,0.7)' : 'rgba(16,44,60,0.7)';
+    ctx.fillStyle = shaftColor;
     for (let i = -1; i * spacing < viewW + spacing; i++) {
       const x = i * spacing - (pillarScroll % spacing);
       const w = 46;
       ctx.fillRect(x, -20 - camera.y * 0.12, w, viewH + 80);
-      ctx.fillStyle = throne ? 'rgba(60,16,26,0.7)' : 'rgba(16,44,60,0.7)';
+      ctx.fillStyle = litColor;
       ctx.fillRect(x, -20 - camera.y * 0.12, 8, viewH + 80);
-      // Capital + base.
-      ctx.fillRect(x - 8, 40 - camera.y * 0.12, w + 16, 16);
-      ctx.fillStyle = throne ? 'rgba(28,8,14,0.85)' : 'rgba(6,20,30,0.85)';
+      // Capital + base. In her lair the columns are ribs, so they get knuckles
+      // down their length instead of one capital near the ceiling.
+      if (lair) {
+        for (let k = -1; k * 90 < viewH + 180; k++) {
+          const y = k * 90 - ((camera.y * 0.12) % 90);
+          ctx.fillRect(x - 7, y, w + 14, 12);
+        }
+      } else {
+        ctx.fillRect(x - 8, 40 - camera.y * 0.12, w + 16, 16);
+      }
+      ctx.fillStyle = shaftColor;
     }
 
     if (throne) {
@@ -125,6 +154,33 @@ export class Background {
         ctx.fillStyle = `rgba(255,${110 + (i % 5) * 12},60,0.35)`;
         ctx.fillRect(px, py, 2.5, 2.5);
       }
+    } else if (lair) {
+      // Roots hanging between the ribs, and a low green glow behind them. A
+      // calm zone, so they hang still rather than swaying - see Zone.calm.
+      for (let i = -1; i * spacing < viewW + spacing; i++) {
+        const x = i * spacing - (pillarScroll % spacing) + spacing / 2;
+        const top = -20 - camera.y * 0.12;
+        ctx.strokeStyle = 'rgba(30,52,28,0.75)';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.quadraticCurveTo(x + 18, top + 110, x + 4, top + 230);
+        ctx.stroke();
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x + 34, top);
+        ctx.quadraticCurveTo(x + 18, top + 90, x + 30, top + 170);
+        ctx.stroke();
+      }
+      for (let i = -1; i * 300 < viewW + 300; i++) {
+        const x = i * 300 - ((camera.x * 0.35) % 300);
+        const y = viewH * 0.58 - camera.y * 0.1 + Math.sin(i * 1.7) * 70;
+        const g = ctx.createRadialGradient(x, y, 4, x, y, 140);
+        g.addColorStop(0, 'rgba(120,215,95,0.12)');
+        g.addColorStop(1, 'rgba(120,215,95,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - 140, y - 140, 280, 280);
+      }
     } else {
       // Cave glow pockets.
       for (let i = -1; i * 340 < viewW + 340; i++) {
@@ -141,7 +197,7 @@ export class Background {
     // Depth haze towards the bottom.
     const haze = ctx.createLinearGradient(0, viewH * 0.5, 0, viewH);
     haze.addColorStop(0, 'rgba(0,0,0,0)');
-    haze.addColorStop(1, throne ? 'rgba(40,4,10,0.55)' : 'rgba(2,10,18,0.6)');
+    haze.addColorStop(1, throne ? 'rgba(40,4,10,0.55)' : lair ? 'rgba(6,18,8,0.6)' : 'rgba(2,10,18,0.6)');
     ctx.fillStyle = haze;
     ctx.fillRect(0, 0, viewW, viewH);
   }
@@ -223,6 +279,7 @@ export class Background {
           }
           break;
         }
+        case 'riftend':
         case 'rift': {
           // Torn slabs of rock standing on end, with a piece of one already
           // adrift above it - the zone's whole idea in a silhouette.
@@ -304,7 +361,8 @@ export class Background {
     const interiorAmount = (from.interior ? 1 - t : 0) + (to.interior ? t : 0);
     if (interiorAmount > 0.002) {
       ctx.globalAlpha = Math.min(1, interiorAmount);
-      this.drawInterior(ctx, camera, time, to.name === 'throne' || (from.name === 'throne' && t < 0.5));
+      const nearer = t < 0.5 ? from : to;
+      this.drawInterior(ctx, camera, time, interiorKind(nearer.interior ? nearer : to.interior ? to : from));
       ctx.globalAlpha = 1;
     }
 
