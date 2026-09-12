@@ -26,5 +26,7 @@ export interface World {
   onDrownedCrownDefeated(): void;
   onMireBossDefeated(): void;
   onHydraEngaged(): void;
+  onHydraNeckCut(wasTheFire: boolean): void;
+  onHydraNeckSealed(sealed: number): void;
   onHydraDefeated(): void;
 }

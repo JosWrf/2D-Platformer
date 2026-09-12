@@ -1,40 +1,38 @@
 /**
- * Die Fünfkronige - the hydra in the shaft at the end of the rift, and the last
+ * Die Fünfkronige - the hydra in the lair at the end of the rift, and the last
  * fight in the game.
  *
- * She is the one boss on the road that cannot be walked past: the gate home
- * stays shut while she lives (verify:ending pins the door itself). Five heads,
- * five phases, and one of them is not a fight on the floor at all - the storm
- * head withdraws to the top of her tower, out of reach of the blade and of the
- * crescent it throws, and the only answer is to climb the steps to it.
+ * She is not five bosses in a queue. All five heads are awake and all five can
+ * be cut, but cutting one is not killing it: the stump counts down and the head
+ * comes back. Steel alone never finishes a hydra. What does is her own fire -
+ * the flame head lobs embers, and an ember turned aside with a parry flies dead
+ * flat and burns a stump shut for good. Because a turned ember flies flat, the
+ * height the hero is standing at is the height he is aiming at, and the four
+ * stumps droop to the heights of four different ledges. That is what her tower
+ * is for.
  *
- * What this pins:
+ * What this pins, in the order the fight teaches it:
  *
- *   - Five heads fall one at a time, each one a phase, and cutting one puts the
- *     next up instead of ending her.
- *   - Only the living head is a target. Her body and the heads still waiting
- *     their turn are not, in either direction: walking into her costs nothing.
- *   - Every move is announced before it lands, and the announcement is long
- *     enough to read.
- *   - The storm head cannot be reached from the floor. Twenty seconds of an
- *     untouchable hero with the sharpest blade in the game, jumping and
- *     throwing crescents, take exactly nothing off it - that is what makes the
- *     climb the answer rather than a scenic route.
- *   - The climb works on real physics: every step of the shaft is landed on,
- *     one after another, and from the top the same head is cut in seconds. A
- *     mortal hero on seven hearts makes the same climb with her storm phase
- *     live - a way up that kills him on the way is not a way up.
- *   - Her lair is a room: waking her shuts it at both ends the way the throne
- *     shuts behind the knight, her last head opens it again, and a death in
- *     there leaves it open so the hero can walk back in.
- *   - Nothing she does crosses that room. She used to solve the venom arc
- *     straight at the hero wherever he stood, so a hero at the far wall was
- *     shelled from forty tiles away; now she waits instead, and the same thirty
- *     seconds up close still cost him.
- *   - A parry breaks her whatever the head has absorbed.
- *   - She sizes up the blade coming at her, like every other boss here.
- *   - She stays down: felled once, a death and a respawn do not rebuild her.
- *   - And she can actually be killed, end to end, without touching her state.
+ *   - Every head is a target, all the time. Her body, her necks and her stumps
+ *     are not, in either direction: walking into her costs nothing and steel
+ *     does nothing at all to a cut neck.
+ *   - A cut neck grows back, and a hero who only swings never finishes her: a
+ *     hundred seconds of mashing leave her standing with heads he has had to
+ *     cut twice. (The blade bats an ember aside as well as a parry does - the
+ *     rule Gallert teaches with his spit - so a masher can seal one by luck.
+ *     Luck is not a plan: it is still her fire doing the work.)
+ *   - Her own fire, parried into a stump, closes it for good.
+ *   - Each of the four closes from its own ledge - floor, and three steps up
+ *     the tower - which is the whole reason the tower is there.
+ *   - The fifth neck is the fire itself and can never be sealed, so cutting it
+ *     early costs time and nothing else. With the other four burned out, putting
+ *     it out finishes her.
+ *   - The storm head is out of reach from the floor, and the six steps are
+ *     climbed on real physics, mortal, with her storm phase live.
+ *   - Her lair shuts behind the hero when she wakes and opens when she falls.
+ *   - Nothing she does crosses that room.
+ *   - Every move is announced, a parry breaks her, she sizes up the blade, and
+ *     once felled she stays down.
  *
  * Usage: node tools/verify-hydra.mjs
  */
@@ -100,11 +98,10 @@ const result = await page.evaluate(() => {
     g.update(1 / 60, input);
     g.render(ctx);
   };
-  // Looked up rather than held on to: every death rebuilds the roster.
   const find = () => g.enemies.find((e) => e.kind === 'hydra');
   const overlaps = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
-  /** Puts the hero on the floor of her shaft, `gap` pixels aside, and wakes her. */
+  /** Puts the hero on the floor of her lair, `gap` pixels aside, and wakes her. */
   const setUp = (tier, gap = 130) => {
     g.restart();
     g.state = 'playing';
@@ -123,14 +120,116 @@ const result = await page.evaluate(() => {
       p.hp = p.maxHp;
       tick();
     }
+    // And out the far side of her rise: she is untouchable while she comes up,
+    // so a check that starts during it measures the intro, not the fight.
+    for (let f = 0; f < 60 * 4 && (h.state === 'rise' || h.state === 'wait'); f++) {
+      p.hp = p.maxHp;
+      p.invuln = 999;
+      p.x = h.cx - gap;
+      p.y = h.bottom - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      tick();
+    }
+    p.invuln = 0;
     return h;
+  };
+
+  /** Takes a named head off, for setting a state up rather than fighting to it. */
+  const cut = (h, i) => {
+    h.struck = i;
+    h.hurt(999, 1, g);
+  };
+
+  /** Every surface the hero can stand on inside her room: the floor and the steps. */
+  const surfaces = (h) => {
+    const L = g.level;
+    const out = [{ top: h.bottom, x0: Math.floor((h.cx - 640) / TILE), x1: Math.floor((h.cx + 640) / TILE) }];
+    for (let ty = 1; ty < L.height; ty++) {
+      let run = null;
+      for (let tx = Math.floor((h.cx - 700) / TILE); tx <= Math.floor((h.cx + 700) / TILE); tx++) {
+        if (L.platformAt(tx, ty)) {
+          if (!run) run = { top: ty * TILE, x0: tx, x1: tx };
+          else run.x1 = tx;
+        } else if (run) {
+          out.push(run);
+          run = null;
+        }
+      }
+      if (run) out.push(run);
+    }
+    return out;
+  };
+
+  /**
+   * Where the hero has to stand to burn a given stump shut: the surface whose
+   * standing height matches it, at the end nearest the stump. Derived, never
+   * counted in tiles - the room can be rebuilt without rewriting this.
+   */
+  const firingPoint = (h, neck) => {
+    const stump = h.stumpCentre(neck);
+    const want = stump.y + p.h / 2;
+    const surface = surfaces(h).sort((a, b) => Math.abs(a.top - want) - Math.abs(b.top - want))[0];
+    const left = surface.x0 * TILE;
+    const right = (surface.x1 + 1) * TILE;
+    const onTheRight = stump.x > (left + right) / 2;
+    // The floor is continuous, so there he simply stands back from it.
+    const wide = right - left > 900;
+    const x = wide ? stump.x - 120 : onTheRight ? right - p.w - 4 : left + 4;
+    return { x, top: surface.top, facing: stump.x > x ? 1 : -1, off: Math.abs(surface.top - want) };
+  };
+
+  /**
+   * Bait an ember and turn it into the stump. Real timing: the hero parries
+   * when one is actually about to reach him, and the ember does the rest.
+   */
+  const burnShut = (h, i, seconds = 26) => {
+    const neck = h.necks[i];
+    const spot = firingPoint(h, neck);
+    let embers = 0;
+    const seen = new Set();
+    let f = 0;
+    for (; f < 60 * seconds && neck.state === 'stump'; f++) {
+      p.hp = p.maxHp;
+      p.dead = false;
+      p.invuln = 0;
+      p.x = spot.x;
+      p.y = spot.top - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      p.facing = spot.facing;
+      let incoming = null;
+      for (const q of g.projectiles) {
+        if (q.kind !== 'ember') continue;
+        if (!seen.has(q)) {
+          seen.add(q);
+          embers++;
+        }
+        if (q.friendly) continue;
+        if (!incoming || Math.abs(q.cx - p.cx) < Math.abs(incoming.cx - p.cx)) incoming = q;
+      }
+      // Tight on purpose. The parry has a cooldown, so a bot that stabs the
+      // button while the coal is still thirty pixels overhead has spent the
+      // window before it arrives - which is exactly what a player pressing too
+      // early does, and is not the same measurement as "can it be turned".
+      const near = incoming && Math.abs(incoming.cx - p.cx) < 30 && Math.abs(incoming.cy - p.cy) < 26;
+      tick({ parry: !!near });
+    }
+    return {
+      kind: neck.kind,
+      sealed: neck.state === 'sealed',
+      seconds: +(f / 60).toFixed(1),
+      embers,
+      ledgeAbove: Math.round(h.bottom - spot.top),
+      aimOff: Math.round(spot.off),
+    };
   };
 
   /* ------------------------------------------ she sizes up the blade, once */
 
   const bar = (tier) => {
     const h = setUp(tier);
-    return { engaged: h.engaged, maxHp: h.maxHp, poise: h.poiseMax, perHead: h.living.maxHp };
+    return { engaged: h.engaged, maxHp: h.maxHp, poise: h.poiseMax, perNeck: h.necks[0].maxHp };
   };
   const soft = bar(0);
   const sharp = bar(2);
@@ -139,11 +238,7 @@ const result = await page.evaluate(() => {
 
   const parryBroke = (() => {
     const h = setUp(1, 70);
-    // The flame head, mid-breath, with poise she could never lose to damage:
-    // whatever shakes her here was the parry and nothing else.
-    h.head = 1;
-    h.heads[0].dead = true;
-    h.heads[0].hp = 0;
+    h.acting = 2;
     h.state = 'act';
     h.timer = 3;
     let broke = false;
@@ -168,12 +263,10 @@ const result = await page.evaluate(() => {
   /* ------------------------------------ her door, and the length of her arm */
 
   const theRoom = (() => {
-    const boss = setUp(1, 130);
+    const h = setUp(1, 130);
     const closedOnWaking = g.level.lairClosed;
-    // The inside face of her left-hand door, read out of the level rather than
-    // counted in tiles: the room can be rebuilt without rewriting this.
-    const floorTy = Math.round(boss.bottom / TILE);
-    let doorTx = Math.floor(boss.cx / TILE);
+    const floorTy = Math.round(h.bottom / TILE);
+    let doorTx = Math.floor(h.cx / TILE);
     while (doorTx > 1 && g.level.tileAt(doorTx, floorTy - 1) !== LAIR_GATE) doorTx--;
     const farX = (doorTx + 2) * TILE;
 
@@ -181,11 +274,10 @@ const result = await page.evaluate(() => {
     p.hp = p.maxHp;
     p.invuln = 0;
     let closestThrow = Infinity;
-    let poolsNearHim = 0;
     for (let f = 0; f < 60 * 20; f++) {
       // Pinned against the far wall: this measures her arm, not his footwork.
       p.x = farX;
-      p.y = boss.bottom - p.h;
+      p.y = h.bottom - p.h;
       p.vx = 0;
       p.vy = 0;
       p.dead = false;
@@ -194,23 +286,20 @@ const result = await page.evaluate(() => {
         if (q.friendly) continue;
         closestThrow = Math.min(closestThrow, Math.abs(q.cx - p.cx));
       }
-      for (const pool of boss.pools) if (Math.abs(pool.x - p.cx) < 140) poolsNearHim++;
     }
     const atTheWall = {
-      tilesAway: Math.round(Math.abs(boss.cx - p.cx) / TILE),
+      tilesAway: Math.round(Math.abs(h.cx - p.cx) / TILE),
       hp: p.hp,
       closestThrow: Number.isFinite(closestThrow) ? Math.round(closestThrow) : null,
-      poolsNearHim,
     };
 
-    // The control, so "she cannot reach him" is not just "she is broken":
-    // the same twenty seconds within her reach have to cost him.
+    // The control, so "she cannot reach him" is not just "she is broken".
     p.hp = p.maxHp;
     p.invuln = 0;
     let hurtClose = 0;
     for (let f = 0; f < 60 * 20 && hurtClose === 0; f++) {
-      p.x = boss.cx - 150;
-      p.y = boss.bottom - p.h;
+      p.x = h.cx - 150;
+      p.y = h.bottom - p.h;
       p.vx = 0;
       p.vy = 0;
       p.dead = false;
@@ -223,82 +312,39 @@ const result = await page.evaluate(() => {
     return { closedOnWaking, atTheWall, hurtClose };
   })();
 
-  /* ------------------------------- and the climb is a climb, not a gauntlet */
+  /* ------------------------------------------ every head is a target, always */
 
-  /*
-   * The same six steps, but with a mortal hero on seven hearts and her storm
-   * phase live: rocks down the shaft and gusts pushing while he is in the air.
-   * The climb is the answer to that phase, so it has to be survivable - a way
-   * up that kills the hero on the way is not a way up.
-   */
-  const mortalClimb = (() => {
-    const boss = setUp(1);
-    boss.head = 2;
-    for (let i = 0; i < 2; i++) {
-      boss.heads[i].dead = true;
-      boss.heads[i].hp = 0;
+  const targets = (() => {
+    const h = setUp(1);
+    const boxAt = (c) => ({ x: c.x - 18, y: c.y - 14, w: 36, h: 28 });
+    const onHeads = h.necks.map((n) => h.overlaps(boxAt(h.headCentre(n))));
+    const onBody = h.overlaps({ x: h.cx - 20, y: h.cy - 20, w: 40, h: 40 });
+    // And a cut neck stops being one: steel does nothing to a stump.
+    cut(h, 0);
+    const stump = h.necks[0];
+    const onStump = h.overlaps(boxAt(h.stumpCentre(stump)));
+    const before = stump.regrow;
+    for (let f = 0; f < 60 * 2; f++) {
+      p.hp = p.maxHp;
+      p.x = h.stumpCentre(stump).x - 26;
+      p.y = h.bottom - p.h;
+      p.vx = 0;
+      p.facing = 1;
+      tick({ attack: f % 2 === 0 });
     }
-    boss.state = 'recover';
-    boss.timer = 1;
-    p.maxHp = 7;
-    p.hp = 7;
-    const spans = [];
-    const L = g.level;
-    for (let ty = 1; ty < L.height; ty++) {
-      let run = null;
-      for (let tx = Math.floor((boss.cx - 700) / TILE); tx <= Math.floor((boss.cx + 700) / TILE); tx++) {
-        if (L.platformAt(tx, ty)) {
-          if (!run) run = { ty, x0: tx, x1: tx };
-          else run.x1 = tx;
-        } else if (run) {
-          spans.push(run);
-          run = null;
-        }
-      }
-      if (run) spans.push(run);
-    }
-    const rows = [...new Set(spans.map((q) => q.ty))].sort((a, b) => b - a);
-    let deaths = 0;
-    let reached = 0;
-    for (const ty of rows) {
-      const step = spans.filter((q) => q.ty === ty)[0];
-      const topY = ty * TILE;
-      const onIt = () =>
-        p.onGround && Math.abs(p.bottom - topY) <= 2 && p.cx > step.x0 * TILE - 8 && p.cx < (step.x1 + 1) * TILE + 8;
-      let hold = 0;
-      let f = 0;
-      for (; f < 60 * 15 && !onIt(); f++) {
-        if (g.state !== 'playing') {
-          deaths++;
-          tick({ confirm: f % 8 < 3 });
-          continue;
-        }
-        const target = Math.max(step.x0 * TILE + 12, Math.min(p.cx, (step.x1 + 1) * TILE - 12));
-        const dx = target - p.cx;
-        if (p.onGround && p.bottom > topY + 4 && Math.abs(dx) < 100) hold = 16;
-        if (hold > 0) hold--;
-        tick({ left: dx < -6, right: dx > 6, jump: hold > 0 });
-      }
-      if (!onIt()) break;
-      reached++;
-    }
-    return { steps: rows.length, reached, deaths, heartsLeft: p.hp };
+    return {
+      everyHead: onHeads.every(Boolean),
+      body: onBody,
+      stump: onStump,
+      stumpStillOpen: stump.state === 'stump',
+      clockRan: before > stump.regrow,
+    };
   })();
 
-  /* ------------------------------------- only the living head is a target */
-
-  const h = setUp(1);
-  const headBox = h.headRect();
-  const dormantAt = h.neckEnd(h.heads[4]);
-  const targets = {
-    livingHead: h.overlaps({ x: headBox.x + 4, y: headBox.y + 4, w: 40, h: 32 }),
-    waitingHead: h.overlaps({ x: dormantAt.x - 20, y: dormantAt.y - 20, w: 40, h: 40 }),
-    body: h.overlaps({ x: h.cx - 20, y: h.cy - 20, w: 40, h: 40 }),
-  };
-
-  /* ------------------------------------------ and standing in her costs nothing */
+  /* --------------------------------------- and standing in her costs nothing */
 
   const contact = (() => {
+    const h = setUp(1);
     h.state = 'rise';
     h.timer = 3;
     p.hp = p.maxHp;
@@ -314,214 +360,287 @@ const result = await page.evaluate(() => {
     return { before, after: p.hp };
   })();
 
-  /* ------------------------------------------------------------- the fight */
+  /* ------------------------------------- steel alone never finishes a hydra */
 
-  h.state = 'recover';
-  h.timer = 0.4;
-  p.x = h.cx - 130;
-  p.y = h.bottom - p.h;
-  p.vx = 0;
-  p.vy = 0;
-
-  const phases = [{ phase: h.phase, kind: h.living.kind, frame: 0 }];
-  let lastPhase = h.phase;
-  let frames = 0;
-  // The shortest warning she ever gave, in frames: a move that lands without
-  // one is the single thing every boss in this game is not allowed to do.
-  let windRun = 0;
-  let shortestWind = 1e9;
-  const watch = () => {
-    const cut = h.phase !== lastPhase || h.dead;
-    if (h.state === 'wind') windRun++;
-    else {
-      // A wind cut short is the hero interrupting her - a stagger, or the head
-      // coming off mid-breath - not her skipping the warning. Only the ones she
-      // was left alone to finish say anything about the telegraph.
-      if (windRun > 0 && h.stun <= 0 && !cut) shortestWind = Math.min(shortestWind, windRun);
-      windRun = 0;
-    }
-    if (cut && !h.dead) {
-      lastPhase = h.phase;
-      phases.push({ phase: h.phase, kind: h.living.kind, frame: frames });
-    }
-  };
-
-  /** Chases the living head and swings at it. Untouchable: this measures reach. */
-  let jumpHold = 0;
-  let dropFor = 0;
-  const chase = (budget) => {
-    for (let f = 0; f < budget && !h.dead; f++) {
-      frames++;
+  const steelAlone = (() => {
+    const h = setUp(2);
+    let jumpHold = 0;
+    let frames = 0;
+    for (; frames < 60 * 100 && !h.dead; frames++) {
       p.hp = p.maxHp;
       p.dead = false;
-      const c = h.headCentre();
+      // Chase whichever head is lowest and hack at it, for ever.
+      const heads = h.necks.filter((n) => n.state === 'head');
+      if (heads.length === 0) {
+        tick();
+        continue;
+      }
+      const target = heads.sort((a, b) => b.hy - a.hy)[0];
+      const c = h.headCentre(target);
       const want = c.x + (p.cx < c.x ? -24 : 24);
       const dx = want - p.cx;
-      if (p.onGround && p.cy < c.y - 90) dropFor = 4;
-      if (dropFor > 0) dropFor--;
-      if (p.onGround && dropFor <= 0 && p.cy + 14 > c.y + 18) jumpHold = 16;
+      if (p.onGround && p.cy + 14 > c.y + 18) jumpHold = 16;
       if (jumpHold > 0) jumpHold--;
-      tick({
-        left: dx < -4,
-        right: dx > 4,
-        jump: jumpHold > 0 || dropFor > 0,
-        down: dropFor > 0,
-        attack: f % 2 === 0,
-      });
-      watch();
+      tick({ left: dx < -4, right: dx > 4, jump: jumpHold > 0, attack: frames % 2 === 0 });
     }
-  };
+    return {
+      seconds: +(frames / 60).toFixed(1),
+      alive: !h.dead,
+      regrowths: h.regrowths,
+      sealed: h.sealed,
+    };
+  })();
 
-  // Phases one and two happen on the floor.
-  chase(60 * 60);
-  const reachedStorm = h.living.kind === 'storm';
+  /* ------------------------------------- her own fire is what closes a neck */
 
-  /* ------------------------------- the storm head is not a floor fight */
+  const byFire = (() => {
+    const h = setUp(1);
+    cut(h, 0);
+    const first = burnShut(h, 0);
+    // Sealed means sealed: fifteen more seconds must not bring it back.
+    for (let f = 0; f < 60 * 15; f++) {
+      p.hp = p.maxHp;
+      p.invuln = 999;
+      tick();
+    }
+    return { ...first, stillSealedAfter15s: h.necks[0].state === 'sealed' };
+  })();
 
-  const stormHp = h.living.hp;
+  /* ------------------------- and if it is left alone instead, it comes back */
+
+  const leftAlone = (() => {
+    const h = setUp(1);
+    cut(h, 2);
+    const neck = h.necks[2];
+    let f = 0;
+    for (; f < 60 * 16 && neck.state === 'stump'; f++) {
+      p.hp = p.maxHp;
+      p.invuln = 999;
+      p.x = h.cx - 300;
+      p.y = h.bottom - p.h;
+      p.vx = 0;
+      tick();
+    }
+    return { state: neck.state, seconds: +(f / 60).toFixed(1), hpBack: neck.hp, ofMax: neck.maxHp };
+  })();
+
+  /* ------------------------------- four stumps, four ledges, one at a time */
+
+  const ledges = (() => {
+    const h = setUp(1);
+    const out = [];
+    for (const i of [0, 2, 3, 4]) {
+      cut(h, i);
+      out.push(burnShut(h, i));
+    }
+    return out;
+  })();
+
+  /* ------------------------------- the fire itself can never be burned shut */
+
+  const theFire = (() => {
+    const h = setUp(1);
+    cut(h, 1);
+    const spot = firingPoint(h, h.necks[1]);
+    let f = 0;
+    for (; f < 60 * 13 && h.necks[1].state === 'stump'; f++) {
+      p.hp = p.maxHp;
+      p.dead = false;
+      p.invuln = 999;
+      p.x = spot.x;
+      p.y = spot.top - p.h;
+      p.vx = 0;
+      p.vy = 0;
+      tick({ parry: f % 6 < 3 });
+    }
+    return { state: h.necks[1].state, seconds: +(f / 60).toFixed(1) };
+  })();
+
+  /* --------------------------------- the storm head is not a floor fight */
+
+  const h = setUp(2);
   let lowestBlade = 1e9;
   let highestBeam = 1e9;
-  for (let f = 0; f < 60 * 20 && h.living.kind === 'storm'; f++) {
-    frames++;
+  const storm = h.necks[4];
+  const stormHpBefore = storm.hp;
+  let jumpHold = 0;
+  for (let f = 0; f < 60 * 20; f++) {
     p.hp = p.maxHp;
     p.dead = false;
-    // Pinned to the floor: this is the question "can it be done from down
-    // here", so he is not allowed to wander onto a step and answer it there.
     if (p.bottom < h.bottom - 2) {
       p.y = h.bottom - p.h;
       p.vy = 0;
     }
-    const c = h.headCentre();
+    const c = h.headCentre(storm);
     const dx = c.x + (p.cx < c.x ? -24 : 24) - p.cx;
     if (p.onGround) jumpHold = 16;
     if (jumpHold > 0) jumpHold--;
     tick({ left: dx < -4, right: dx > 4, jump: jumpHold > 0, attack: f % 2 === 0 });
     lowestBlade = Math.min(lowestBlade, p.swordRect().y);
     for (const q of g.projectiles) if (q.friendly && q.kind === 'beam') highestBeam = Math.min(highestBeam, q.y);
-    watch();
   }
   const fromTheFloor = {
-    headKind: h.living.kind,
-    hpBefore: stormHp,
-    hpAfter: h.living.hp,
-    headBottom: Math.round(h.headRect().y + h.headRect().h),
+    hpBefore: stormHpBefore,
+    hpAfter: storm.hp,
+    headBottom: Math.round(h.headRect(storm).y + h.headRect(storm).h),
     bladeGotTo: Math.round(lowestBlade),
     crescentGotTo: Number.isFinite(highestBeam) ? Math.round(highestBeam) : null,
   };
 
   /* ------------------------------------------------ so he climbs to it */
 
-  // The steps are read out of the level rather than assumed: every run of
-  // platform tiles in her shaft, lowest row first.
-  const spans = [];
-  const L = g.level;
-  const from = Math.floor((h.cx - 700) / TILE);
-  const to = Math.floor((h.cx + 700) / TILE);
-  for (let ty = 1; ty < L.height; ty++) {
-    let run = null;
-    for (let tx = from; tx <= to; tx++) {
-      if (L.platformAt(tx, ty)) {
-        if (!run) run = { ty, x0: tx, x1: tx };
-        else run.x1 = tx;
-      } else if (run) {
-        spans.push(run);
-        run = null;
-      }
-    }
-    if (run) spans.push(run);
-  }
-  const rows = [...new Set(spans.map((s) => s.ty))].sort((a, b) => b - a);
-
-  const centreOf = (q) => ((q.x0 + q.x1 + 1) / 2) * TILE;
+  const steps = surfaces(h).filter((s) => s.top < h.bottom - 8);
+  const rows = [...new Set(steps.map((s) => s.top))].sort((a, b) => b - a);
   const standingOn = (step) =>
     p.onGround &&
-    Math.abs(p.bottom - step.ty * TILE) <= 2 &&
+    Math.abs(p.bottom - step.top) <= 2 &&
     p.cx > step.x0 * TILE - 8 &&
     p.cx < (step.x1 + 1) * TILE + 8;
 
   /** One step at a time, on real physics, from wherever he is standing now. */
   const climbTheSteps = () => {
     const log = [];
-    let last = null;
-    for (const ty of rows) {
-      if (p.bottom <= ty * TILE + 2) continue;
-      const step = spans
-        .filter((q) => q.ty === ty)
-        .sort((a, b) => Math.abs(centreOf(a) - p.cx) - Math.abs(centreOf(b) - p.cx))[0];
-      last = step;
+    for (const top of rows) {
+      if (p.bottom <= top + 2) continue;
+      const step = steps
+        .filter((q) => q.top === top)
+        .sort(
+          (a, b) =>
+            Math.abs(((a.x0 + a.x1 + 1) / 2) * TILE - p.cx) - Math.abs(((b.x0 + b.x1 + 1) / 2) * TILE - p.cx),
+        )[0];
       let hold = 0;
       let f = 0;
       for (; f < 60 * 12 && !standingOn(step); f++) {
-        frames++;
         p.hp = p.maxHp;
         p.dead = false;
         const target = Math.max(step.x0 * TILE + 12, Math.min(p.cx, (step.x1 + 1) * TILE - 12));
         const dx = target - p.cx;
-        if (p.onGround && p.bottom > step.ty * TILE + 4 && Math.abs(dx) < 100) hold = 16;
+        if (p.onGround && p.bottom > step.top + 4 && Math.abs(dx) < 100) hold = 16;
         if (hold > 0) hold--;
         tick({ left: dx < -6, right: dx > 6, jump: hold > 0 });
-        watch();
       }
-      log.push({ row: ty, landed: standingOn(step), seconds: +(f / 60).toFixed(1) });
+      log.push({ row: Math.round(top / TILE), landed: standingOn(step), seconds: +(f / 60).toFixed(1) });
       if (!standingOn(step)) break;
     }
-    return { log, top: last };
+    return log;
   };
 
-  const firstClimb = climbTheSteps();
-  const climbed = firstClimb.log;
-  const top = firstClimb.top;
+  const climbed = climbTheSteps();
   const climbedEvery = climbed.length === rows.length && climbed.every((c) => c.landed);
 
-  // From up there the same head answers to the same blade.
+  // And the storm head answers to the same blade from up there.
   const stormAtTheTop = (() => {
-    const before = h.living.kind === 'storm' ? h.living.hp : null;
     let f = 0;
-    // He walks to the edge of the step and swings off it - and no further:
-    // a bot that strolls off the end is measuring the drop, not the reach.
+    const top = steps.filter((s) => s.top === rows[rows.length - 1])[0];
     const edgeL = top.x0 * TILE + 4;
     const edgeR = (top.x1 + 1) * TILE - p.w - 4;
-    let fellOff = 0;
-    for (; f < 60 * 30 && h.living.kind === 'storm'; f++) {
-      // A gust can carry him off the end of the step. A player climbs back up,
-      // so the bot does too - otherwise one shove decides the measurement.
-      if (p.bottom > top.ty * TILE + 4 && p.onGround) {
-        fellOff++;
+    for (; f < 60 * 30 && storm.state === 'head'; f++) {
+      if (p.bottom > top.top + 4 && p.onGround) {
         climbTheSteps();
         continue;
       }
-      frames++;
       p.hp = p.maxHp;
       p.dead = false;
-      const c = h.headCentre();
+      const c = h.headCentre(storm);
       const want = Math.max(edgeL, Math.min(edgeR, c.x + (p.cx < c.x ? -24 : 24) - p.w / 2));
       const dx = want - p.x;
       tick({ left: dx < -3, right: dx > 3, attack: f % 2 === 0 });
-      watch();
     }
-    const box = p.swordRect();
-    const hr = h.headRect();
-    return {
-      hpBefore: before,
-      hpAfter: h.living.kind === 'storm' ? h.living.hp : null,
-      cut: h.living.kind !== 'storm',
-      seconds: +(f / 60).toFixed(1),
-      fellOff,
-      stoodAt: Math.round(p.x),
-      edgeR: Math.round(edgeR),
-      onGround: p.onGround,
-      inTheRoster: g.enemies.includes(h),
-      blade: [Math.round(box.x), Math.round(box.x + box.w), Math.round(box.y), Math.round(box.y + box.h)],
-      head: [Math.round(hr.x), Math.round(hr.x + hr.w), Math.round(hr.y), Math.round(hr.y + hr.h)],
-    };
+    return { cut: storm.state !== 'head', seconds: +(f / 60).toFixed(1) };
   })();
 
-  /* -------------------------------------------------- and down again, to the end */
+  /* ------------------------------- a mortal hero makes the same climb alive */
 
-  chase(60 * 90);
-  const felled = h.dead;
-  const doorAfterHerFall = !g.level.lairClosed;
-  const secondsToFell = +(frames / 60).toFixed(1);
+  const mortalClimb = (() => {
+    const boss = setUp(1);
+    cut(boss, 0);
+    cut(boss, 1);
+    cut(boss, 2);
+    cut(boss, 3);
+    p.maxHp = 7;
+    p.hp = 7;
+    let deaths = 0;
+    let reached = 0;
+    for (const top of rows) {
+      if (p.bottom <= top + 2) continue;
+      const step = steps.filter((q) => q.top === top)[0];
+      let hold = 0;
+      let f = 0;
+      for (; f < 60 * 15 && !standingOn(step); f++) {
+        if (g.state !== 'playing') {
+          deaths++;
+          tick({ confirm: f % 8 < 3 });
+          continue;
+        }
+        const target = Math.max(step.x0 * TILE + 12, Math.min(p.cx, (step.x1 + 1) * TILE - 12));
+        const dx = target - p.cx;
+        if (p.onGround && p.bottom > step.top + 4 && Math.abs(dx) < 100) hold = 16;
+        if (hold > 0) hold--;
+        tick({ left: dx < -6, right: dx > 6, jump: hold > 0 });
+      }
+      if (!standingOn(step)) break;
+      reached++;
+    }
+    return { steps: rows.length, reached, deaths, heartsLeft: p.hp };
+  })();
+
+  /* -------------------------------------- burn out four, put out the fifth */
+
+  const theEnd = (() => {
+    const boss = setUp(2);
+    p.maxHp = 12;
+    // The shortest warning she ever gave herself time to finish, in frames.
+    let windRun = 0;
+    let shortestWind = 1e9;
+    let lastSealed = 0;
+    const watch = () => {
+      const settled = boss.sealed === lastSealed && boss.stun <= 0 && !boss.dead;
+      if (boss.state === 'wind') windRun++;
+      else {
+        if (windRun > 0 && settled) shortestWind = Math.min(shortestWind, windRun);
+        windRun = 0;
+      }
+      lastSealed = boss.sealed;
+    };
+    const burned = [];
+    for (const i of [0, 2, 3, 4]) {
+      cut(boss, i);
+      const neck = boss.necks[i];
+      const spot = firingPoint(boss, neck);
+      for (let f = 0; f < 60 * 26 && neck.state === 'stump'; f++) {
+        p.hp = p.maxHp;
+        p.dead = false;
+        p.invuln = 0;
+        p.x = spot.x;
+        p.y = spot.top - p.h;
+        p.vx = 0;
+        p.vy = 0;
+        p.facing = spot.facing;
+        let incoming = null;
+        for (const q of g.projectiles) {
+          if (q.kind !== 'ember' || q.friendly) continue;
+          if (!incoming || Math.abs(q.cx - p.cx) < Math.abs(incoming.cx - p.cx)) incoming = q;
+        }
+        const near = incoming && Math.abs(incoming.cx - p.cx) < 30 && Math.abs(incoming.cy - p.cy) < 26;
+        tick({ parry: !!near });
+        watch();
+      }
+      burned.push(neck.state);
+    }
+    const fourSealed = boss.sealed;
+    // And now the fire goes out, with nothing left to feed the others.
+    const aliveBeforeLastCut = !boss.dead;
+    cut(boss, 1);
+    for (let f = 0; f < 60 * 3; f++) tick();
+    return {
+      burned,
+      fourSealed,
+      aliveBeforeLastCut,
+      felled: boss.dead || !find(),
+      shortestWindFrames: Number.isFinite(shortestWind) ? shortestWind : null,
+      doorOpen: !g.level.lairClosed,
+    };
+  })();
 
   /* ------------------------------------------------------- and she stays down */
 
@@ -544,44 +663,57 @@ const result = await page.evaluate(() => {
       parryBroke &&
       theRoom.closedOnWaking &&
       theRoom.atTheWall.hp === 12 &&
-      theRoom.atTheWall.poolsNearHim === 0 &&
       (theRoom.atTheWall.closestThrow === null || theRoom.atTheWall.closestThrow > 260) &&
       theRoom.hurtClose > 0 &&
-      doorAfterHerFall &&
-      stayedDown.doorOpen &&
-      targets.livingHead &&
-      !targets.waitingHead &&
+      targets.everyHead &&
       !targets.body &&
+      !targets.stump &&
+      targets.stumpStillOpen &&
+      targets.clockRan &&
       contact.after === contact.before &&
-      reachedStorm &&
-      phases.map((q) => q.kind).join() === 'venom,flame,storm,stone,crown' &&
-      fromTheFloor.headKind === 'storm' &&
+      steelAlone.alive &&
+      steelAlone.regrowths >= 2 &&
+      byFire.sealed &&
+      byFire.stillSealedAfter15s &&
+      leftAlone.state === 'head' &&
+      leftAlone.hpBack < leftAlone.ofMax &&
+      ledges.length === 4 &&
+      ledges.every((l) => l.sealed) &&
+      new Set(ledges.map((l) => l.ledgeAbove)).size === 4 &&
+      ledges.every((l) => l.aimOff <= 4) &&
+      theFire.state === 'head' &&
       fromTheFloor.hpAfter === fromTheFloor.hpBefore &&
       fromTheFloor.bladeGotTo > fromTheFloor.headBottom &&
       climbedEvery &&
+      stormAtTheTop.cut &&
       mortalClimb.reached === mortalClimb.steps &&
       mortalClimb.deaths === 0 &&
-      mortalClimb.heartsLeft >= 4 &&
-      stormAtTheTop.cut &&
-      felled &&
+      theEnd.burned.every((s) => s === 'sealed') &&
+      theEnd.fourSealed === 4 &&
+      theEnd.aliveBeforeLastCut &&
+      theEnd.felled &&
+      theEnd.doorOpen &&
+      theEnd.shortestWindFrames !== null &&
+      theEnd.shortestWindFrames >= 36 &&
       stayedDown.afterWin === 0 &&
       stayedDown.afterDying === 0 &&
       stayedDown.state === 'playing' &&
-      shortestWind >= 36,
+      stayedDown.doorOpen,
     scaling: { tier0: soft, tier2: sharp },
     parryBroke,
     theRoom,
-    doorAfterHerFall,
     targets,
     contact,
-    phases,
-    shortestWindFrames: Number.isFinite(shortestWind) ? shortestWind : null,
+    steelAlone,
+    byFire,
+    leftAlone,
+    ledges,
+    theFire,
     fromTheFloor,
     climbed,
-    mortalClimb,
     stormAtTheTop,
-    felled,
-    secondsToFell,
+    mortalClimb,
+    theEnd,
     stayedDown,
   };
 });
@@ -592,17 +724,18 @@ server.close();
 
 if (!result.ok) {
   console.error(
-    'FAIL: the hydra no longer answers head by head, her body or a waiting head can be hit, a move ' +
-      'lands without a warning, her lair no longer shuts behind the hero or no longer opens again, ' +
-      'she reaches across the room (or no longer reaches at all), a parry no longer breaks her, the ' +
-      'storm head can be reached from the floor or no longer from the steps, she cannot be climbed ' +
-      'to, felled, or she comes back.',
+    'FAIL: the hydra fight no longer works as designed - a head is not a target or her body is, ' +
+      'steel alone finishes her or a cut neck no longer grows back, her fire no longer seals a ' +
+      'stump or seals one it should not, a stump no longer hangs at its own ledge, the storm head ' +
+      'is reachable from the floor or no longer from the steps, a move lands without a warning, ' +
+      'her lair or her reach is wrong, or she cannot be felled and stay down.',
   );
   process.exit(1);
 }
 console.log(
-  'OK: five heads fall one at a time, only the living one is a target, every move is announced, ' +
-    'her lair shuts behind the hero and opens on her last head, nothing she throws crosses it, ' +
-    'the storm head is out of reach from the floor and in reach from the steps he climbs to it, ' +
-    'a parry breaks her, she sizes up the blade, and once felled she stays down.',
+  'OK: all five heads are targets and none of the rest of her is, steel alone never finishes her ' +
+    'because a cut neck grows back, her own fire parried into a stump burns it shut for good, each ' +
+    'of the four burns shut from its own ledge, the fire itself never can, the storm head is only ' +
+    'reachable from the steps he climbs to it, her lair shuts and opens, nothing she throws crosses ' +
+    'it, and four burned necks plus the fire put out finish her for good.',
 );

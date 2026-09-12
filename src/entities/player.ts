@@ -547,8 +547,25 @@ export class Player extends Body {
     for (const p of world.projectiles) {
       if (p.dead || p.friendly || !p.overlaps(box)) continue;
       p.deflect(this.facing);
+      this.aimFire(p);
       this.onParrySuccess(world, -this.facing);
     }
+  }
+
+  /**
+   * A turned ember leaves at the hero's own height, not at whatever height it
+   * happened to be falling through.
+   *
+   * That is the whole of the aiming in the hydra's fight - her cut necks hang
+   * at the heights of four different ledges, and the answer to each is to stand
+   * on the right one. Letting the coal keep its own height made that a matter
+   * of catching it at exactly the right moment of its arc instead: measured, a
+   * bot standing dead level with a stump missed it twelve embers running.
+   */
+  private aimFire(p: Projectile): void {
+    if (p.kind !== 'ember') return;
+    p.y = this.cy - p.h / 2;
+    p.vy = 0;
   }
 
   /**
@@ -759,6 +776,7 @@ export class Player extends Body {
       if (!p.overlaps(box)) continue;
       this.hitThisSwing.add(p);
       p.deflect(this.facing);
+      this.aimFire(p);
       world.particles.burst(p.cx, p.cy, 10, '#dff3ff', { speed: 150, gravity: 60, shape: 'spark' });
       audio.play('hit', 1.4);
     }

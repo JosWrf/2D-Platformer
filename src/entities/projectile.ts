@@ -4,7 +4,7 @@ import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
 
-export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob';
+export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob' | 'ember';
 
 export class Projectile extends Body {
   friendly = false;
@@ -78,6 +78,14 @@ export class Projectile extends Body {
         this.life = 3;
         this.damage = 1;
         break;
+      case 'ember':
+        // The hydra's fire, lobbed on a solved arc. It is her attack and the
+        // hero's only tool at once - see deflect.
+        this.w = 18;
+        this.h = 18;
+        this.life = 3.2;
+        this.damage = 2;
+        break;
     }
   }
 
@@ -87,6 +95,19 @@ export class Projectile extends Body {
 
   deflect(dir: number): void {
     this.friendly = true;
+    if (this.kind === 'ember') {
+      /*
+       * Her fire flies flat once it has been turned. That is the whole of the
+       * aiming in her fight: whatever height the hero parries at is the height
+       * the ember travels at, so where he is standing is where he is aiming.
+       * An arc would make lining a stump up a matter of luck.
+       */
+      this.vx = 420 * dir;
+      this.vy = 0;
+      this.life = Math.max(this.life, 1.6);
+      this.damage = 2;
+      return;
+    }
     this.vx = Math.abs(this.vx || 260) * dir * 1.5;
     this.vy *= 0.3;
     this.damage = 2;
@@ -125,6 +146,22 @@ export class Projectile extends Body {
       }
     } else if (this.kind === 'bone' || this.kind === 'rock') {
       this.vy += 900 * dt;
+    } else if (this.kind === 'ember') {
+      // Falls until it is turned; a turned ember carries its own fire.
+      if (!this.friendly) this.vy += 1000 * dt;
+      if (world.time % 0.04 < dt) {
+        world.particles.spawn({
+          x: this.cx + rand(-5, 5),
+          y: this.cy + rand(-5, 5),
+          vx: rand(-14, 14),
+          vy: -rand(20, 60),
+          gravity: -40,
+          color: this.friendly ? 'rgba(255,226,150,0.75)' : 'rgba(255,150,60,0.7)',
+          size: 3,
+          life: 0.32,
+          shape: 'circle',
+        });
+      }
     } else if (this.kind === 'blob') {
       // Heavier than it looks, so the arc is short and readable.
       this.vy += 1150 * dt;
@@ -190,6 +227,8 @@ export class Projectile extends Body {
         return '#bff0ff';
       case 'blob':
         return this.friendly ? '#bdf0a0' : '#8fd45c';
+      case 'ember':
+        return this.friendly ? '#ffe9b0' : '#ff9a44';
       case 'shockwave':
         return this.water ? '#9fe4dc' : '#ff9a5c';
       default:
@@ -257,6 +296,37 @@ export class Projectile extends Body {
         ctx.fillStyle = 'rgba(220,255,190,0.75)';
         ctx.beginPath();
         ctx.ellipse(-2, -2.5, 3.4, 2.2, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'ember': {
+        /*
+         * Two readings of the same thing: hers is a falling coal trailing
+         * smoke, the turned one is a white-hot bolt with a tail. A player has
+         * to be able to tell at a glance whether the fire on screen is still a
+         * threat or already a tool.
+         */
+        const hot = this.friendly;
+        glow(ctx, cx, cy, hot ? 26 : 20, hot ? 'rgba(255,220,140,0.6)' : 'rgba(255,130,50,0.5)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.atan2(this.vy, this.vx));
+        const len = hot ? 20 : 11;
+        const tail = ctx.createLinearGradient(-len, 0, len * 0.5, 0);
+        tail.addColorStop(0, 'rgba(255,120,40,0)');
+        tail.addColorStop(1, hot ? 'rgba(255,238,190,0.95)' : 'rgba(255,168,70,0.9)');
+        ctx.fillStyle = tail;
+        ctx.beginPath();
+        ctx.moveTo(-len, 0);
+        ctx.lineTo(0, -7);
+        ctx.lineTo(len * 0.5, 0);
+        ctx.lineTo(0, 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = hot ? '#fffbe8' : '#ffd28a';
+        ctx.beginPath();
+        ctx.arc(0, 0, hot ? 5 : 4.2, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         break;

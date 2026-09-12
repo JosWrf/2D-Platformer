@@ -165,24 +165,31 @@ const out = await page.evaluate(() => {
   hinsetzen(tor0 - 1, 17);
   for (let f = 0; f < 60 * 3 && g.state === 'playing'; f++) { p.hp = p.maxHp; t(); }
   const torZuBeiIhr = g.state === 'playing' && g.victoryTimer === 0;
-  // Die Köpfe der Reihe nach: der Kampf selbst steht in verify:hydra, hier zählt
-  // nur, dass ihr Fall das Tor aufmacht.
+  /*
+   * Ihr Kampf steht in verify:hydra - Hälse abschlagen, die Stümpfe mit ihrem
+   * eigenen Feuer ausbrennen. Hier zählt nur das Gelenk: dass ihr Fall das Tor
+   * aufmacht. Also werden die vier brennbaren Hälse direkt auf "ausgebrannt"
+   * gesetzt und das Feuer ausgeblasen - genau die Siegbedingung, ohne den
+   * Kampf ein zweites Mal zu fahren.
+   */
   hinsetzen(hydraKachel - 5, 17);
-  let koepfe = 0, hf = 0;
-  for (; hf < 60 * 40 && hydra(); hf++) {
-    p.hp = p.maxHp; p.dead = false; p.invuln = 999;
-    const h = hydra();
-    const vorher = h.phase;
-    h.hurt(4, 1, g);
-    if (h.phase !== vorher) koepfe++;
-    t();
+  const sie = hydra();
+  for (let f = 0; f < 60 * 2; f++) { p.hp = p.maxHp; p.invuln = 999; t(); }
+  const lebteVorDemLetzten = !!hydra();
+  for (const hals of sie.necks) {
+    if (hals.kind === 'flame') continue;
+    hals.state = 'sealed';
+    hals.hp = 0;
   }
+  sie.struck = sie.necks.findIndex((n) => n.kind === 'flame');
+  sie.hurt(999, 1, g);
+  for (let f = 0; f < 60 * 3; f++) { p.hp = p.maxHp; p.invuln = 999; t(); }
   melde('Fünfkronige', {
     geweckt,
     torZuBeiIhr,
+    lebteVorDemLetzten,
     gefallen: !hydra(),
-    koepfe,
-    sekunden: +(hf / 60).toFixed(1),
+    torWiederOffen: !g.level.lairClosed,
     herzen: p.maxHp,
     stufe: p.beamTier,
   });
@@ -247,8 +254,9 @@ const ok =
   // Und das Tor gehört ihr, bis der fünfte Kopf fällt.
   hydra.geweckt === true &&
   hydra.torZuBeiIhr === true &&
+  hydra.lebteVorDemLetzten === true &&
   hydra.gefallen === true &&
-  hydra.koepfe === 4 &&
+  hydra.torWiederOffen === true &&
   hydra.herzen === 7 &&
   hydra.stufe === 2 &&
   gate.zustand === 'victory' &&

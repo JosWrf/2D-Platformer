@@ -54,15 +54,6 @@ interface SpawnRecord {
   y: number;
 }
 
-/** What each of her heads is called on the health bar. */
-const HEAD_NAMES: Record<string, string> = {
-  venom: 'GIFT',
-  flame: 'FLAMME',
-  storm: 'STURM',
-  stone: 'STEIN',
-  crown: 'KRONE',
-};
-
 export class Game implements World {
   readonly level = new Level();
   readonly particles = new Particles();
@@ -343,6 +334,11 @@ export class Game implements World {
     };
   }
 
+  /** Said once each: what a cut neck does, and what closes one. */
+  private hydraToldAboutRegrowth = false;
+  private hydraToldAboutSealing = false;
+  private hydraToldAboutFire = false;
+
   /** The one fight on the road that cannot be walked past - see the portal. */
   private get hydraStillGuarding(): boolean {
     return this.enemies.some((e) => e instanceof Hydra && !e.dead);
@@ -357,6 +353,36 @@ export class Game implements World {
     this.level.lairClosed = true;
     this.zoneBanner = { text: 'DIE FÜNFKRONIGE', timer: 3.4 };
     this.camera.addShake(8);
+  }
+
+  /**
+   * The first neck the blade takes off, and what the hero has to be told: steel
+   * alone does not finish a hydra. Said once, on the cut that teaches it, and
+   * never again - a banner that fires five times is wallpaper.
+   */
+  onHydraNeckCut(wasTheFire: boolean): void {
+    if (this.state !== 'playing') return;
+    if (wasTheFire && !this.hydraToldAboutFire) {
+      this.hydraToldAboutFire = true;
+      this.zoneBanner = { text: 'OHNE IHR FEUER WÄCHST ALLES NACH', timer: 3.6 };
+      return;
+    }
+    if (this.hydraToldAboutRegrowth) return;
+    this.hydraToldAboutRegrowth = true;
+    this.zoneBanner = { text: 'DER HALS WÄCHST NACH — BRENN IHN AUS', timer: 4.2 };
+    audio.play('hurt', 0.5);
+  }
+
+  /** And the first one burned shut, which is the answer. */
+  onHydraNeckSealed(sealed: number): void {
+    if (this.state !== 'playing') return;
+    this.score += 500;
+    if (!this.hydraToldAboutSealing) {
+      this.hydraToldAboutSealing = true;
+      this.zoneBanner = { text: 'AUSGEBRANNT — DIESER HALS BLEIBT UNTEN', timer: 3.6 };
+    } else {
+      this.zoneBanner = { text: `${sealed} VON 4 HÄLSEN AUSGEBRANNT`, timer: 2.2 };
+    }
   }
 
   /**
@@ -855,6 +881,9 @@ export class Game implements World {
     this.felledBosses.clear();
     this.level.exitSealed = true;
     this.level.lairClosed = false;
+    this.hydraToldAboutRegrowth = false;
+    this.hydraToldAboutSealing = false;
+    this.hydraToldAboutFire = false;
     this.respawnAtCheckpoint();
   }
 
@@ -1305,17 +1334,20 @@ export class Game implements World {
 
     const hydra = this.enemies.find((e): e is Hydra => e instanceof Hydra && e.engaged && !e.dead);
     if (hydra) {
-      const head = hydra.living;
+      const open = hydra.openStumps.length;
+      const label = open > 0 ? `${open} HALS${open > 1 ? 'E' : ''} OFFEN` : `${hydra.sealed} VON 4 AUSGEBRANNT`;
       drawBossBar(
         ctx,
         VIEW_W,
         VIEW_H,
         {
-          name: `DIE FÜNFKRONIGE   ·   KOPF ${hydra.phase} VON 5   ·   ${HEAD_NAMES[head.kind]}`,
-          hp: head.hp,
-          maxHp: head.maxHp,
-          ghost: head.hp,
-          phase: hydra.phase,
+          name: `DIE FÜNFKRONIGE   ·   ${label}`,
+          hp: hydra.hp,
+          maxHp: hydra.maxHp,
+          ghost: hydra.hp,
+          phase: 1 + hydra.sealed,
+          pips: hydra.pips,
+          pipUrgency: hydra.pipUrgency,
         },
         0,
       );

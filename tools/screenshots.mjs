@@ -423,35 +423,39 @@ await release('right');
 await step(10);
 await shot('17-der-riss');
 
-/* 16b — Die Fünfkronige, mid-breath --------------------------------------- */
+/* 16b — Die Fünfkronige, mid-fight ---------------------------------------- */
+// The whole mechanic in one frame: five necks, one already burned shut, one an
+// open stump counting down, and her fire in the air on its way to the hero.
 await open(`?x=${marken.hydra - 9}`);
 await step(30);
-results.hydraBreath = await page.evaluate(() => {
+results.hydraFight = await page.evaluate(() => {
   const g = window.game;
   const p = g.player;
   const h = g.enemies.find((e) => e.kind === 'hydra');
-  p.x = h.cx - 230;
+  p.x = h.cx - 250;
   p.y = h.bottom - p.h;
   p.vx = 0;
   p.vy = 0;
-  g.camera.snapTo(p.cx + 90, p.cy - 40);
-  h.engaged = true;
-  // The flame head, halfway down a breath: the picture that says what she is.
-  h.head = 1;
-  h.heads[0].dead = true;
-  h.heads[0].hp = 0;
-  h.state = 'act';
-  h.timer = 3;
-  h.glow = 1;
-  h.breathDir = -1;
-  h.breath = 0.62;
   p.invuln = 999;
-  return { head: h.living.kind, phase: h.phase };
+  p.facing = 1;
+  g.camera.snapTo(p.cx + 120, p.cy - 70);
+  h.engaged = true;
+  h.necks[0].state = 'sealed';
+  h.necks[0].hp = 0;
+  h.necks[3].state = 'stump';
+  h.necks[3].regrow = 6.2;
+  h.acting = 1;
+  h.state = 'wind';
+  h.glow = 1;
+  h.timer = 3;
+  h.necks[1].jaw = 1;
+  h.lobEmbers(g, h.headCentre(h.necks[1]), 1);
+  return { sealed: h.sealed, open: h.openStumps.length, heads: h.heads.length };
 });
-await step(2);
+await step(26);
 await shot('23-fuenfkronige');
 
-/* 16c — the climb, during the storm phase --------------------------------- */
+/* 16c — the climb, with the storm neck up the shaft ------------------------ */
 await open(`?x=${marken.hydra - 9}`);
 await step(30);
 results.hydraClimb = await page.evaluate(() => {
@@ -460,13 +464,9 @@ results.hydraClimb = await page.evaluate(() => {
   const TILE = 32;
   const h = g.enemies.find((e) => e.kind === 'hydra');
   h.engaged = true;
-  h.head = 2;
-  for (let i = 0; i < 2; i++) {
-    h.heads[i].dead = true;
-    h.heads[i].hp = 0;
-  }
   h.state = 'recover';
   h.timer = 3;
+  h.acting = 4;
   h.glow = 0.8;
   // Third step from the bottom, read out of the level rather than assumed.
   const spans = [];
@@ -492,7 +492,7 @@ results.hydraClimb = await page.evaluate(() => {
   p.invuln = 999;
   g.camera.snapTo(p.cx + 40, p.cy);
   h.markDrops(g, [p.cx + 30, h.cx - 120, h.cx + 150], 1.6);
-  return { head: h.living.kind, row: step3.ty };
+  return { row: step3.ty };
 });
 await step(40);
 await shot('24-der-aufstieg');

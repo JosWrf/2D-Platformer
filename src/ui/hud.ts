@@ -83,6 +83,70 @@ export interface BossBarInfo {
   maxHp: number;
   ghost: number;
   phase: number;
+  /**
+   * One mark per part, for a boss whose fight is not one bar coming down.
+   * 'head' still has to be cut, 'stump' is cut but counting back, 'sealed' is
+   * finished - the hydra's whole state in five symbols.
+   */
+  pips?: ('head' | 'stump' | 'sealed')[];
+  /** Seconds left on the shortest open stump, 0..1 of its full time. */
+  pipUrgency?: number[];
+}
+
+/**
+ * The hydra's five necks under her bar: a head still to cut, an open stump with
+ * the seconds it has left drawn round it, or a burned-out ring. A player has to
+ * be able to see at a glance which of his cuts are about to come undone.
+ */
+function drawPips(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  y: number,
+  pips: ('head' | 'stump' | 'sealed')[],
+  urgency: number[],
+): void {
+  const gap = 34;
+  const first = cx - ((pips.length - 1) * gap) / 2;
+  for (const [i, pip] of pips.entries()) {
+    const px = first + i * gap;
+    ctx.save();
+    ctx.translate(px, y);
+    if (pip === 'head') {
+      ctx.fillStyle = '#8fd45c';
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(24,44,20,0.9)';
+      ctx.beginPath();
+      ctx.arc(1.5, -1.5, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (pip === 'stump') {
+      const left = clamp(urgency[i] ?? 1, 0, 1);
+      ctx.fillStyle = 'rgba(190,255,150,0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = left < 0.34 ? '#ff9a78' : '#c8ffa0';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = 'rgba(150,150,150,0.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,150,70,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(-4.5, -4.5);
+      ctx.lineTo(4.5, 4.5);
+      ctx.moveTo(4.5, -4.5);
+      ctx.lineTo(-4.5, 4.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 
 export function drawBossBar(
@@ -116,9 +180,13 @@ export function drawBossBar(
   ctx.lineWidth = 1;
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
 
-  // Phase notches.
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  for (const p of [0.3, 0.62]) ctx.fillRect(x + w * p, y, 2, 12);
+  if (info.pips && info.pips.length) {
+    drawPips(ctx, viewW / 2, y + 24, info.pips, info.pipUrgency ?? []);
+  } else {
+    // Phase notches.
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    for (const p of [0.3, 0.62]) ctx.fillRect(x + w * p, y, 2, 12);
+  }
 
   if (intro > 0) {
     ctx.globalAlpha = clamp(intro, 0, 1);

@@ -355,8 +355,10 @@ check('Zwei Minuten Kampf ohne Absturz', r.zustand === 'playing', `Zustand ${r.z
 
 /* --------------------------------------------------- I: Die Fünfkronige */
 
-// Alle fünf Phasen einmal durchfahren und dabei die Bildzeit messen: sie ist
-// das teuerste Ding im Spiel, und ihr Schacht ist dreizehn Kacheln hoch.
+// Eine Minute in ihrem Saal, mit allem gleichzeitig auf dem Schirm - fünf Köpfe,
+// offene Stümpfe, nachwachsende Hälse, Glut in der Luft - und dabei die Bildzeit
+// gemessen: sie ist das teuerste Ding im Spiel, und ihr Saal ist dreizehn
+// Kacheln hoch. Ihren Kampf prüft verify:hydra; hier zählt das Bild.
 await open(`?x=${marken.hydra - 12}`);
 await page.evaluate(helpers);
 r = await page.evaluate(() => {
@@ -369,24 +371,43 @@ r = await page.evaluate(() => {
   p.vy = 0;
   g.camera.snapTo(p.cx, p.cy);
   for (let i = 0; i < 60 * 3 && !h0.engaged; i++) { p.hp = p.maxHp; t(); }
-  const phasen = new Set();
+  const koepfe = new Set();
   const zeiten = [];
+  let stuempfe = 0;
   for (let i = 0; i < 60 * 60 && finde(); i++) {
     const h = finde();
-    phasen.add(h.living.kind);
+    for (const hals of h.necks) if (hals.state === 'head') koepfe.add(hals.kind);
+    stuempfe = Math.max(stuempfe, h.openStumps.length);
     p.hp = p.maxHp;
     p.dead = false;
     p.invuln = 999;
-    // Die Köpfe der Reihe nach abräumen: gemessen wird das Bild, nicht der Kampf.
-    if (i % 20 === 19) h.hurt(3, 1, g);
+    // Reihum einen Hals abschlagen: gemessen wird das Bild, nicht der Kampf.
+    if (i % 45 === 44) {
+      h.struck = (i / 45) % h.necks.length | 0;
+      h.hurt(4, 1, g);
+    }
     const start = performance.now();
     t({ attack: i % 4 === 0, jump: i % 37 === 0 });
     zeiten.push(performance.now() - start);
   }
+  // Und zum Schluss die Siegbedingung: vier Hälse aus, das Feuer aus.
+  const sie = finde();
+  if (sie) {
+    for (const hals of sie.necks) {
+      if (hals.kind === 'flame') continue;
+      hals.state = 'sealed';
+      hals.hp = 0;
+    }
+    sie.struck = sie.necks.findIndex((n) => n.kind === 'flame');
+    sie.hurt(999, 1, g);
+    for (let i = 0; i < 60 * 2; i++) t();
+  }
   zeiten.sort((a, b) => a - b);
   const q = (f) => +zeiten[Math.floor(f * (zeiten.length - 1))].toFixed(2);
   return {
-    phasen: [...phasen],
+    koepfe: [...koepfe],
+    nachgewachsen: g.enemies.some((e) => e.kind === 'hydra') ? 0 : 1,
+    stuempfe,
     gefallen: !finde(),
     // Neunundneunzigstes Perzentil statt des schlimmsten Bildes: die Ausreißer
     // ganz oben sind Pausen der Speicherbereinigung und messen nicht das Spiel.
@@ -397,8 +418,9 @@ r = await page.evaluate(() => {
     projektile: g.projectiles.length,
   };
 });
-check('Fünfkronige zeigt alle fünf Köpfe', r.phasen.length === 5, r.phasen.join(', '));
-check('Fünfkronige fällt', r.gefallen, `gefallen=${r.gefallen}`);
+check('Fünfkronige zeigt alle fünf Köpfe', r.koepfe.length === 5, r.koepfe.join(', '));
+check('Abgeschlagene Hälse stehen offen', r.stuempfe >= 1, `höchstens ${r.stuempfe} gleichzeitig`);
+check('Fünfkronige fällt, wenn vier Hälse aus sind', r.gefallen, `gefallen=${r.gefallen}`);
 check('Bildzeit in ihrem Schacht unter 16,67 ms', r.p99 < 16.67, `Mittel ${r.p50} ms, p99 ${r.p99} ms über ${r.bilder} Bilder`);
 check('Ihr Schacht flutet nicht mit Partikeln', r.partikel < 900, `${r.partikel}`);
 

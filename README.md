@@ -429,21 +429,76 @@ wahre Ende, wenn das Herz gefallen ist.
 
 ### Der Endboss: Die Fünfkronige
 
-Am Ende des Risses, in ihrem eigenen Saal vor dem Tor. Fünf Köpfe, fünf Phasen,
-und ein
-Kopf nach dem anderen: 70 Trefferpunkte, gleichmäßig auf die fünf verteilt —
-mehr, wenn die Klinge schon wirft, siehe *Bosse nehmen die Klinge zur Kenntnis*.
-Was die Leiste zeigt, ist immer nur der lebende; fällt er, kommt der nächste
-hoch, und erst der fünfte beendet sie.
+Am Ende des Risses, in ihrem eigenen Saal vor dem Tor. Sie ist **keine Reihe aus
+fünf Bossen**: Alle fünf Köpfe sind wach, alle fünf lassen sich abschlagen — und
+einen abzuschlagen heißt nicht, ihn zu töten. Der Stumpf zuckt neun Sekunden
+lang, dann ist der Kopf wieder da. Stahl allein bringt eine Hydra nie um.
 
-Getroffen wird auch nur er. Ihr Leib und die Köpfe, die noch warten, sind keine
-Ziele, in beide Richtungen: In sie hineinzulaufen kostet nichts.
+Was es tut, ist ihr eigenes Feuer. Der Flammenkopf wirft Glut; eine Glut, die
+man pariert, **fliegt schnurgerade** und brennt einen Stumpf für immer zu. Die
+Schleife lautet also:
+
+> Kopf abschlagen → auf die Höhe steigen, auf die der Stumpf herunterhängt →
+> Glut ködern → sie in den Stumpf parieren.
+
+Und weil eine gewendete Glut waagerecht fliegt, ist **die Höhe, auf der man
+steht, die Höhe, auf die man zielt**. Die vier Stümpfe hängen an vier
+verschiedenen Absätzen: einer am Boden, die anderen drei auf der 3., der 7. und
+der 13. Kachel Höhe — also auf drei verschiedenen Stufen ihres Turms. Der
+Aufstieg ist damit nicht mehr *eine Phase* des Kampfes, sondern der Kampf.
+
+| Kopf | Wo man ihn abschlägt | Wo sein Stumpf hängt |
+| --- | --- | --- |
+| **GIFT** | Boden, ein Sprung | Boden |
+| **FLAMME** | Boden, ein Sprung | — er *ist* das Feuer |
+| **STEIN** | Boden, Doppelsprung | 1. Stufe (96 px) |
+| **KRONE** | 4. Stufe | 4. Stufe (224 px) |
+| **STURM** | oberste Stufe | oberste Stufe (416 px) |
+
+Der fünfte Hals ist das Feuer selbst. Er lässt sich abschlagen wie jeder andere,
+aber nichts kann seinen Stumpf ausbrennen — er wächst einfach nach. Es sei denn,
+die anderen vier sind schon zu: dann macht ihn auszulöschen sie fertig. Wer den
+Flammenkopf zuerst abschlägt, verliert nichts als Zeit und lernt die
+Reihenfolge. Eine Sackgasse gibt es nicht.
+
+Die Klinge schlägt eine Glut übrigens genauso aus der Luft wie die Parade — es
+ist dieselbe Regel, die Gallert im Moor mit seiner Spucke beibringt. Die Parade
+ist nur der sichere Weg, weil man dafür nicht in Kopfreichweite stehen muss.
+
+Gemessen statt behauptet, alles in `verify:hydra`:
+
+* **Stahl allein reicht nicht.** Hundert Sekunden Dauerhauen mit der schärfsten
+  Klinge des Spiels: zwanzig nachgewachsene Köpfe, **null** ausgebrannte Hälse,
+  sie steht noch.
+* **Feuer reicht.** Jeder der vier Stümpfe brennt in 1,8 bis 3,2 Sekunden zu,
+  von seinem eigenen Absatz aus — und die vier Absätze liegen messbar auf vier
+  verschiedenen Höhen.
+* **Zu bleibt zu.** Fünfzehn Sekunden später ist ein ausgebrannter Hals immer
+  noch aus.
+* **Offen bleibt nicht offen.** Wer einen Stumpf in Ruhe lässt, hat den Kopf
+  nach 9,6 Sekunden wieder — mit 7 von 12 Trefferpunkten.
+* **Nur Köpfe sind Ziele.** Ihr Leib, ihre Hälse und die Stümpfe nicht, in beide
+  Richtungen: In sie hineinzulaufen kostet nichts, und Stahl tut einem
+  abgeschlagenen Hals gar nichts.
+* Dazu wie gehabt: Der Sturmkopf ist vom Boden aus unerreichbar, die sechs
+  Stufen werden mit echter Physik und sieben Herzen erklommen, jede Ankündigung
+  dauert mindestens 0,6 s, eine Parade bricht sie, nichts von ihr fliegt quer
+  durch den Saal, ihr Tor fällt beim Aufwachen zu und geht bei ihrem Fall auf,
+  und gefallen bleibt sie gefallen.
+
+Ein Fehler, den das Messen aufgedeckt hat: Eine gewendete Glut behielt ihre
+eigene Flughöhe. Wer genau auf Stumpfhöhe stand, verfehlte ihn trotzdem — der
+Bot zwölf Gluten hintereinander —, weil man die Kohle im exakt richtigen Moment
+ihres Bogens erwischen musste. Jetzt verlässt sie die Klinge auf **Heldenhöhe**.
+Und sie warf zwei Gluten links und rechts am Helden vorbei, je 34 px: Ein
+Paradefenster ist 52 px breit, zwei Gluten daneben sind zwei, die man nicht
+wenden kann. Jetzt kommt eine auf ihn und die zweite weit daneben.
 
 #### Ihr Saal
 
 Sie bekommt denselben Handel wie der Ritter: Wände, eine Decke und ein Rippentor
 an jedem Ende, das zufällt, sobald sie wach wird, und wieder hochgeht, wenn der
-fünfte Kopf fällt. Es ist **ihr** Tor, nicht das des Ritters — zwei Bosse in
+letzte Hals ausgeht. Es ist **ihr** Tor, nicht das des Ritters — zwei Bosse in
 einem Level brauchen zwei Türen, sonst schließt das Aufwecken des einen den Raum
 des anderen. Wer darin stirbt, findet es offen: Der Kontrollpunkt liegt davor,
 und eine Tür, die einen aussperrt, ist ein Sackgassen-Spielstand.
@@ -451,45 +506,16 @@ und eine Tür, die einen aussperrt, ist ein Sackgassen-Spielstand.
 #### Ihr Arm reicht nicht über den Saal
 
 Sie hat die Giftgalle vorher auf den Helden gelöst, egal wo er stand — also auch
-quer durch den ganzen Raum. Das ist jetzt vorbei: Ihr längster Zug ist der Atem
-mit 340 px, der Giftbogen ist kürzer, und jenseits davon wartet sie, statt auf
-einen Punkt an der Gegenwand zu werfen. Gemessen wird beides, damit „sie kommt
-nicht heran" nicht heimlich „sie tut gar nichts mehr" bedeutet: zwanzig Sekunden
-an der Gegenwand kosten null Herzen und es landet nichts in seiner Nähe —
-dieselben zwanzig Sekunden in ihrer Reichweite kosten ihn Blut.
-
-| Kopf | Was er fragt |
-| --- | --- |
-| **GIFT** | Wirft drei Gallen, die als Pfützen liegen bleiben und weiterfressen. Am Boden kämpfen, aber nicht stehen bleiben. |
-| **FLAMME** | Ein Atem die Bodenreihe entlang, knapp elf Kacheln weit. Die Antwort ist Höhe. |
-| **STURM** | Sie zieht sich auf die Spitze ihres Turms zurück — 430 px hoch. |
-| **STEIN** | Die Umkehrung: Sie kommt herunter und fegt den Boden, während die Stufen Geröll abbekommen. |
-| **KRONE** | Der letzte Kopf hängt so hoch, dass ein Hieb aus dem Stand darunter durchgeht. Er benutzt die anderen vier, schneller hintereinander. |
-
-Die dritte Phase ist der Grund, warum der Schacht so aussieht, wie er aussieht.
-430 px sind außer Reichweite — für das Schwert ohnehin, aber auch für die
-Klingenwelle, die waagerecht fliegt. Gemessen statt geschätzt: Zwanzig Sekunden
-lang springt und wirft ein unverwundbarer Held mit der schärfsten Klinge des
-Spiels vom Boden aus auf sie ein, und die Klinge kommt 373 px zu kurz. Der Kopf
-verliert nichts. Der einzige Weg dorthin sind die sechs Stufen, die quer durch
-den Schacht nach oben führen, durch das Geröll und die Böen, die schieben,
-solange der Held in der Luft ist.
-
-Die oberste Stufe hört **kurz vor** ihr auf, statt unter ihr durchzulaufen: Der
-Sturmkopf hängt über der Kante, in Reichweite vom festen Boden aus. Ein Loch,
-neben dem man stehen muss, ist ein Loch, in das man fällt, und von dort oben
-geht es dreizehn Kacheln tief.
+quer durch den ganzen Raum. Das ist vorbei: Ihr längster Zug ist der Steinatem
+mit 340 px, der Giftbogen ist auf 300 px gedeckelt, und jenseits ihrer Reichweite
+wartet sie. Gemessen wird beides, damit „sie kommt nicht heran" nicht heimlich
+„sie tut gar nichts mehr" bedeutet: zwanzig Sekunden an der Gegenwand (18
+Kacheln) kosten null Herzen und es landet nichts in seiner Nähe — dieselben
+zwanzig Sekunden in ihrer Reichweite kosten ihn Blut.
 
 | | |
 | --- | --- |
 | ![Die Fünfkronige](screenshots/23-fuenfkronige.png) | ![Der Aufstieg](screenshots/24-der-aufstieg.png) |
-
-`verify:hydra` fährt das alles ab: fünf Köpfe der Reihe nach, Leib und wartende
-Köpfe als Nicht-Ziele, das Tor zu beim Aufwachen und offen nach ihrem Fall,
-nichts, was quer durch den Saal fliegt, jede Ankündigung mindestens 0,6 s lang, der Sturmkopf
-unerreichbar von unten und in Sekunden erledigt von oben, jede der sechs Stufen
-auf echter Physik erklommen, eine Parade, die sie bricht, und ein Lauf, der sie
-am Ende wirklich umlegt.
 
 ### Der Miniboss: Splitterwächter
 
@@ -572,7 +598,7 @@ npm run verify:thalassa # ihre Züge, die Springflut, ihr Fall und die Flutkling
 npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wand aus?
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
-npm run verify:hydra   # fünf Köpfe, fünf Phasen — und ist der Sturmkopf nur oben zu erreichen?
+npm run verify:hydra   # wächst ein Hals nach, brennt ihr Feuer ihn zu, reicht Stahl allein nicht?
 npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
 npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
@@ -677,9 +703,10 @@ er jeweils den passenden Zug wählt — und dass er gegen jemanden, der nur die
 Angriffstaste hält, überhaupt zum Zug kommt.
 
 `verify:hydra` ist das Werkzeug für den letzten Kampf, und die Prüfung, an der
-der ganze Entwurf hängt, ist eine Messung: Der Sturmkopf muss vom Boden aus
-unerreichbar sein und von der obersten Stufe aus in Sekunden fallen. Dazwischen
-klettert derselbe Bot die sechs Stufen mit echter Physik hoch — nicht als
+der ganze Entwurf hängt, ist ein Paar Messungen gegeneinander: Hundert Sekunden
+Dauerhauen dürfen sie **nicht** umbringen, und dieselben Stümpfe müssen mit ihrem
+eigenen Feuer in Sekunden zugehen — jeder von seinem eigenen Absatz aus. Dazu
+klettert derselbe Bot die sechs Stufen mit echter Physik hoch, nicht als
 Sichtprüfung der ASCII-Kunst, sondern als Landung auf jeder einzelnen.
 
 `npm run suite` ist die breite Reihe daneben: Zustandsautomat, Tastenbelegung,
