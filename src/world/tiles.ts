@@ -17,11 +17,23 @@ export const enum Tile {
    * shuts the other one's room.
    */
   LairGate = 9,
+  /**
+   * A ward at either end of a boss arena. The one behind the hero comes down
+   * once the fight has begun and he is inside; the one ahead of him stands
+   * until the boss has fallen. That is what makes a boss a boss rather than a
+   * detour: the road goes through it, not around it.
+   */
+  Ward = 10,
 }
 
 export function isSolid(tile: Tile): boolean {
   return (
-    tile === Tile.Solid || tile === Tile.Earth || tile === Tile.Gate || tile === Tile.Seal || tile === Tile.LairGate
+    tile === Tile.Solid ||
+    tile === Tile.Earth ||
+    tile === Tile.Gate ||
+    tile === Tile.Seal ||
+    tile === Tile.LairGate ||
+    tile === Tile.Ward
   );
 }
 
@@ -47,6 +59,9 @@ export type SpawnKind =
   | 'warden'
   | 'thalassa'
   | 'prismarch'
+  | 'colossus'
+  | 'wyrm'
+  | 'vesper'
   | 'boss'
   | 'gem'
   | 'heart'
@@ -76,6 +91,7 @@ export const CHAR_TO_TILE: Record<string, Tile> = {
   G: Tile.Gate,
   S: Tile.Seal,
   g: Tile.LairGate,
+  '|': Tile.Ward,
 };
 
 export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
@@ -92,6 +108,9 @@ export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
   W: 'warden',
   K: 'prismarch',
   Y: 'thalassa',
+  A: 'colossus',
+  I: 'wyrm',
+  D: 'vesper',
   B: 'boss',
   $: 'gem',
   H: 'heart',

@@ -14,7 +14,9 @@
  *   - A masher pays for it, and can still win.
  *   - His fall hands over the Herzkern: six hearts become seven, filled.
  *   - He stays down afterwards, checkpoint or no checkpoint.
- *   - And he is not a wall: the bog has no gate, so he can be walked past.
+ *   - And he is not a detour any more: the bog is warded at both ends, and a
+ *     hero who runs and jumps at the far ward for twenty-five seconds - kept
+ *     alive, so only the ward can stop him - does not get past it.
  *
  * Usage: node tools/verify-gallert.mjs
  */
@@ -82,15 +84,27 @@ const result = await page.evaluate(() => {
   const bossY = first.y;
   const standY = bossY + first.h - p.h;
 
-  /* --------------------------------------------------------- not a wall */
+  /* ------------------------------------------------------ not a detour */
 
   // First, because it is the only run that needs the hero where the level put
-  // him: the bog has no gate.
+  // him. The bog used to have no gate, and this run walked past him for one
+  // heart; now it runs into the far ward and stays there.
+  const arena = g.level.arenaAt(home);
   first.engaged = true;
-  for (let f = 0; f < 60 * 25 && p.cx < home + 300; f++) {
+  let furthest = 0;
+  for (let f = 0; f < 60 * 25; f++) {
+    p.hp = p.maxHp;
+    p.dead = false;
     tick({ right: true, jump: f % 90 < 12 });
+    furthest = Math.max(furthest, p.x + p.w);
   }
-  const passHp = { walkedPast: p.cx > home + 200, heartsLeft: p.hp };
+  const passHp = {
+    warded: !!arena,
+    furthest: Math.round(furthest),
+    farWard: arena ? arena.right : null,
+    gotPast: !arena || furthest > arena.right + 1,
+    shutBehind: !!arena && arena.fighting,
+  };
 
   /** Both back on their marks. `pin` holds his poise out of reach. */
   const setUp = (gap, hpRatio = 1, pin = true) => {
@@ -341,8 +355,9 @@ const result = await page.evaluate(() => {
       stayedDown.afterWin === 0 &&
       stayedDown.afterDying === 0 &&
       stayedDown.state === 'playing' &&
-      passHp.walkedPast &&
-      passHp.heartsLeft >= 4,
+      passHp.warded &&
+      !passHp.gotPast &&
+      passHp.shutBehind,
     maxHp: first.maxHp,
     near,
     far,
@@ -356,7 +371,7 @@ const result = await page.evaluate(() => {
     felled,
     reward,
     stayedDown,
-    walkPast: passHp,
+    notADetour: passHp,
   };
 });
 
@@ -368,7 +383,7 @@ if (!result.ok) {
   console.error(
     'FAIL: Gallert no longer picks his move by range, his spit can no longer be batted aside, his ' +
       'leap hits the wrong ground, his split is off, a parry no longer shakes him, he no longer ' +
-      'answers a masher, he cannot be felled or walked past, or his fall no longer leaves the ' +
+      'answers a masher, he cannot be felled, he can be walked past, or his fall no longer leaves the ' +
       'Herzkern.',
   );
   process.exit(1);
@@ -376,5 +391,5 @@ if (!result.ok) {
 console.log(
   'OK: Gallert leaps up close, spits from afar, his slime can be swatted out of the air, his ' +
     'landing hurts only where he lands, he splits twice, a parry shakes him loose, a masher pays ' +
-    'and wins, he can be walked past, and his fall leaves a seventh heart.',
+    'and wins, the bog\'s wards do not let him be walked past, and his fall leaves a seventh heart.',
 );

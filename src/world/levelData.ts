@@ -14,6 +14,9 @@
  *   s  slime            b  bat                k  skeleton     m  dark mage
  *   $  gem              H  heart              C  checkpoint
  *   T  torch            X  crystal            M/V moving platform (h/v)
+ *   |  arena ward (see warded() below)
+ *   A  Ankhor, the temple colossus   I  Ignivor, the ember wyrm
+ *   D  Vesperon, the blood lord
  */
 
 export const CHUNK_H = 22;
@@ -40,6 +43,33 @@ const c = (width: number, rows: string[]): Chunk => {
     throw new Error(`Chunk row ${wrong} is ${rows[wrong].length} wide, expected ${width}`);
   }
   return { width, rows };
+};
+
+/**
+ * Puts a ward into the given columns of a chunk, from the top row down to the
+ * row the arena floor stands on.
+ *
+ * A ward is a boss arena's door: the one behind the hero comes down when the
+ * fight begins, the one ahead of him stands until the boss has fallen. It runs
+ * the full height on purpose - a four-tile door in an open field is a door
+ * that gets jumped over, and then the boss is optional again. Only empty cells
+ * are warded; rock stays rock, so an interior keeps its ceiling. Anything else
+ * in the way (a platform, a spawn) is a mistake in the chunk, and stops the
+ * build rather than being quietly overwritten.
+ */
+const warded = (chunk: Chunk, columns: number[], bottomRow = 17): Chunk => {
+  const rows = chunk.rows.map((row, ty) => {
+    if (ty > bottomRow) return row;
+    const cells = row.split('');
+    for (const tx of columns) {
+      if (cells[tx] === '.') cells[tx] = '|';
+      else if (cells[tx] !== '#' && cells[tx] !== '=') {
+        throw new Error(`Ward at column ${tx}, row ${ty} would cover '${cells[tx]}'`);
+      }
+    }
+    return cells.join('');
+  });
+  return c(chunk.width, rows);
 };
 
 /* ------------------------------------------------------------------ forest */
@@ -148,8 +178,11 @@ const FOREST_LAVA = c(40, [
  * The bog at the end of the forest, and Gallert in it. Flat ground, two steps
  * to dodge onto, a checkpoint and a heart on the way in - and no gems, so the
  * count in the rest of the world stays the count it always was.
+ *
+ * Warded at both ends. The bog used to have no door at all, and the first boss
+ * of the game was a slime you could simply walk away from.
  */
-const FOREST_MIRE = c(40, [
+const FOREST_MIRE = warded(c(40, [
   '........................................',
   '........................................',
   '........................................',
@@ -165,14 +198,14 @@ const FOREST_MIRE = c(40, [
   '........................................',
   '........................................',
   '........................................',
-  '.....-----....................-----.....',
+  '..........-----...............-----.....',
   '........................................',
   '..C.H.T............Q...............T....',
   '========================================',
   '========================================',
   '========================================',
   '========================================',
-]);
+]), [8, 39]);
 
 /* ------------------------------------------------------------------- ruins */
 
@@ -251,6 +284,38 @@ const RUINS_GAUNTLET = c(40, [
   '========================================',
 ]);
 
+/**
+ * The inner court of the temple, and Ankhor in it: a colossus buried to the
+ * chest, with two hands that do not need arms. He does not walk, so the room
+ * is built around where he stands - flat ground for his hands to sweep, and a
+ * ledge either side at head height, one jump up, for anyone who wants to be
+ * out of the sweep or level with his face.
+ */
+const RUINS_COLOSSUS = warded(c(46, [
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '...................----......----.............',
+  '..............................................',
+  '..C..H.T....T.............A..............T....',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
+
 /* ---------------------------------------------------------------- caverns */
 
 const CAVERN_ENTRY = c(40, [
@@ -328,6 +393,36 @@ const CAVERN_CRYSTAL = c(40, [
   '========================================',
 ]);
 
+/**
+ * The ember wyrm's chamber. Solid rock underfoot, because rock is what he
+ * swims through: the floor is where he comes from, and the four ledges are
+ * where the hero goes when the floor starts to glow.
+ */
+const CAVERN_WYRM = warded(c(46, [
+  '##############################################',
+  '##############################################',
+  '#########...##########......########....######',
+  '##.....................................#######',
+  '..............X..................X............',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '................----.......----...............',
+  '..............................................',
+  '..............................................',
+  '............-----.............-----...........',
+  '..............................................',
+  '..C..H.X...X..............I.............X.....',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
+
 /* ----------------------------------------------------------------- castle */
 
 /** Down out of the caves into the water: sunken steps and coral. */
@@ -382,8 +477,12 @@ const DROWNED_NAVE = c(40, [
   '=========....======....========....=====',
 ]);
 
-/** Thalassa holds the drowned choir. Flat ground, two steps to dodge onto. */
-const DROWNED_CROWN = c(40, [
+/**
+ * Thalassa holds the drowned choir. Flat ground, two steps to dodge onto, and a
+ * ward at each end: the choir used to be open, and walking past her cost one
+ * heart.
+ */
+const DROWNED_CROWN = warded(c(40, [
   '........................................',
   '........................................',
   '........................................',
@@ -395,18 +494,18 @@ const DROWNED_CROWN = c(40, [
   '........................................',
   '........................................',
   '........................................',
-  '..........$$............................',
-  '........-----...........................',
+  '.............$$.........................',
+  '...........-----........................',
   '........................................',
   '........................................',
-  '.....-----....................-----.....',
+  '..........-----...............-----.....',
   '........................................',
   '..C..H..T..$.X........Y....X...T..$.X...',
   '========================================',
   '========================================',
   '========================================',
   '========================================',
-]);
+]), [9, 39]);
 
 const CASTLE_WALLS = c(40, [
   '........................................',
@@ -457,6 +556,37 @@ const CASTLE_TOWERS = c(40, [
   '========================================',
   '========================================',
 ]);
+
+/**
+ * The blood tower: the roof of the keep, open to the sky, and Vesperon over
+ * it. He flies, so the room gives the hero height - two merlons to stand on,
+ * two planks and two higher up, at his height - and he comes down to it often
+ * enough that nobody has to chase him through the air.
+ */
+const CASTLE_KEEP = warded(c(46, [
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '...........................D..................',
+  '..............................................',
+  '..............................................',
+  '...............-----.......-----..............',
+  '..............................................',
+  '..............................................',
+  '............-----.............-----...........',
+  '..........##........................##........',
+  '..C..H.T..##.......T..........T.....##........',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
 
 const CASTLE_FINAL = c(40, [
   '........................................',
@@ -590,8 +720,11 @@ const RIFT_HOLLOW = c(40, [
   '=========....==========....=============',
 ]);
 
-/** The Shard Warden holds the middle of the rift. Flat ground on purpose. */
-const RIFT_WARDEN = c(44, [
+/**
+ * The Shard Warden holds the middle of the rift. Flat ground on purpose, and
+ * warded like every other boss: a mini-boss is still a boss.
+ */
+const RIFT_WARDEN = warded(c(44, [
   '............................................',
   '............................................',
   '............................................',
@@ -614,7 +747,7 @@ const RIFT_WARDEN = c(44, [
   '============================================',
   '============================================',
   '============================================',
-]);
+]), [11, 43]);
 
 /** The climb out, once the warden has fallen. */
 const RIFT_ASCENT = c(40, [
@@ -778,14 +911,17 @@ export const LEVEL_CHUNKS: Chunk[] = [
   RUINS_TEMPLE,
   RUINS_CLIMB,
   RUINS_GAUNTLET,
+  RUINS_COLOSSUS,
   CAVERN_ENTRY,
   CAVERN_DEEP,
   CAVERN_CRYSTAL,
+  CAVERN_WYRM,
   DROWNED_STAIR,
   DROWNED_NAVE,
   DROWNED_CROWN,
   CASTLE_WALLS,
   CASTLE_TOWERS,
+  CASTLE_KEEP,
   CASTLE_FINAL,
   THRONE,
   RIFT_ENTRY,
@@ -798,3 +934,37 @@ export const LEVEL_CHUNKS: Chunk[] = [
   RIFT_SHRINE,
   CRYSTAL_HALL,
 ];
+
+/** World x, in pixels, at which a chunk begins. */
+function startOf(chunk: Chunk): number {
+  let tiles = 0;
+  for (const other of LEVEL_CHUNKS) {
+    if (other === chunk) return tiles * 32;
+    tiles += other.width;
+  }
+  throw new Error('Chunk is not in the level');
+}
+
+/**
+ * Where each zone begins, taken from the chunks rather than written down.
+ *
+ * These used to be numbers in the palette, and a chunk inserted anywhere in
+ * the level moved every zone behind it by its width - the throne room would
+ * have been lit like a castle wall.
+ */
+export const ZONE_START = {
+  forest: 0,
+  ruins: startOf(RUINS_TEMPLE),
+  temple: startOf(RUINS_COLOSSUS),
+  caverns: startOf(CAVERN_ENTRY),
+  forge: startOf(CAVERN_WYRM),
+  drowned: startOf(DROWNED_STAIR),
+  castle: startOf(CASTLE_WALLS),
+  keep: startOf(CASTLE_KEEP),
+  castleEnd: startOf(CASTLE_FINAL),
+  throne: startOf(THRONE),
+  rift: startOf(RIFT_ENTRY),
+  lair: startOf(HYDRA_SHAFT),
+  riftend: startOf(RIFT_SHRINE),
+  crystalworld: startOf(CRYSTAL_HALL),
+} as const;

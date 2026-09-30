@@ -19,7 +19,10 @@ export type EnemyKind =
   | 'hydra'
   | 'warden'
   | 'thalassa'
-  | 'prismarch';
+  | 'prismarch'
+  | 'colossus'
+  | 'wyrm'
+  | 'vesper';
 
 /**
  * The kinds that are bosses rather than roster: announced, with a health bar,
@@ -32,6 +35,9 @@ export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
   'thalassa',
   'warden',
   'prismarch',
+  'colossus',
+  'wyrm',
+  'vesper',
 ]);
 
 /**
@@ -51,6 +57,16 @@ export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
 export function bossScale(beamTier: number): { hp: number; poise: number } {
   const tier = clamp(beamTier, 0, 2);
   return { hp: 1 + 0.22 * tier, poise: 1 + 0.35 * tier };
+}
+
+/** A light in world space, as the lighting pass takes it. */
+export interface GlowLight {
+  x: number;
+  y: number;
+  radius: number;
+  rgb: string;
+  strength: number;
+  tint?: number;
 }
 
 export abstract class Enemy extends Body {
@@ -79,6 +95,8 @@ export abstract class Enemy extends Body {
    * next one cannot happen, and that breath is what lets her answer.
    */
   protected poiseLock = 0;
+  /** For bosses: awake and fighting. The arenas close on this. */
+  engaged = false;
   anim = 0;
   readonly homeX: number;
   readonly homeY: number;
@@ -115,7 +133,7 @@ export abstract class Enemy extends Body {
 
   protected die(world: World): void {
     this.dead = true;
-    audio.play('enemyDie');
+    audio.play(BOSS_KINDS.has(this.kind) ? 'bossDown' : 'enemyDie');
     world.addScore(this.scoreValue, this.cx, this.y, `+${this.scoreValue}`);
     world.particles.burst(this.cx, this.cy, 22, this.deathColor(), { speed: 210, gravity: 520, size: 4 });
     world.particles.burst(this.cx, this.cy, 10, '#ffffff', { speed: 120, gravity: 200, shape: 'spark' });
@@ -132,6 +150,33 @@ export abstract class Enemy extends Body {
 
   abstract update(dt: number, world: World): void;
   abstract draw(ctx: CanvasRenderingContext2D, world: World): void;
+
+  /**
+   * The lights a big enemy carries, beyond the one the game gives every enemy
+   * at its centre. A boss the size of a wall lit from one point in its middle
+   * is a dark wall with a bright spot in it.
+   */
+  lights(): GlowLight[] {
+    return [];
+  }
+
+  /**
+   * Drawn a second time, faintly, on top of the darkness - see
+   * Game.drawCastLight. Right for a bat in an unlit corner; wrong for a boss
+   * that fills half the screen and carries its own lights, which that second
+   * pass only washes out.
+   */
+  castLight = true;
+
+  /** The name on the boss bar, for the bosses that draw one of their own. */
+  barName(): string | null {
+    return null;
+  }
+
+  /** Which notch of the boss bar it is in. */
+  barPhase(): number {
+    return 1;
+  }
 
   /**
    * What a parry knocks out of this enemy, beyond the damage it deals.
@@ -371,7 +416,7 @@ export class Bat extends Enemy {
         const len = dist || 1;
         this.vx = (dx / len) * 250;
         this.vy = (dy / len) * 250;
-        audio.play('swing', 1.8);
+        audio.play('screech', 1.4);
       } else {
         const targetX = dist < this.aggroRange ? player.cx - Math.sign(dx) * 70 : this.homeX;
         const targetY = (dist < this.aggroRange ? player.cy - 60 : this.homeY) + Math.sin(this.phase) * 16;
@@ -666,7 +711,7 @@ export class DarkMage extends Enemy {
           const speed = 190;
           const p = new Projectile('orb', this.cx - 7 + this.facing * 12, this.cy - 11, (dx / len) * speed, (dy / len) * speed);
           world.spawnProjectile(p);
-          audio.play('shoot');
+          audio.play('magic', 0.8);
         }
       }
     }
@@ -774,12 +819,12 @@ export class Bomber extends Enemy {
     this.state = 'fuse';
     this.fuse = seconds;
     this.beeped = 0;
-    audio.play('shoot', 1.7);
+    audio.play('fuse');
   }
 
   private boom(world: World): void {
     this.dead = true;
-    audio.play('slam', 1.25);
+    audio.play('explode');
     world.camera.addShake(5);
     world.particles.burst(this.cx, this.cy, 34, '#ffb066', { speed: 300, gravity: 220, size: 4 });
     world.particles.burst(this.cx, this.cy, 18, '#fff0c8', { speed: 190, shape: 'spark' });
@@ -811,7 +856,7 @@ export class Bomber extends Enemy {
       this.beeped -= dt;
       if (this.beeped <= 0) {
         this.beeped = Math.max(0.06, this.fuse * 0.35);
-        audio.play('hit', 1.9);
+        audio.play('fuse', 1.3);
       }
       this.vx = approach(this.vx, 0, 600 * dt);
       this.vy += 1400 * dt;
@@ -948,7 +993,7 @@ export class Shieldman extends Enemy {
     // A blow into the shield is a blow into a wall.
     const fromFront = Math.sign(fromDir) === -this.facing;
     if (fromFront && !this.exposed) {
-      audio.play('parry', 0.8);
+      audio.play('clank', 0.8);
       world.particles.burst(this.cx - this.facing * 12, this.cy - 4, 8, '#dfe8ff', {
         speed: 150,
         shape: 'spark',
@@ -968,7 +1013,7 @@ export class Shieldman extends Enemy {
     this.state = 'exposed';
     this.timer = 1.8;
     this.vx = -this.facing * 120;
-    audio.play('hit', 0.7);
+    audio.play('clank', 0.55);
     world.particles.burst(this.cx, this.cy, 12, '#dfe8ff', { speed: 170, shape: 'spark' });
   }
 
@@ -1224,7 +1269,7 @@ export class Charger extends Enemy {
             this.state = 'dazed';
             this.timer = 1.5;
             this.vx = -this.facing * 90;
-            audio.play('slam', 1.4);
+            audio.play('crumble', 1.3);
             world.camera.addShake(3);
             world.particles.burst(this.cx + this.facing * 12, this.cy, 16, '#c2a08a', {
               speed: 200,
@@ -1310,8 +1355,9 @@ const POISE = 5;
 /**
  * The Shard Warden: what the rift grew in the knight's place.
  *
- * A mini-boss rather than a second boss - a third of the knight's health, three
- * moves instead of five, and no arena to lock the player in. What it keeps from
+ * A mini-boss rather than a second boss - a third of the knight's health and
+ * three moves instead of five - but warded in like every other boss, because
+ * a fight the road goes around is a fight nobody takes. What it keeps from
  * the knight is the thing that made him fair: every move is announced, and the
  * pause afterwards is long enough to answer.
  */
@@ -1324,8 +1370,6 @@ export class Warden extends Enemy {
   private poise = POISE;
   /** That figure, once it has seen the blade coming. */
   private poiseMax = POISE;
-  /** True once the player has come close enough to wake it. */
-  engaged = false;
 
   constructor(x: number, y: number) {
     super('warden', x, y);
@@ -1429,7 +1473,7 @@ export class Warden extends Enemy {
             this.state = 'volleyWind';
             this.timer = 0.5;
           }
-          audio.play('shoot', 0.7);
+          audio.play('tell', 0.8);
         }
         break;
       }
@@ -1463,7 +1507,7 @@ export class Warden extends Enemy {
             const shard = new Projectile('orb', this.cx - 7, this.cy - 14, (dx / len) * 200, (dy / len) * 200);
             world.spawnProjectile(shard);
           }
-          audio.play('shoot');
+          audio.play('magic', 1.1);
           this.state = 'recover';
           this.timer = 1.25;
         }
@@ -1659,7 +1703,6 @@ export class Gallert extends Enemy {
   private spawned = 0;
   /** Last floor he stood on, so his shadow stays down there when he leaps. */
   private groundY = 0;
-  engaged = false;
 
   constructor(x: number, y: number) {
     super('gallert', x, y);
@@ -1786,7 +1829,7 @@ export class Gallert extends Enemy {
           this.timer = move === 'hopWind' ? 0.7 : 0.6;
           this.core = 1;
           this.hitThisMove = false;
-          audio.play('shoot', 0.5);
+          audio.play('tell', 0.6);
         }
         break;
       }
@@ -1849,7 +1892,7 @@ export class Gallert extends Enemy {
             world.spawnProjectile(new Projectile('blob', this.cx - 8, originY, vx, vy));
           }
           this.squash = 0.6;
-          audio.play('shoot');
+          audio.play('splash', 1.5);
           this.state = 'recover';
           this.timer = 1.25 * quick;
         }
@@ -1863,7 +1906,7 @@ export class Gallert extends Enemy {
           // slimes: the point is that they are in the way, not that they are
           // dangerous.
           for (const side of [-1, 1]) {
-            const spawn = createEnemy('slime', this.cx + side * 34, this.bottom - 26);
+            const spawn = new Slime(this.cx + side * 34, this.bottom - 26);
             spawn.y = this.bottom - spawn.h;
             spawn.active = true;
             world.spawnEnemy(spawn);
@@ -2078,7 +2121,6 @@ export class Thalassa extends Enemy {
    * fight, and thirty of its ninety-seven seconds spent in them.
    */
   private tideCool = 0;
-  engaged = false;
 
   constructor(x: number, y: number) {
     super('thalassa', x, y);
@@ -2236,7 +2278,7 @@ export class Thalassa extends Enemy {
       this.tideLeft = 1;
       this.crowded = 0;
       this.tideCool = 5;
-      audio.play('slam', 0.7);
+      audio.play('phase', 0.9);
       world.camera.addShake(6);
       world.particles.burst(this.cx, this.cy, 26, '#a8efe6', { speed: 230, gravity: -80, shape: 'spark' });
     }
@@ -2285,7 +2327,7 @@ export class Thalassa extends Enemy {
                   : 'undertow';
           // The warning itself never shortens - only the resting does.
           this.timer = 0.55;
-          audio.play('shoot', 0.55);
+          audio.play('tell', 0.9);
         }
         break;
       }
@@ -2315,7 +2357,7 @@ export class Thalassa extends Enemy {
             wave.water = true;
             world.spawnProjectile(wave);
           }
-          audio.play('slam');
+          audio.play('splash', 0.8);
           world.camera.addShake(this.surgeLeft > 1 ? 7 : 5);
           world.particles.burst(this.cx, this.bottom, 22, '#7fd6cc', { speed: 240, gravity: 500 });
           this.surgeLeft--;
@@ -2345,7 +2387,7 @@ export class Thalassa extends Enemy {
             const anchor = new Projectile('rock', this.cx - 10, originY, vx, vy);
             world.spawnProjectile(anchor);
           }
-          audio.play('shoot');
+          audio.play('fireball', 0.6);
           this.afterMove(1.0);
         }
         break;
@@ -2356,7 +2398,7 @@ export class Thalassa extends Enemy {
         if (this.timer <= 0) {
           this.state = 'undertow';
           this.timer = 1.1;
-          audio.play('shoot', 0.5);
+          audio.play('splash', 0.6);
         }
         break;
 
@@ -2399,7 +2441,7 @@ export class Thalassa extends Enemy {
             );
             world.spawnProjectile(orb);
           }
-          audio.play('shoot');
+          audio.play('magic', 0.9);
           this.afterMove(1.05);
         }
         break;
@@ -2428,7 +2470,7 @@ export class Thalassa extends Enemy {
           // untouchable for a moment after a hit - so a tide that punishes
           // standing still has to ask the question twice.
           this.tideLeft = this.phase >= 2 ? 2 : 1;
-          audio.play('shoot', 0.4);
+          audio.play('rumble', 1.4);
           this.state = 'tide';
           this.timer = 1.35;
         }
@@ -2442,7 +2484,7 @@ export class Thalassa extends Enemy {
           if (this.tideLeft > 0) {
             // The second ripple asks where he is now, not where he was.
             this.geysers.push(...this.markTide([player.cx, this.cx - 92, this.cx + 92]));
-            audio.play('shoot', 0.35);
+            audio.play('rumble', 1.5);
             this.timer = 1.35;
           } else {
             this.afterMove(1.0);
@@ -2504,7 +2546,7 @@ export class Thalassa extends Enemy {
         continue;
       }
       if (before < g.wind) {
-        audio.play('slam', 0.45);
+        audio.play('splash', 0.9);
         world.camera.addShake(3);
         world.particles.burst(g.x, this.floorY - 6, 14, '#a8efe6', {
           speed: 220,
@@ -2751,7 +2793,6 @@ export class Prismarch extends Enemy {
   private rainTimer = 0;
   private hitThisMove = false;
   private lastMove = '';
-  engaged = false;
 
   constructor(x: number, y: number) {
     super('prismarch', x, y);
@@ -2854,7 +2895,7 @@ export class Prismarch extends Enemy {
           this.lastMove = move;
           this.state = move as typeof this.state;
           this.timer = move === 'rainWind' ? 0.6 * quick : 0.55 * quick;
-          audio.play('shoot', 0.6);
+          audio.play('tell', 1.3);
         }
         break;
       }
@@ -2872,7 +2913,7 @@ export class Prismarch extends Enemy {
             const vy = ((dx / len) * Math.sin(a) + (dy / len) * Math.cos(a)) * 215;
             world.spawnProjectile(new Projectile('orb', this.cx - 7, this.cy - 16, vx, vy));
           }
-          audio.play('shoot');
+          audio.play('magic', 1.3);
           this.state = 'recover';
           this.timer = 1.25 * quick;
         }
@@ -3139,7 +3180,6 @@ export class Hydra extends Enemy {
   private fury = 0;
   /** How many heads the blade has had to take twice. Read by verify:hydra. */
   regrowths = 0;
-  engaged = false;
 
   /**
    * Head heights are measured against what the hero can actually do, not
@@ -3328,7 +3368,7 @@ export class Hydra extends Enemy {
     world.particles.burst(c.x, c.y, 16, '#fff4d8', { speed: 150, shape: 'spark' });
     world.camera.addShake(6);
     world.hitStop(0.12);
-    audio.play('victory', 0.5);
+    audio.play('burst', 1.2);
     world.addScore(500, c.x, c.y, '+500');
     world.onHydraNeckSealed(this.sealed);
     if (this.finished) {
@@ -3478,7 +3518,7 @@ export class Hydra extends Enemy {
           this.hitThisMove = false;
           // The longest warnings belong to the biggest thing in the game.
           this.timer = (this.necks[this.acting].kind === 'storm' ? 0.75 : 0.65) * haste;
-          audio.play('shoot', 0.5);
+          audio.play('tell', 0.7);
         }
         break;
 
@@ -3558,7 +3598,7 @@ export class Hydra extends Enemy {
           world.spawnProjectile(glob);
           this.pools.push({ x: this.cx + aim + spread, life: POOL_LIFE, wait: flight });
         }
-        audio.play('shoot');
+        audio.play('fireball', 1.2);
         this.state = 'recover';
         this.timer = 1.1;
         break;
@@ -3592,7 +3632,7 @@ export class Hydra extends Enemy {
           this.gust = 1.1;
           this.gustDir = player.cx > this.cx ? 1 : -1;
         }
-        audio.play('shoot', 0.4);
+        audio.play('rumble', 1.2);
         this.state = 'recover';
         this.timer = 1.2;
         break;
@@ -3610,7 +3650,7 @@ export class Hydra extends Enemy {
             world.spawnProjectile(glob);
             this.pools.push({ x: this.cx + aim + spread, life: POOL_LIFE, wait: flight });
           }
-          audio.play('shoot');
+          audio.play('fireball', 1.2);
           this.state = 'recover';
           this.timer = 0.95;
         } else if (pick === 1) {
@@ -3621,7 +3661,7 @@ export class Hydra extends Enemy {
           this.timer = 1.0;
         } else {
           this.markDrops(world, [player.cx, player.cx + rand(-120, 120)], 0.7);
-          audio.play('shoot', 0.4);
+          audio.play('rumble', 1.2);
           this.state = 'recover';
           this.timer = 1.0;
         }
@@ -3645,7 +3685,7 @@ export class Hydra extends Enemy {
       const ember = new Projectile('ember', from.x - 9, from.y - 9, vx, vy);
       world.spawnProjectile(ember);
     }
-    audio.play('shoot', 0.8);
+    audio.play('fireball');
     world.camera.addShake(3);
   }
 
@@ -4429,7 +4469,12 @@ export class Hydra extends Enemy {
   }
 }
 
-export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
+/**
+ * The roster in this file. The bosses that live in files of their own are
+ * built in roster.ts, which knows about both - this one cannot import them
+ * without a cycle, since they are built on Enemy.
+ */
+export function createBaseEnemy(kind: EnemyKind, x: number, y: number): Enemy {
   switch (kind) {
     case 'slime':
       return new Slime(x, y);
@@ -4455,5 +4500,7 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Thalassa(x, y);
     case 'prismarch':
       return new Prismarch(x, y);
+    default:
+      throw new Error(`${kind} is built in roster.ts`);
   }
 }

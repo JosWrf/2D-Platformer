@@ -2,6 +2,25 @@ import { Rng, clamp } from '../core/math';
 import { CHUNK_H, LEVEL_CHUNKS } from './levelData';
 import { CHAR_TO_SPAWN, CHAR_TO_TILE, Spawn, TILE, Tile, isHazard, isPlatform, isSolid } from './tiles';
 
+/**
+ * A boss arena: the stretch between two wards. Built from the level itself - a
+ * chunk that has wards in it is an arena, the leftmost ward column its way in
+ * and the rightmost its way out.
+ */
+export interface Arena {
+  /** Column of the ward the hero comes in through. */
+  readonly entryTx: number;
+  /** Column of the ward that bars the way on. */
+  readonly exitTx: number;
+  /** World x of the first and last pixel inside. */
+  readonly left: number;
+  readonly right: number;
+  /** The fight is on: both wards stand. */
+  fighting: boolean;
+  /** Its boss has fallen: both wards are down for good. */
+  cleared: boolean;
+}
+
 export interface TileDecor {
   /** Deterministic 0..1 value per tile, used for subtle rendering variety. */
   noise: number;
@@ -23,6 +42,15 @@ export class Level {
   readonly arenaLeft: number;
   /** The way out of the throne room stays shut until the knight falls. */
   exitSealed = true;
+  /** Every warded boss arena, left to right. */
+  readonly arenas: Arena[] = [];
+  /** Which arena a ward column belongs to, or -1. */
+  private readonly wardArena: Int16Array;
+  /**
+   * Treat every ward as open. Only for the static reachability check, which
+   * asks whether the road exists at all - the same reason it opens the seal.
+   */
+  wardsOpen = false;
 
   constructor() {
     let width = 0;
@@ -34,9 +62,12 @@ export class Level {
     this.decorNoise = new Float32Array(width * this.height);
 
     const rng = new Rng(0xc0ffee);
+    this.wardArena = new Int16Array(width).fill(-1);
     let gateTx = -1;
     let offsetX = 0;
     for (const chunk of LEVEL_CHUNKS) {
+      let wardMin = Infinity;
+      let wardMax = -Infinity;
       for (let ty = 0; ty < this.height; ty++) {
         const row = chunk.rows[ty] ?? '';
         for (let cx = 0; cx < chunk.width; cx++) {
@@ -46,11 +77,28 @@ export class Level {
           if (tile !== undefined) {
             this.tiles[ty * width + tx] = tile;
             if (tile === Tile.Gate) gateTx = Math.max(gateTx, tx);
+            if (tile === Tile.Ward) {
+              wardMin = Math.min(wardMin, tx);
+              wardMax = Math.max(wardMax, tx);
+            }
           } else {
             const spawn = CHAR_TO_SPAWN[ch];
             if (spawn) this.spawns.push({ kind: spawn, tx, ty });
           }
         }
+      }
+      if (wardMax > wardMin) {
+        const index = this.arenas.length;
+        this.arenas.push({
+          entryTx: wardMin,
+          exitTx: wardMax,
+          left: (wardMin + 1) * TILE,
+          right: wardMax * TILE,
+          fighting: false,
+          cleared: false,
+        });
+        this.wardArena[wardMin] = index;
+        this.wardArena[wardMax] = index;
       }
       offsetX += chunk.width;
     }
@@ -76,7 +124,27 @@ export class Level {
     if (t === Tile.Gate) return this.gateClosed;
     if (t === Tile.LairGate) return this.lairClosed;
     if (t === Tile.Seal) return this.exitSealed;
+    if (t === Tile.Ward) return this.wardClosed(tx);
     return isSolid(t);
+  }
+
+  /**
+   * Whether the ward in this column stands. The way in only closes behind a
+   * fight; the way on stands until the boss is gone.
+   */
+  wardClosed(tx: number): boolean {
+    if (this.wardsOpen) return false;
+    const arena = this.arenas[this.wardArena[tx] ?? -1];
+    if (!arena || arena.cleared) return false;
+    return tx === arena.entryTx ? arena.fighting : true;
+  }
+
+  /** The arena a world x lies in, wards included, if any. */
+  arenaAt(x: number): Arena | null {
+    for (const arena of this.arenas) {
+      if (x >= arena.left - TILE && x < arena.right + TILE) return arena;
+    }
+    return null;
   }
 
   platformAt(tx: number, ty: number): boolean {

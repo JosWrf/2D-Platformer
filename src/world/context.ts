@@ -2,7 +2,7 @@ import type { Camera } from '../core/camera';
 import type { Particles } from '../fx/particles';
 import type { Level } from './level';
 import type { Player } from '../entities/player';
-import type { Enemy } from '../entities/enemy';
+import type { Enemy, EnemyKind } from '../entities/enemy';
 import type { Projectile } from '../entities/projectile';
 import type { Boss } from '../entities/boss';
 
@@ -29,4 +29,6 @@ export interface World {
   onHydraNeckCut(wasTheFire: boolean): void;
   onHydraNeckSealed(sealed: number): void;
   onHydraDefeated(): void;
+  /** One of the arena bosses without a reward of its own has fallen. */
+  onBossFelled(kind: EnemyKind, x: number, y: number): void;
 }

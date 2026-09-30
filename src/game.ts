@@ -1,4 +1,4 @@
-import { audio } from './core/audio';
+import { audio, type TrackName } from './core/audio';
 import { Camera } from './core/camera';
 import { Input } from './core/input';
 import { clamp, rand } from './core/math';
@@ -12,8 +12,8 @@ import {
   Prismarch,
   Thalassa,
   Warden,
-  createEnemy,
 } from './entities/enemy';
+import { createEnemy } from './entities/roster';
 import { MovingPlatform } from './entities/platform';
 import { Checkpoint, Pickup } from './entities/pickup';
 import { PLAYER_MAX_HP, Player } from './entities/player';
@@ -31,7 +31,7 @@ import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
 import { drawBossBar, drawHeart, drawPanel, drawTextCentered, font } from './ui/hud';
 import type { World } from './world/context';
-import { Level } from './world/level';
+import { Arena, Level } from './world/level';
 import { TILE, Tile } from './world/tiles';
 
 const TILE_LAVA_TOP = Tile.LavaTop;
@@ -53,6 +53,42 @@ interface SpawnRecord {
   x: number;
   y: number;
 }
+
+/** What goes up over the arena when its wards come down. */
+const ARENA_TITLES: Partial<Record<EnemyKind, string>> = {
+  gallert: 'GALLERT, DER AUFGEQUOLLENE',
+  thalassa: 'THALASSA, DIE ERTRUNKENE KRONE',
+  warden: 'DER SPLITTERWÄCHTER',
+  colossus: 'ANKHOR, DER TEMPELKOLOSS',
+  wyrm: 'IGNIVOR, DER GLUTWURM',
+  vesper: 'VESPERON, DER BLUTFÜRST',
+};
+
+/** The fight each boss is fought to. */
+const BOSS_TRACK: Partial<Record<EnemyKind, TrackName>> = {
+  gallert: 'boss',
+  warden: 'boss',
+  thalassa: 'bossTide',
+  colossus: 'bossStone',
+  wyrm: 'bossFire',
+  vesper: 'bossBlood',
+  hydra: 'bossHydra',
+  prismarch: 'bossCrystal',
+};
+
+/** And the piece each zone is walked to. */
+const ZONE_TRACK: Record<string, TrackName> = {
+  forest: 'forest',
+  ruins: 'ruins',
+  caverns: 'caverns',
+  drowned: 'drowned',
+  castle: 'castle',
+  throne: 'throne',
+  rift: 'rift',
+  riftend: 'rift',
+  lair: 'lair',
+  crystalworld: 'crystal',
+};
 
 export class Game implements World {
   readonly level = new Level();
@@ -109,6 +145,8 @@ export class Game implements World {
   private readonly enemySpawns: SpawnRecord[] = [];
   /** Spawn keys of the bosses that have been beaten. They do not come back. */
   private readonly felledBosses = new Set<string>();
+  /** The boss each warded arena belongs to, by spawn key, arena for arena. */
+  private readonly arenaKeys: (string | null)[] = [];
   private readonly collected = new Set<string>();
   private checkpointX: number;
   private checkpointY: number;
@@ -158,6 +196,9 @@ export class Game implements World {
         case 'warden':
         case 'thalassa':
         case 'prismarch':
+        case 'colossus':
+        case 'wyrm':
+        case 'vesper':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -206,8 +247,16 @@ export class Game implements World {
           break;
       }
     }
+    for (const arena of this.level.arenas) {
+      const rec = this.enemySpawns.find((r) => BOSS_KINDS.has(r.kind) && r.x >= arena.left && r.x < arena.right);
+      this.arenaKeys.push(rec ? Game.keyOf(rec) : null);
+    }
     this.spawnEnemiesFresh();
     this.pickups.forEach((pickup, i) => (pickup.id = `p${i}`));
+  }
+
+  private static keyOf(rec: SpawnRecord): string {
+    return `${rec.kind}@${rec.x},${rec.y}`;
   }
 
   /** Pixels down to the first solid tile below a spawn tile, or null. */
@@ -237,12 +286,12 @@ export class Game implements World {
   private spawnEnemiesFresh(): void {
     this.enemies.length = 0;
     for (const rec of this.enemySpawns) {
-      const key = `${rec.kind}@${rec.x},${rec.y}`;
+      const key = Game.keyOf(rec);
       if (this.felledBosses.has(key)) continue;
       const enemy = createEnemy(rec.kind, rec.x, rec.y);
       enemy.spawnKey = key;
       // Anchor ground-bound enemies on the floor of their tile.
-      if (rec.kind !== 'bat' && rec.kind !== 'mage') enemy.y = rec.y + TILE - enemy.h;
+      if (rec.kind !== 'bat' && rec.kind !== 'mage' && rec.kind !== 'vesper') enemy.y = rec.y + TILE - enemy.h;
       this.enemies.push(enemy);
     }
   }
@@ -283,6 +332,7 @@ export class Game implements World {
 
   onBossEngaged(): void {
     this.level.gateClosed = true;
+    audio.play('wardClose', 0.8);
     this.bossIntro = 3;
     this.zoneBanner = { text: 'SCHATTENRITTER MORVAIN', timer: 3 };
     this.camera.addShake(8);
@@ -296,6 +346,7 @@ export class Game implements World {
     this.bossDefeated = true;
     this.flashWhite = 1;
     this.zoneBanner = { text: 'DAS SIEGEL BRICHT', timer: 3.4 };
+    audio.play('bossDown');
     audio.play('victory');
     this.camera.addShake(10);
   }
@@ -351,6 +402,7 @@ export class Game implements World {
    */
   onHydraEngaged(): void {
     this.level.lairClosed = true;
+    audio.play('wardClose', 0.7);
     this.zoneBanner = { text: 'DIE FÜNFKRONIGE', timer: 3.4 };
     this.camera.addShake(8);
   }
@@ -370,7 +422,7 @@ export class Game implements World {
     if (this.hydraToldAboutRegrowth) return;
     this.hydraToldAboutRegrowth = true;
     this.zoneBanner = { text: 'DER HALS WÄCHST NACH — BRENN IHN AUS', timer: 4.2 };
-    audio.play('hurt', 0.5);
+    audio.play('phase', 0.9);
   }
 
   /** And the first one burned shut, which is the answer. */
@@ -393,6 +445,7 @@ export class Game implements World {
   onHydraDefeated(): void {
     if (this.state !== 'playing') return;
     this.level.lairClosed = false;
+    audio.play('wardOpen', 0.8);
     this.score += 3000;
     this.flashWhite = 1;
     this.camera.addShake(10);
@@ -433,8 +486,30 @@ export class Game implements World {
     };
   }
 
+  /**
+   * Ankhor, Ignivor or Vesperon falls. They hold nothing for the blade, so
+   * what they give is the thing a hero wants most after a long fight: every
+   * heart back, and the wards down.
+   */
+  onBossFelled(kind: EnemyKind, x: number, y: number): void {
+    if (this.state !== 'playing') return;
+    const words: Partial<Record<EnemyKind, string>> = {
+      colossus: 'ANKHOR ZERFÄLLT',
+      wyrm: 'IGNIVOR ERLISCHT',
+      vesper: 'VESPERON ZERSTIEBT',
+    };
+    this.flashWhite = 0.9;
+    this.camera.addShake(9);
+    this.score += 1500;
+    this.particles.text(x, y, '+1500', PALETTE.gold);
+    this.player.heal(this.player.maxHp);
+    this.zoneBanner = { text: words[kind] ?? 'BESIEGT', timer: 3.8 };
+    audio.play('victory');
+  }
+
   /** One heart more, for good, and full again right away. */
   private takeHeartCore(): void {
+    audio.play('upgrade');
     this.player.maxHp = PLAYER_MAX_HP + 1;
     this.player.hp = this.player.maxHp;
     this.zoneBanner = { text: 'HERZKERN — EIN HERZ MEHR', timer: 4.2 };
@@ -478,6 +553,7 @@ export class Game implements World {
 
   /** The first tier of the blade, and the word for it on the HUD. */
   private takeFloodIntoBlade(): void {
+    audio.play('upgrade');
     this.player.beamTier = 1;
     this.zoneBanner = { text: 'FLUTKLINGE — JEDER HIEB SCHNEIDET WEITER', timer: 4.2 };
     this.flashWhite = 0.7;
@@ -539,7 +615,7 @@ export class Game implements World {
     this.player.beamTier = 2;
     this.flashWhite = 1;
     this.zoneBanner = { text: 'KLINGENWELLE — JEDER HIEB SCHIESST', timer: 4.2 };
-    audio.play('victory');
+    audio.play('upgrade');
     if (!back) return;
     this.checkpointX = back.cpX;
     this.checkpointY = back.cpY;
@@ -559,7 +635,7 @@ export class Game implements World {
       // doing nothing - a door that ignores you reads as broken.
       if (this.zoneBanner.timer <= 0) {
         this.zoneBanner = { text: 'VERSIEGELT, SOLANGE DIE FÜNFKRONIGE LEBT', timer: 2.6 };
-        audio.play('hurt', 0.6);
+        audio.play('clank', 0.6);
       }
       return;
     }
@@ -594,6 +670,102 @@ export class Game implements World {
     }
   }
 
+  /* --------------------------------------------------------------- arenas */
+
+  /**
+   * The wards around every boss arena. A boss is not optional: the way on
+   * stands until it has fallen, and once the fight is on and the hero is
+   * inside, the way back comes down behind him too.
+   *
+   * The way in only closes with the hero fully inside it. A boss that wakes
+   * while he is still standing in the doorway would otherwise shut him out of
+   * his own fight - awake, unreachable, and in the way for good. The boss is
+   * kept inside its room for the same reason: one that followed him out
+   * through the open door could end up on the wrong side of it.
+   */
+  private updateArenas(): void {
+    const p = this.player;
+    this.level.arenas.forEach((arena, i) => {
+      const key = this.arenaKeys[i];
+      if (!key || arena.cleared) return;
+      if (this.felledBosses.has(key)) {
+        arena.cleared = true;
+        arena.fighting = false;
+        this.onArenaCleared(arena);
+        return;
+      }
+      const boss = this.enemies.find((e) => e.spawnKey === key && !e.dead);
+      if (!boss) return;
+      if (boss.x < arena.left) boss.x = arena.left;
+      if (boss.x + boss.w > arena.right) boss.x = arena.right - boss.w;
+      if (arena.fighting) return;
+      const inside = !p.dead && p.x > arena.left + 2 && p.x + p.w < arena.right - 2;
+      if (boss.engaged && inside) {
+        arena.fighting = true;
+        this.onArenaSealed(arena, boss);
+      }
+    });
+  }
+
+  /** The door behind him comes down. */
+  private onArenaSealed(arena: Arena, boss: Enemy): void {
+    audio.play('wardClose');
+    this.camera.addShake(6);
+    this.wardSparks(arena.entryTx);
+    const title = ARENA_TITLES[boss.kind];
+    if (title) this.zoneBanner = { text: title, timer: 3.4 };
+  }
+
+  /** Both doors go, for good. */
+  private onArenaCleared(arena: Arena): void {
+    audio.play('wardOpen');
+    this.wardSparks(arena.entryTx);
+    this.wardSparks(arena.exitTx);
+  }
+
+  private wardSparks(tx: number): void {
+    const rgb = zoneAt(tx * TILE).name === 'castle' ? '#ff8aa0' : '#ffe2a8';
+    for (let ty = 2; ty < 18; ty += 2) {
+      if (this.level.tileAt(tx, ty) !== Tile.Ward) continue;
+      this.particles.burst(tx * TILE + 16, ty * TILE + 16, 4, rgb, { speed: 110, gravity: -30, shape: 'spark' });
+    }
+  }
+
+  /** The boss whose arena is shut around the hero right now, if any. */
+  private get arenaFight(): Enemy | null {
+    for (const [i, arena] of this.level.arenas.entries()) {
+      if (!arena.fighting) continue;
+      const key = this.arenaKeys[i];
+      const boss = this.enemies.find((e) => e.spawnKey === key && !e.dead);
+      if (boss) return boss;
+    }
+    return null;
+  }
+
+  /* ---------------------------------------------------------------- sound */
+
+  /** What should be playing: the fight if there is one, else the zone. */
+  private chooseMusic(): TrackName | null {
+    if (this.state === 'title') return 'title';
+    if (this.state === 'victory') return 'crystal';
+    if (this.boss && this.boss.engaged && !this.boss.dead) return 'bossKnight';
+    const fight = this.arenaFight;
+    if (fight) return BOSS_TRACK[fight.kind] ?? 'boss';
+    for (const e of this.enemies) {
+      if (e.dead || !e.engaged) continue;
+      if (e.kind === 'hydra' || e.kind === 'prismarch') return BOSS_TRACK[e.kind] ?? 'boss';
+    }
+    return ZONE_TRACK[zoneAt(this.player.cx).name] ?? null;
+  }
+
+  private updateSound(): void {
+    audio.setMusic(this.chooseMusic());
+    const zone = zoneAt(this.player.cx);
+    audio.setSpace(zone.name === 'drowned' ? 1 : zone.interior ? 0.8 : zone.name === 'rift' ? 0.55 : 0.25);
+    audio.duck(this.state === 'paused' || this.state === 'dead' || this.dialogue !== null);
+    audio.tick();
+  }
+
   /* --------------------------------------------------------------- update */
 
   update(dt: number, input: Input): void {
@@ -604,11 +776,23 @@ export class Game implements World {
     // purpose: someone who cannot look at it must be able to switch it off
     // from wherever they are, including the title screen and the pause menu.
     if (input.pressed('calm')) this.setMotion(this.camera.motion > 0 ? 0 : 1);
+    if (input.pressed('music')) {
+      audio.unlock();
+      const on = audio.toggleMusic();
+      this.zoneBanner = { text: on ? 'MUSIK AN' : 'MUSIK AUS', timer: 2.2 };
+    }
+    if (input.pressed('sound')) {
+      audio.unlock();
+      const on = audio.toggleSound();
+      this.zoneBanner = { text: on ? 'TON AN' : 'TON AUS', timer: 2.2 };
+    }
+    this.updateSound();
 
     // A dialogue holds everything else: no enemies, no gravity, no clock.
     if (this.dialogue) {
       this.particles.update(dt * 0.3);
       if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
+        audio.play('blip');
         this.dialogue.index++;
         if (this.dialogue.index >= this.dialogue.lines.length) {
           const done = this.dialogue.after;
@@ -627,6 +811,7 @@ export class Game implements World {
       for (const d of this.decor) d.update(dt, this.particles, this.isVisible(d.x, d.y));
       if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
         audio.unlock();
+        audio.play('confirm');
         this.state = 'playing';
       }
       input.endFrame();
@@ -738,6 +923,7 @@ export class Game implements World {
       if (BOSS_KINDS.has(enemy.kind)) this.felledBosses.add(enemy.spawnKey);
       this.enemies.splice(i, 1);
     }
+    this.updateArenas();
 
     if (this.boss) {
       this.boss.update(dt, this);
@@ -802,7 +988,8 @@ export class Game implements World {
     const zone = zoneAt(this.player.cx);
     if (zone.label !== this.currentZone) {
       this.currentZone = zone.label;
-      if (!this.boss?.engaged) this.zoneBanner = { text: zone.label, timer: 3.2 };
+      // A boss's name on screen outranks the name of the room it is in.
+      if (!this.boss?.engaged && !this.arenaFight) this.zoneBanner = { text: zone.label, timer: 3.2 };
     }
     if (this.zoneBanner.timer > 0) this.zoneBanner.timer -= dt;
 
@@ -814,6 +1001,7 @@ export class Game implements World {
       this.state = 'dead';
       this.deathTimer = 1.1;
       this.deaths++;
+      audio.play('death');
       this.camera.addShake(9);
       this.particles.burst(this.player.cx, this.player.cy, 40, PALETTE.playerCloak, { speed: 240, gravity: 500 });
     }
@@ -841,6 +1029,8 @@ export class Game implements World {
     // Her door goes back up with her: a hero who died in there has to be able
     // to walk back in, and one who died outside must not find it shut.
     this.level.lairClosed = false;
+    // The same for every warded arena: the fight starts again from the door.
+    for (const arena of this.level.arenas) arena.fighting = false;
     if (this.boss && !this.bossDefeated) {
       this.boss.reset();
       this.bossGhostHp = this.boss.maxHp;
@@ -879,6 +1069,10 @@ export class Game implements World {
     this.player.beamTier = 0;
     this.player.maxHp = PLAYER_MAX_HP;
     this.felledBosses.clear();
+    for (const arena of this.level.arenas) {
+      arena.cleared = false;
+      arena.fighting = false;
+    }
     this.level.exitSealed = true;
     this.level.lairClosed = false;
     this.hydraToldAboutRegrowth = false;
@@ -930,13 +1124,21 @@ export class Game implements World {
       add(cp.x + 12, cp.y + 20, cp.activated ? 150 : 70, cp.activated ? '255,214,110' : '110,140,190', 0.8, 0.32);
     }
     for (const p of this.projectiles) {
-      const rgb = p.kind === 'orb' ? '210,110,255' : p.kind === 'shockwave' ? '255,140,90' : '200,180,160';
+      const rgb =
+        p.kind === 'orb'
+          ? '210,110,255'
+          : p.kind === 'shockwave' || p.kind === 'magma' || p.kind === 'ember'
+            ? '255,140,90'
+            : p.kind === 'blood'
+              ? '255,60,90'
+              : '200,180,160';
       add(p.cx, p.cy, p.kind === 'bone' ? 40 : 84, rgb, 0.8, 0.34);
     }
     // Every enemy carries some light. A threat the player cannot see is not a
     // difficulty, it is a bug.
     for (const enemy of this.enemies) {
       if (enemy.dead) continue;
+      for (const l of enemy.lights()) add(l.x, l.y, l.radius, l.rgb, l.strength, l.tint ?? 0.3);
       switch (enemy.kind) {
         case 'mage':
           add(enemy.cx, enemy.cy, 104, '200,90,223', 0.85, 0.36);
@@ -1092,7 +1294,7 @@ export class Game implements World {
     layer.save();
     layer.translate(-this.camera.renderX, -this.camera.renderY);
     for (const enemy of this.enemies) {
-      if (enemy.dead || !this.isVisible(enemy.x, enemy.y, 140)) continue;
+      if (enemy.dead || !enemy.castLight || !this.isVisible(enemy.x, enemy.y, 140)) continue;
       // Drawn without its hit flash. The flash is a canvas filter, and a canvas
       // filter costs a layer the size of the whole view per draw: measured, one
       // flashing enemy took this pass from 0.4 ms to 64 ms, for the dozen
@@ -1312,6 +1514,25 @@ export class Game implements World {
       );
     }
 
+    // The arena bosses that carry their own name for the bar.
+    const named = this.enemies.find((e) => e.engaged && !e.dead && e.barName() !== null);
+    if (named) {
+      drawBossBar(
+        ctx,
+        VIEW_W,
+        VIEW_H,
+        {
+          name: `${named.barName()}   ·   PHASE ${named.barPhase()}`,
+          hp: Math.max(0, named.hp),
+          maxHp: named.maxHp,
+          ghost: Math.max(0, named.hp),
+          phase: named.barPhase(),
+        },
+        0,
+      );
+      return;
+    }
+
     // The warden gets the same bar, half the width: it is a mini-boss, and a
     // fight with a health bar is a fight the player knows to take seriously.
     const prism = this.enemies.find((e): e is Prismarch => e instanceof Prismarch && e.engaged && !e.dead);
@@ -1462,6 +1683,15 @@ export class Game implements World {
         ctx.fillRect(0, 0, VIEW_W, VIEW_H);
         drawTextCentered(ctx, 'PAUSE', VIEW_W / 2, VIEW_H / 2 - 6, 46, '#f4f7ff');
         drawTextCentered(ctx, 'P oder LEERTASTE zum Fortsetzen  ·  R für Neustart', VIEW_W / 2, VIEW_H / 2 + 30, 14, '#94a0c8', 600);
+        drawTextCentered(
+          ctx,
+          `M  Musik ${audio.musicOff ? 'aus' : 'an'}   ·   N  Ton ${audio.muted ? 'aus' : 'an'}   ·   B  Bildwackeln ${this.camera.motion > 0 ? 'an' : 'aus'}`,
+          VIEW_W / 2,
+          VIEW_H / 2 + 56,
+          12,
+          '#6f7ba3',
+          600,
+        );
         break;
       case 'dead': {
         const a = clamp(1.1 - this.deathTimer, 0, 1) * 0.78;
@@ -1510,8 +1740,9 @@ export class Game implements World {
       ['SHIFT  /  L', 'Ausweichrolle (unverwundbar)'],
       ['↓ + Sprung', 'Durch Plattform fallen'],
       ['P  /  R', 'Pause  ·  Neustart'],
+      ['M  /  N', 'Musik  ·  Ton an/aus'],
     ];
-    drawPanel(ctx, VIEW_W / 2 - 220, 252, 440, 168, 0.6);
+    drawPanel(ctx, VIEW_W / 2 - 220, 252, 440, 190, 0.6);
     ctx.font = font(13, 600);
     rows.forEach(([key, desc], i) => {
       const y = 278 + i * 25;
@@ -1526,9 +1757,17 @@ export class Game implements World {
 
     const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
     ctx.globalAlpha = 0.35 + blink * 0.65;
-    drawTextCentered(ctx, 'LEERTASTE ZUM STARTEN', VIEW_W / 2, 470, 20, '#ffffff');
+    drawTextCentered(ctx, 'LEERTASTE ZUM STARTEN', VIEW_W / 2, 474, 20, '#ffffff');
     ctx.globalAlpha = 1;
-    drawTextCentered(ctx, 'Schlage dich durch 5 Zonen bis zum Thronsaal des Schattenritters.', VIEW_W / 2, 502, 12, '#6f7ba3', 600);
+    drawTextCentered(
+      ctx,
+      'Acht Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
+      VIEW_W / 2,
+      502,
+      12,
+      '#6f7ba3',
+      600,
+    );
   }
 
   private drawVictory(ctx: CanvasRenderingContext2D): void {

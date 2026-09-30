@@ -1,3 +1,5 @@
+import { ZONE_START } from '../world/levelData';
+
 /** Central colour palette so every zone of the level shares one coherent look. */
 export const PALETTE = {
   skyTop: '#0b1024',
@@ -111,7 +113,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'ruins',
-    start: 6400,
+    start: ZONE_START.ruins,
     skyTop: '#0a0716',
     skyBottom: '#140f22',
     hillFar: '#2a2140',
@@ -125,8 +127,28 @@ export const ZONES: Zone[] = [
     calm: false,
   },
   {
+    /*
+     * The temple's inner court, where Ankhor stands. Still the ruins - the same
+     * stone, the same sky - with the dark leaning a little towards his amber,
+     * so the room reads as somewhere before the banner says so.
+     */
+    name: 'ruins',
+    start: ZONE_START.temple,
+    skyTop: '#0c0714',
+    skyBottom: '#1a1020',
+    hillFar: '#2c2038',
+    hillNear: '#1f172a',
+    ambient: 'rgba(230,170,90,0.06)',
+    label: 'Das Tempelherz',
+    sporeRgb: '250,206,140',
+    darkness: 0.76,
+    darkTint: '#0a0610',
+    interior: false,
+    calm: false,
+  },
+  {
     name: 'caverns',
-    start: 10240,
+    start: ZONE_START.caverns,
     skyTop: '#03080d',
     skyBottom: '#071620',
     hillFar: '#0f2634',
@@ -140,9 +162,25 @@ export const ZONES: Zone[] = [
     calm: false,
   },
   {
+    // Ignivor's chamber: the caves, a little redder in their black.
+    name: 'caverns',
+    start: ZONE_START.forge,
+    skyTop: '#0a0506',
+    skyBottom: '#1a0b08',
+    hillFar: '#2a120c',
+    hillNear: '#1c0c08',
+    ambient: 'rgba(255,120,60,0.07)',
+    label: 'Die Glutkammer',
+    sporeRgb: '255,190,120',
+    darkness: 0.86,
+    darkTint: '#0a0302',
+    interior: true,
+    calm: false,
+  },
+  {
     name: 'drowned',
     // Between the caves and the castle: a hall that the water took.
-    start: 14080,
+    start: ZONE_START.drowned,
     skyTop: '#03080e',
     skyBottom: '#08202c',
     hillFar: '#0e3040',
@@ -157,7 +195,39 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'castle',
-    start: 17920,
+    start: ZONE_START.castle,
+    skyTop: '#0d0710',
+    skyBottom: '#1a0c14',
+    hillFar: '#2c1620',
+    hillNear: '#1d0f17',
+    ambient: 'rgba(255,110,80,0.06)',
+    label: 'Burg Nachtfall',
+    sporeRgb: '255,196,126',
+    darkness: 0.78,
+    darkTint: '#0c0509',
+    interior: false,
+    calm: false,
+  },
+  {
+    // The roof of the keep, under a moon that has gone the colour of him.
+    name: 'castle',
+    start: ZONE_START.keep,
+    skyTop: '#140409',
+    skyBottom: '#2a0a14',
+    hillFar: '#3a1220',
+    hillNear: '#240a14',
+    ambient: 'rgba(255,70,90,0.07)',
+    label: 'Der Blutturm',
+    sporeRgb: '255,150,150',
+    darkness: 0.78,
+    darkTint: '#0e0307',
+    interior: false,
+    calm: false,
+  },
+  {
+    // Back down onto the walls for the last stretch to the throne.
+    name: 'castle',
+    start: ZONE_START.castleEnd,
     skyTop: '#0d0710',
     skyBottom: '#1a0c14',
     hillFar: '#2c1620',
@@ -172,7 +242,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'throne',
-    start: 21760,
+    start: ZONE_START.throne,
     skyTop: '#0c040a',
     skyBottom: '#1e0710',
     hillFar: '#340d18',
@@ -187,7 +257,7 @@ export const ZONES: Zone[] = [
   },
   {
     name: 'rift',
-    start: 23360,
+    start: ZONE_START.rift,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',
@@ -207,7 +277,7 @@ export const ZONES: Zone[] = [
      * through reads as a threshold rather than more corridor.
      */
     name: 'lair',
-    start: 31168,
+    start: ZONE_START.lair,
     sporeRgb: '168,226,138',
     darkness: 0.87,
     darkTint: '#040b06',
@@ -223,7 +293,7 @@ export const ZONES: Zone[] = [
   {
     // Out the far door, back into the rift for the last stretch to the gate.
     name: 'riftend',
-    start: 32576,
+    start: ZONE_START.riftend,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',
@@ -239,7 +309,7 @@ export const ZONES: Zone[] = [
   {
     name: 'crystalworld',
     // Behind the rift, reached only by teleport. Nothing walks in here.
-    start: 33856,
+    start: ZONE_START.crystalworld,
     // This colour is also the rim light along every ledge. Cyan carries a lot
     // of luminance, so it is pulled down until the floor stops outshining the
     // hero walking on it.

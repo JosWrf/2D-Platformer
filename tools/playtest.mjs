@@ -1,6 +1,11 @@
 /**
  * Headless playtest: a simple bot runs the hero from the spawn to the boss
  * using the real physics, then fights the boss. Reports where it gets stuck.
+ *
+ * The warded arenas on the way are bosses this bot cannot beat - it only
+ * walks and swings. It fights each one for five seconds, so the report says it
+ * got there and was shut in, and then the boss is felled for it: this tool is
+ * about the road, and verify:wards and the boss tools are about the fights.
  */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -45,6 +50,19 @@ const result = await page.evaluate(({ seconds }) => {
   let attackHold = 0;
   const stuckSpots = [];
   let reachedBossAt = -1;
+  let arenaFrames = 0;
+  const arenasReached = [];
+  const fell = (arena) => {
+    const boss = g.enemies.find((e) => !e.dead && e.engaged && e.x + e.w > arena.left && e.x < arena.right);
+    if (!boss) return;
+    arenasReached.push({ boss: boss.kind, atSecond: Math.round(stepIndex / 60) });
+    if (typeof boss.beginDying === 'function') boss.beginDying(g);
+    else {
+      boss.overlaps({ x: -1e7, y: -1e7, w: 2e7, h: 2e7 });
+      boss.hurt(9999, 1, g);
+    }
+  };
+  let stepIndex = 0;
 
   const solidAhead = (p) => {
     const tx = Math.floor((p.x + p.w + 6) / TILE);
@@ -61,7 +79,15 @@ const result = await page.evaluate(({ seconds }) => {
   };
 
   for (let i = 0; i < steps; i++) {
+    stepIndex = i;
     const p = g.player;
+    const shutIn = g.level.arenas.find((a) => a.fighting);
+    if (shutIn) {
+      arenaFrames++;
+      if (arenaFrames === 300) fell(shutIn);
+    } else {
+      arenaFrames = 0;
+    }
     if (g.state === 'dead') {
       input.forceDown('confirm', true);
       g.update(DT, input);
@@ -133,7 +159,7 @@ const result = await page.evaluate(({ seconds }) => {
     if (p.cx > maxX + 2) {
       maxX = p.cx;
       stuckFrames = 0;
-    } else if (!bossActive) {
+    } else if (!bossActive && !shutIn) {
       stuckFrames++;
       if (stuckFrames === 360) stuckSpots.push({ tile: Math.round(maxX / TILE), atSecond: Math.round(i / 60) });
     }
@@ -149,6 +175,7 @@ const result = await page.evaluate(({ seconds }) => {
     deaths: g.deaths,
     gems: `${g.gems}/${g.totalGems}`,
     stuckSpots: stuckSpots.slice(0, 8),
+    arenasReached,
   };
 }, { seconds: Number(process.argv[2] ?? 300) });
 

@@ -41,6 +41,9 @@ const report = await page.evaluate(() => {
   // The seal behind the throne opens when the knight falls; for a static
   // reachability check it has to be treated as open, like the arena gate.
   L.exitSealed = false;
+  // The same for the wards around the boss arenas: this asks whether the road
+  // exists, and verify:wards asks whether it is barred until the boss falls.
+  L.wardsOpen = true;
   const W = L.width;
   const H = L.height;
 

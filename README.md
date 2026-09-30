@@ -5,11 +5,14 @@
 Läuft direkt im Browser, ohne Installation: **joswrf.github.io/2D-Platformer**
 
 Ein 2D-Jump-'n'-Run in TypeScript: ein schwertschwingender Held kämpft sich
-durch ein großes, zusammenhängendes Level über sechs Zonen bis in den Thronsaal
-des Schattenritters Morvain — und darüber hinaus.
+durch ein großes, zusammenhängendes Level über acht Zonen bis in den Thronsaal
+des Schattenritters Morvain — und darüber hinaus. Acht Bosse stehen auf dem Weg,
+und an keinem führt er vorbei.
 
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
-auf ein `<canvas>` gezeichnet, Soundeffekte werden per WebAudio synthetisiert.
+auf ein `<canvas>` gezeichnet, und alles, was man hört, wird per WebAudio
+synthetisiert: gut vierzig Soundeffekte und achtzehn Musikstücke, keines davon
+aufgenommen.
 
 [![Titelbild](screenshots/01-titel.png)](https://joswrf.github.io/2D-Platformer/)
 
@@ -21,7 +24,7 @@ npm run dev      # http://127.0.0.1:5173
 npm run build    # Typecheck + Produktions-Build nach dist/
 ```
 
-Der Build legt genau eine Datei ab: `dist/index.html`, rund 98 kB, mit dem
+Der Build legt genau eine Datei ab: `dist/index.html`, rund 300 kB, mit dem
 gesamten Spiel darin. Sie braucht keinen Server — ein Doppelklick auf die
 Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
@@ -39,6 +42,8 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `P` / `Esc` | Pause |
 | `R` | Neustart |
 | `B` | Bildwackeln aus/an |
+| `M` | Musik aus/an |
+| `N` | Ton aus/an (alles) |
 
 Die Belegung wird mit **echten Tastendrücken** geprüft, nicht über die
 Eingabeschicht: `verify:combat` fährt Parade, Ladeschlag und das Durchfallen
@@ -56,16 +61,20 @@ rechts. Geprüft von 320×240 bis 2560×1440, dazu Hochformat 500×900.
 
 ## Das Level
 
-Ein durchgehendes Level aus 1058 Kacheln (33 856 px) in acht Zonen, plus eine
+Ein durchgehendes Level aus 1260 Kacheln (40 320 px) in acht Zonen, plus eine
 neunte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime, und am Ende das Moor mit
    Gallert darin
-2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette
-3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier
+2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette, und dahinter **das
+   Tempelherz**, der Innenhof, um den die Ruinen gebaut sind: Ankhor, der
+   Tempelkoloss
+3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier, und am
+   Ende **die Glutkammer**, in deren Boden Ignivor schwimmt
 4. **Die Ertrunkene Halle** — was das Wasser geholt hat: Algenkanten, Korallen,
    dunkle Magier im Kirchenschiff, und im Chor Thalassa, die den Boden aufmacht
-5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen
+5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen, und oben auf dem
+   Bergfried **der Blutturm**, über dem Vesperon kreist
 6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
 7. **Der Riss** — was hinter dem Thron aufbricht: 328 Kacheln violettes Gestein
    über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter — und
@@ -87,7 +96,13 @@ bleibt zu, solange sie lebt, und sagt das auch, statt den Helden zu ignorieren.
 
 Wen das Bildwackeln bei Treffern stört, schaltet es mit `B` ab — jederzeit, auch
 im Titelbild und in der Pause. Das beruhigt zugleich das Sporenfeld in allen
-Zonen. Die Einstellung bleibt über Sitzungen erhalten.
+Zonen. Die Einstellung bleibt über Sitzungen erhalten, genau wie `M` (Musik) und
+`N` (der ganze Ton); das Pausenbild zeigt, was gerade an ist.
+
+Die Zonengrenzen stehen nicht mehr als Zahlen in der Palette, sondern werden aus
+den Abschnitten abgeleitet. Vorher hätte jeder eingeschobene Abschnitt jede Zone
+dahinter um seine Breite verschoben — drei neue Arenen hätten den Thronsaal wie
+eine Burgmauer beleuchtet.
 
 Der Riss hält im Übrigen still: kein wehender Bewuchs, keine treibenden
 Silhouetten, kaum pulsende Kristalle, und ein Sporenfeld, das am Bildschirm
@@ -102,6 +117,42 @@ statt Stimmung zu machen.
 | ![Lava](screenshots/06-lava.png) | ![Ruinen](screenshots/07-ruinen.png) |
 | ![Kristallhöhlen](screenshots/09-kristallhoehlen.png) | ![Ertrunkene Halle](screenshots/10-ertrunkene-halle.png) |
 | ![Thalassa](screenshots/11-thalassa.png) | ![Burg](screenshots/12-burg-nachtfall.png) |
+
+## Kein Boss ist optional
+
+Früher standen drei Bosse im offenen Gelände: das Moor, der Chor der Ertrunkenen
+Halle und die Mitte des Risses hatten keine Tür. Wer Gallert, Thalassa oder den
+Splitterwächter nicht wollte, lief vorbei — gemessen und bis dahin sogar
+*geprüft*, für ein Herz. Dem Schleim konnte man schlicht weglaufen.
+
+Jetzt ist jede Bossarena **gebannt**. An beiden Enden steht eine Bannwand, ein
+Vorhang aus Licht in der Farbe der Zone, vom Boden bis in den Himmel — eine vier
+Kacheln hohe Tür auf freiem Feld wäre eine Tür, über die man springt:
+
+* **Der Weg weiter** steht von Anfang an und fällt erst, wenn der Boss fällt.
+* **Der Weg zurück** liegt offen, bis der Boss wach ist *und* der Held ganz
+  drin steht; dann kommt er hinter ihm herunter. Offen zeigt er sich als Naht
+  aus Runen im Boden — dass er sich schließt, ist ein gehaltenes Versprechen,
+  keine Überraschung.
+* Wer darin stirbt, findet ihn offen (der Kontrollpunkt liegt davor), und der
+  Boss wartet schlafend, der Weg weiter weiterhin zu.
+* Der Boss bleibt in seinem Raum. Einer, der dem Helden durch die offene Tür
+  folgt, könnte sonst auf der falschen Seite landen.
+
+Die Tür hinter ihm schließt sich nur, wenn er **ganz** drin ist: Ein Boss, der
+aufwacht, während der Held noch in der Tür steht, hätte ihn sonst aus seinem
+eigenen Kampf ausgesperrt — wach, unerreichbar, und für immer im Weg.
+
+`verify:wards` fährt das für alle sechs gebannten Arenen mit echter Physik ab. Ein
+Held, der dreißig Sekunden lang springend auf die ferne Wand zurennt und dabei am
+Leben gehalten wird — sodass nur die Wand ihn aufhalten kann —, kommt in keiner
+Arena auch nur einen Pixel weiter als bis an die Wand. Die Tür hinter ihm fällt
+nach 1,1 bis 1,4 Sekunden, und acht Sekunden Zurückrennen bringen ihn nicht
+hinaus. Der Ritter und die Fünfkronige hatten ihre Türen schon; der Prismarch
+bleibt, was er ist — ein Bonus hinter allen Edelsteinen, aber wer im Hort steht,
+kommt dort auch nur über ihn wieder heraus.
+
+![Die Bannwand im Moor](screenshots/29-bannwand.png)
 
 ## Der Boss: Schattenritter Morvain
 
@@ -219,8 +270,8 @@ gefunden hat, trifft genau den Boss, der für ihn eingestellt wurde:
 | Flutklinge | 83 | 24 |
 | Klingenwelle | 98 | 31 |
 
-Dasselbe gilt für Thalassa, den Splitterwächter, den Prismarchen und Gallert
-(+22 % Leben und +35 % Poise je Stufe). Auf Distanz stehen bleiben hilft
+Dasselbe gilt für Thalassa, den Splitterwächter, den Prismarchen, Gallert und die
+drei neuen — Ankhor, Ignivor und Vesperon (+22 % Leben und +35 % Poise je Stufe). Auf Distanz stehen bleiben hilft
 seitdem auch nicht mehr: der Ritter wählt weit draußen zweimal so oft den
 Sturmangriff wie das Hinterherlaufen, und ein Bot, der auf 150 px kampierte und
 die Klinge schickte, verliert jetzt statt in 30 s zu gewinnen.
@@ -302,12 +353,82 @@ jedem Zug, den er anfing, und kassierte im ganzen Kampf **keinen einzigen
 Treffer**. Jetzt kostet derselbe Bot 5 von 6 Herzen und braucht 9 Sekunden; mit
 aufgefüllter Bossleiste gemessen — sonst ist der Kampf vorbei, bevor er dreimal
 zum Zug kam — landet Gallert 7 bis 18 Treffer in 25 Sekunden. Eine Parade
-schüttelt ihn immer los. Vorbeilaufen geht auch hier: das Moor hat kein Tor.
+schüttelt ihn immer los. Vorbeilaufen geht **nicht mehr**: das Moor ist gebannt,
+und `verify:gallert` prüft jetzt das Gegenteil dessen, was es früher prüfte.
 
 Wer ihn schlägt, bekommt den **Herzkern**: sechs Herzen werden sieben, für den
 ganzen Rest des Laufs, und die Leiste ist sofort wieder voll. Das ist die
 einzige Belohnung im Spiel, die nicht die Klinge betrifft — nach der ersten
 Stunde soll etwas anderes dastehen als eine größere Zahl auf einem Hieb.
+
+### Der zweite Boss: Ankhor, der Tempelkoloss
+
+Im Innenhof der Ruinen, bis zur Brust im eigenen Pflaster vergraben: ein Wächter
+aus Sandstein mit Nemes-Kopftuch in Lapis und Gold, einem Halskragen aus
+Perlenreihen, einer Sonnenscheibe auf der Brust und Rissen, durch die das Licht
+in ihm scheint. Er geht nicht — dafür hat er zwei Hände, die keine Arme brauchen.
+Solange niemand den Hof betritt, liegen sie auf dem Boden, und er ist eine Statue.
+
+54 Trefferpunkte, zwei Phasen, vier Züge:
+
+* **Faustschlag** — eine Faust steigt über den Helden und folgt ihm, ihr
+  Schatten wird auf dem Boden größer; dann hält sie für einen Atemzug *still* und
+  kommt herunter. Aus dem Schatten treten. Danach liegt sie so lange am Boden,
+  dass man hineinschlagen kann.
+* **Wischer** — eine Hand geht an die Wand gegenüber, legt sich auf den Boden
+  und fegt über den ganzen Hof. Drüberspringen, oder auf einem Absatz stehen.
+  Sie kommt immer von der fernen Seite, quer an ihm vorbei: der längste Blick
+  auf einen Angriff, den man verlangen kann.
+* **Sonnenblick** — er sieht nach oben, zwei dünne Strahlen aus seinen Augen in
+  den Himmel, und der Himmel antwortet: eine Säule aus Sonnenlicht kommt auf den
+  Helden herunter und folgt ihm — langsamer, als er läuft. Ein Grund, sich zu
+  bewegen, kein Urteil.
+* **Doppelschlag** — ab der Hälfte beide Fäuste nacheinander, und jeder Schlag
+  schickt Schockwellen über den Boden.
+
+Jeder Teil von ihm, den man trifft, zählt — aber **sein Gesicht nimmt doppelt**,
+und eine Faust, die genug abbekommen hat oder deren Schlag pariert wurde,
+**zerspringt**. Ohne sie sackt er nach vorn, der ganze Leib sinkt ins Pflaster,
+und sein Kopf kommt dorthin, wo ein Schwert vom Boden aus hinkommt. Das ist die
+Öffnung, um die der Kampf gebaut ist. Sechs Sekunden später fliegen die Splitter
+zurück und die Faust ist wieder da.
+
+![Ankhor](screenshots/25-tempelkoloss.png)
+
+### Der dritte Boss: Ignivor, der Glutwurm
+
+Fünfzehn Platten aus Obsidian, zwischen denen das Feuer des Berges läuft, ein
+langer Schädel mit zurückgeschwungenen Hörnern und einem Kiefer, der fällt, wenn
+er speit. Der Boden seiner Kammer ist Fels, weil Fels das ist, wodurch er
+schwimmt — und wer hereinkommt, sieht zuerst gar nichts. Dann grollt es.
+
+58 Trefferpunkte, zwei Phasen, und eine Regel, die jeder Wurm hat: **Die Panzerung
+ist Panzerung.** Eine Klinge auf seinen Platten klingt und tut nichts. Nur der Kopf
+zählt, und der Kopf ist nur draußen, wenn er etwas will:
+
+* **Durchbruch** — der Boden unter dem Helden glüht und folgt ihm, hält dann
+  **0,4 Sekunden** still und bricht auf. In Bewegung bleiben; wenn es stehen
+  bleibt, gehen. Der Wurm fährt gerade nach oben, nicht dorthin, wohin der Held
+  inzwischen gelaufen ist — sonst bestrafte er genau das, wozu ihn die
+  Ankündigung aufgefordert hat. (Gemessen: vorher zielte der Bogen nach und
+  kostete einen Ausweichenden fast so viel wie einen, der stehen blieb.)
+* **Glutspeien** — er steigt ein Stück weiter aus dem Boden, wirft den Kopf
+  zurück und speit Klumpen aus Magma, die dort weiterbrennen, wo sie landen.
+  Danach bleibt er oben, den Kopf tief und pendelnd — das ist die Zeit, ihn zu
+  treffen.
+* **Feuerwelle** — er geht an die ferne Wand und schwimmt die ganze Kammer
+  entlang knapp unter dem Boden, und hinter ihm schlägt der Boden als Feuer
+  hoch, den ganzen Weg. Der Boden ist kein Ort, an dem man dann sein will; die
+  vier Absätze sind es.
+
+Wer den Kopf oben genug trifft, holt ihn herunter: Er schlägt betäubt auf den
+Boden, liegt dort zwei Sekunden, und das ist das lange Fenster. Ab der Hälfte
+bricht er zweimal hintereinander durch, und das Feuer, das er oben am Scheitel
+aufwirft, kommt als Regen wieder herunter.
+
+| | |
+| --- | --- |
+| ![Ignivor bricht durch](screenshots/26-glutwurm.png) | ![Die Feuerwelle](screenshots/27-feuerwelle.png) |
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
@@ -379,17 +500,67 @@ Gemessen, mit echten Lebenspunkten auf beiden Seiten, drei Läufe je Spielweise:
 | ausweichen, Kugeln parieren | 17–28 s, 0–4 Treffer, kein Tod | 40–58 s, 8–17 Treffer, 1–2 Tode |
 | stehen bleiben und hauen | 0–2 Treffer | 4–5 Treffer |
 | in ihrer Reichweite parieren | — | 18 s, 3–4 Treffer, kein Tod |
-| einfach vorbeilaufen | 1 Treffer | 1 Treffer |
+| einfach vorbeilaufen | 1 Treffer | geht nicht mehr — der Chor ist gebannt |
 
 Ein Treffer ist ein kassiertes Herz von sechs; ein Tod füllt die Leiste wieder
 auf, darum stehen in der zweiten Spalte auch Zahlen über sechs.
 
-Die letzte Zeile ist Absicht und wird geprüft: ihr Chor hat kein Fallgitter, wer
-den Kampf nicht will, muss vorbeikommen. Und die vorletzte auch: die beste
-Antwort auf sie ist die Parade, nicht das Ausdauerhalten.
+Die letzte Zeile hat sich umgedreht und wird weiter geprüft: früher hatte ihr
+Chor kein Fallgitter und wer den Kampf nicht wollte, kam vorbei — jetzt steht an
+jedem Ende eine Bannwand, und der Kampf in der Mitte des Spiels lässt sich nicht
+mehr auslassen.
+Die vorletzte gilt wie gehabt: die beste Antwort auf sie ist die Parade, nicht
+das Ausdauerhalten.
 
 Wer sie schlägt, nimmt mit, was sie gehalten hat: die **Flutklinge**, die erste
 Hälfte des Klingen-Upgrades.
+
+### Der Herr des Bergfrieds: Vesperon, der Blutfürst
+
+Über dem Dach des Bergfrieds, unter einem Mond, der seine Farbe angenommen hat.
+Ein hoher Kragen, ein bleiches Gesicht mit spitzen Ohren und rotem Blick, und
+Fledermausflügel mit Armknochen, vier Fingern und einer gewellten Hinterkante,
+die bei jedem Schlag im Mondlicht aufglüht. Er ist ein Flieger — ein Problem für
+jemanden mit einem Schwert. Also ist der Kampf um die Momente gebaut, in denen
+er herunterkommt. 56 Trefferpunkte, zwei Phasen, vier Züge:
+
+* **Sturzflug** — er steigt, breitet die Flügel, schreit und zeichnet eine rote
+  Linie dorthin, wo er hinwill; eine Viertelsekunde vorher rastet sie ein, dann
+  kommt er. Durchrollen oder von der Linie gehen. Wo er landet, muss er Atem
+  holen: auf dem Dach, in Reichweite, gut eine Sekunde lang. Wer den Sturz
+  **pariert**, legt ihn aufs Gesicht; wer ihn gegen eine Zinne lockt, auch.
+* **Blutsicheln** — ein Fächer aus Sicheln aus dem Umhang. Ein Hieb schickt sie
+  zu ihm zurück.
+* **Schwarm** — Fledermäuse aus dem Mantel, nie mehr als vier, und sie jagen,
+  statt zurück ins Gebälk zu fliegen.
+* **Blutmond** — ab der Hälfte steigt er ganz nach oben, der Mond hinter ihm
+  färbt sich, und wo es auf dem Dach rot markiert ist, regnet es.
+
+Und man kann ihn herunterholen: die Planken und die Zinnen stellen den Helden
+auf seine Höhe, und genug Schaden in der Luft wirft ihn aufs Dach.
+
+![Vesperon](screenshots/28-blutfuerst.png)
+
+#### Gemessen: lesen lohnt sich
+
+`verify:bosses` stellt für jeden der drei einen Helden hin, der nur dasteht, und
+einen, der die Ankündigungen liest — aus dem Schatten tritt, über die Hand
+springt, die Glut unter sich verlässt, von der Sturzlinie geht und die
+Fledermäuse abwehrt. Beide werden am Leben gehalten; gezählt wird, was durchkommt:
+
+| | Ankündigung (kürzeste gemessene) | stehen bleiben | lesen |
+| --- | --- | --- | --- |
+| Ankhor, 60 s | Faust 0,95 s + 0,35 s Aufstieg, Wischer 0,78 s, Sonne 0,55 s | 28 Herzen | 2 |
+| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13 Herzen | 0 |
+| Vesperon, 40 s | Sturzflug 0,57 s | 31 Herzen | 9 |
+
+Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen. Und die
+Regeln halten: Ankhors Gesicht nimmt 2 statt 1, sein gesackter Kopf reicht bis
+18 px über den Boden herab; Ignivors Platten nehmen 0, sein Kopf 1, und die
+Feuerwelle kostet auf dem Boden 9 Herzen und auf dem Absatz keines. Die Bildzeit
+bleibt in allen drei Kämpfen im 99. Perzentil unter 15 ms.
+
+Wer einen der drei schlägt, bekommt alle Herzen zurück, und die Bannwände fallen.
 
 ### Die Klinge: zwei Stufen
 
@@ -570,13 +741,59 @@ nur gegen Angriffe; Stacheln und Lava lassen sich nicht wegparieren.
 | ![Phase 3](screenshots/16-bosskampf-phase-3.png) | ![Der Riss](screenshots/17-der-riss.png) |
 | ![Das Tor](screenshots/18-das-tor.png) | ![Sieg](screenshots/19-sieg.png) |
 
+## Ton und Musik
+
+Früher waren es siebzehn Piepser aus je einem Oszillator. Jetzt läuft alles über
+ein kleines Mischpult: Effekte und Musik auf eigenen Kanälen, ein gemeinsamer
+Hall, dessen Größe der Zone folgt — eine Höhle hallt, ein Wald nicht, die
+Ertrunkene Halle am meisten —, und ein Kompressor am Ende, damit ein sterbender
+Boss auf einer Parade nicht übersteuert.
+
+**Effekte** (`src/core/audio.ts`) sind Rezepte aus Schichten: ein Körper, der die
+Tonhöhe gibt, ein Stoß gefiltertes Rauschen für die Textur, und etwas Kurzes
+obendrauf für den Anschlag. Dazu FM-Stimmen für alles, was klingt — die Parade
+ist Klinge auf Klinge und hallt nach, ein Treffer auf Ignivors Panzer klirrt —,
+und eine Verzerrerstufe für Einschläge. Jeder Effekt schwankt um ein paar
+Prozent in der Tonhöhe, damit zehn Hiebe hintereinander nicht zehnmal derselbe
+Hieb sind. Es gibt jetzt 42: Landung, Doppelsprung, Abwehr, das Schließen und
+Öffnen einer Bannwand, Explosion und Zündschnur des Zunders, Wasser, Grollen,
+Durchbruch, Feuerball, Fledermausschrei, Flügelschlag, zerberstender Stein,
+Sonnenstrahl, Magie, Dialogtippen, Tod, Bossfall, Upgrade, Phasenwechsel — und
+vor jedem Bosszug ein eigenes Aufziehen, das „gleich kommt etwas" sagt.
+
+**Musik** (`src/core/music.ts`) ist als Daten geschrieben und wird von einem
+Step-Sequencer gespielt: Tonart, Tempo, ein Akkord pro Takt und ein paar
+Sechzehntel-Muster für Bass, Arpeggio, Melodie und Schlagzeug. Er plant die
+Noten einen Sekundenbruchteil voraus auf der Uhr des AudioContext; ein
+Stückwechsel blendet über, statt abzuschneiden. Jede Zone hat ihr Stück — der
+Wald dorisch, die Ruinen phrygisch, die Höhlen mit Tropfen aus Glocken, die Burg
+im Marschtritt —, und jeder Boss seinen Kampf: Ankhor mit Tomtoms, Ignivor
+schnell in harmonisch Moll, Vesperon mit einem Cembalo-Arpeggio über einer Orgel,
+der Ritter, die Fünfkronige und der Prismarch jeder mit eigenem. Die Musik
+wechselt, sobald die Bannwand fällt, und gibt nach dem Kampf an die Zone zurück;
+in der Pause, im Dialog und nach einem Tod wird sie gedämpft.
+
+`M` schaltet die Musik, `N` den ganzen Ton; beides bleibt über Sitzungen
+erhalten. Vor dem ersten Tastendruck läuft nichts — so wollen es die Browser.
+
+`verify:audio` hört so, wie ein Testlauf hören kann: Es rendert jeden Effekt und
+jedes Stück offline und misst Spitze und Mittel. Ein Rezept, das nichts baut,
+käme als Null heraus, eines, das übersteuert, über eins. Danach spielt es mit
+echten Tastendrücken: Titelmusik, Übergabe an den Wald, in jeder Bossarena der
+richtige Kampf und danach wieder die Zone, sechs Bosse mit sechs verschiedenen
+Stücken, `M` und `N` samt Neuladen.
+
 ## Aufbau des Codes
 
 ```
 src/
-  core/      Spielschleife (fester Zeitschritt), Eingabe, Kamera, Mathe, WebAudio
+  core/      Spielschleife (fester Zeitschritt), Eingabe, Kamera, Mathe,
+             WebAudio: synth.ts (Bausteine), audio.ts (Effekte, Mischpult),
+             music.ts (Stücke und Sequencer)
   world/     Level-ASCII, Parser, Kachel-Kollision, World-Interface
-  entities/  Physikkörper, Spieler, Gegner, Boss, Projektile, Pickups, Plattformen
+  entities/  Physikkörper, Spieler, Gegner, Boss, Projektile, Pickups, Plattformen;
+             colossus.ts, wyrm.ts, vesper.ts für die drei neuen Bosse, und
+             roster.ts, das alle Gegner aus ihrer Art baut
   render/    Parallax-Hintergrund, Kachel-Renderer, Deko, Sprite-Helfer, Palette
   fx/        Partikel und Schadenszahlen
   ui/        HUD-Bausteine (Herzen, Bossleiste, Panels)
@@ -598,6 +815,8 @@ $  Edelstein     H  Herz         C  Kontrollpunkt
 T  Fackel        X  Kristall     M/V bewegliche Plattform    B  Boss
 W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
 Z  Die Fünfkronige (Endboss)
+|  Bannwand (an beiden Enden jeder Bossarena, siehe warded() in levelData.ts)
+A  Ankhor (Boss)   I  Ignivor (Boss)   D  Vesperon (Boss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
@@ -623,6 +842,9 @@ npm run verify:enemies # zündet der Zunder, hält der Schild, zahlt sich die Wa
 npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auch dann?
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run verify:hydra   # wächst ein Hals nach, brennt ihr Feuer ihn zu, reicht Stahl allein nicht?
+npm run verify:wards   # hält jede Bannwand, bis ihr Boss fällt - und fällt sie dann für immer?
+npm run verify:bosses  # Ankhor, Ignivor, Vesperon: Züge, Ankündigungen, Regeln, Ende
+npm run verify:audio   # klingt jeder Effekt, spielt jedes Stück, folgt die Musik dem Kampf?
 npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
 npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
@@ -657,7 +879,8 @@ sein Sprung dort trifft, wo er landet, und 420 px weiter eben nicht; dass die
 Teilung genau zwei Schleime bringt und nur zweimal; dass eine Parade ihn
 losschüttelt; dass ein Draufhauer zahlt und trotzdem gewinnt; dass sein Fall
 die sechs Herzen auf sieben setzt und die Leiste füllt; dass er nach einem Tod
-des Helden **nicht wieder aufsteht**; und dass man an ihm vorbeikommt.
+des Helden **nicht wieder aufsteht**; und — umgedreht, seit das Moor gebannt
+ist — dass man an ihm **nicht** mehr vorbeikommt.
 
 `verify:thalassa` prüft ihren Kampf Eigenschaft für Eigenschaft: die Zugwahl auf
 zwei Entfernungen; zwei Wellen in Phase eins und vier in Phase zwei, ein Anker
@@ -673,9 +896,9 @@ Aus dieser Messung ist die Aufprall-Sperre entstanden, und später der ganze
 Umbau oben: Poise allein reicht nicht, weil ein Dauerangreifer schneller Schaden
 macht als jede Ankündigung dauert. Danach, dass ihr Fall die Flutklinge hergibt:
 eine Sichel je Hieb, die auf 120 px trifft und auf 250 px eben nicht — das ist
-die andere Hälfte, und die gehört dem Prismarchen. Und der Held läuft einmal an
-ihr vorbei, ohne zu kämpfen — das muss gehen, und es darf höchstens drei Herzen
-kosten.
+die andere Hälfte, und die gehört dem Prismarchen. Und der Held versucht einmal,
+an ihr vorbeizulaufen, ohne zu kämpfen — früher musste das gehen, jetzt darf es
+nicht mehr: die ferne Bannwand hält, und die hinter ihm ist zu.
 
 `verify:chain` läuft die ganze Belohnungskette in **einem** Lauf durch, ohne
 Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 160
@@ -732,6 +955,30 @@ Dauerhauen dürfen sie **nicht** umbringen, und dieselben Stümpfe müssen mit i
 eigenen Feuer in Sekunden zugehen — jeder von seinem eigenen Absatz aus. Dazu
 klettert derselbe Bot die sechs Stufen mit echter Physik hoch, nicht als
 Sichtprüfung der ASCII-Kunst, sondern als Landung auf jeder einzelnen.
+
+`verify:wards` geht alle sechs gebannten Arenen der Reihe nach ab, jede mit
+echter Physik: vorher (Weg weiter zu, Weg zurück offen), dreißig Sekunden gegen
+die ferne Wand, acht Sekunden zurück, ein Tod darin, der Fall des Bosses und noch
+ein Tod danach. Der Kampf wird für die Tür übersprungen, nicht gekämpft — ob die
+Bosse fair sind, prüfen ihre eigenen Werkzeuge.
+
+`verify:bosses` bekommt für jeden der drei neuen Bosse eine frische Seite, damit
+kein Kampf in den nächsten hineinleckt, und prüft 28 Dinge: dass jeder Zug
+auftaucht, von drei Stellen im Raum aus; dass jede Ankündigung mindestens eine
+halbe Sekunde dauert — gemessen vom *ersten* Bild des Aufziehens an, denn ein
+Zug, der beim Start der Messung schon lief, maß zu kurz und ließ die Prüfung
+einmal grundlos durchfallen —; dass Lesen weniger als halb so viel kostet wie
+Stehenbleiben; die Regel jedes Bosses; die Bildzeit; und das Ende mit Heilung,
+Banner und offenen Wänden.
+
+`npm run playtest` fällt an den gebannten Arenen jetzt nicht mehr durch die Wände
+— er kämpft fünf Sekunden, meldet, dass er dort war und eingeschlossen wurde, und
+dann wird der Boss für ihn gefällt: Der Bot kann laufen und hauen, nicht lesen.
+
+`npm run screenshots` leitet jetzt auch die frühen Bilder aus den Zonen ab statt
+aus Kachelzahlen. „Kristallhöhlen" zeigte seit dem Einbau des Moors die Ruinen,
+„Ruinen" das Moor — beides sah im Raster richtig genug aus, dass es niemand
+bemerkt hat.
 
 `npm run suite` ist die breite Reihe daneben: Zustandsautomat, Tastenbelegung,
 Pickups, Gefahren, Bildzeit in jeder Zone (inzwischen auch im Schacht der

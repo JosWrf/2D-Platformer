@@ -21,9 +21,10 @@
  *     with the crown's call and a ring of five columns.
  *   - A parry breaks her out of any move, whatever her poise.
  *
- * And one thing she must NOT be: a wall. Her choir has no portcullis, so a
- * player who does not want the fight has to be able to walk past it. Measured,
- * that costs one or two hearts.
+ * And one thing she must NOT be any more: a detour. Her choir had no door, and
+ * walking past her cost one or two hearts - so the boss of the middle of the
+ * game was optional. The choir is warded now, and a hero who runs at the far
+ * ward for twenty-five seconds does not get through it.
  *
  * Usage: node tools/verify-thalassa.mjs
  */
@@ -97,14 +98,25 @@ const result = await page.evaluate(() => {
 
   /*
    * First of all, because it is the only run that needs the hero where the
-   * level itself put him: she is not a gate. Her choir has no portcullis, so a
-   * player who does not want the fight has to be able to walk past it.
+   * level itself put him: the choir is warded, and she is not a detour. The
+   * hero is kept alive, so the only thing that can stop him is the ward.
    */
+  const arena = g.level.arenaAt(home);
   boss.engaged = true;
-  for (let f = 0; f < 60 * 25 && p.cx < home + 300; f++) {
+  let furthest = 0;
+  for (let f = 0; f < 60 * 25; f++) {
+    p.hp = p.maxHp;
+    p.dead = false;
     tick({ right: true, jump: f % 90 < 12 });
+    furthest = Math.max(furthest, p.x + p.w);
   }
-  const passHp = { walkedPast: p.cx > home + 200, heartsLeft: p.hp };
+  const passHp = {
+    warded: !!arena,
+    furthest: Math.round(furthest),
+    farWard: arena ? arena.right : null,
+    gotPast: !arena || furthest > arena.right + 1,
+    shutBehind: !!arena && arena.fighting,
+  };
 
   /**
    * Both fighters put back on their marks, at a chosen gap and a chosen share
@@ -533,8 +545,9 @@ const result = await page.evaluate(() => {
       beamNear.allFriendly &&
       beamNear.hurtAtGap > 0 &&
       beamFar.hurtAtGap === 0 &&
-      passHp.walkedPast &&
-      passHp.heartsLeft >= 3,
+      passHp.warded &&
+      !passHp.gotPast &&
+      passHp.shutBehind,
     maxHp: boss.maxHp,
     near,
     far,
@@ -555,7 +568,7 @@ const result = await page.evaluate(() => {
     killSeconds: +(killFrames / 60).toFixed(1),
     reward: { dialogue: rewardDialogue, beamTier: tier, at120px: beamNear, at250px: beamFar },
     stayedDown,
-    walkPast: passHp,
+    notADetour: passHp,
   };
 });
 
@@ -568,7 +581,7 @@ if (!result.ok) {
     'FAIL: Thalassa no longer picks her move by range, or her flood can be swatted away, or the ' +
       'spring tide no longer answers a squatter (or no longer spares someone who steps aside), or ' +
       'the crown no longer calls, or a parry no longer breaks her, or she no longer answers a ' +
-      'masher, or she cannot be killed or walked past, or her fall no longer hands over the ' +
+      'masher, or she cannot be killed, or she can be walked past, or her fall no longer hands over the ' +
       'Flutklinge, or she is back on her feet at the next checkpoint.',
   );
   process.exit(1);
@@ -576,6 +589,6 @@ if (!result.ok) {
 console.log(
   'OK: Thalassa surges up close, throws the anchor from afar, opens the floor under a squatter, ' +
     'answers twice in her second phase, calls the crown once for her last third, breaks to a ' +
-    'parry, makes a masher pay, can be walked past, drowns for good - and leaves the Flutklinge ' +
+    'parry, makes a masher pay, cannot be walked past, drowns for good - and leaves the Flutklinge ' +
     'behind.',
 );

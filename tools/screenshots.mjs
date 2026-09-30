@@ -159,12 +159,21 @@ await open('?x=6');
 const marken = await page.evaluate(() => {
   const spawns = window.game.level.spawns;
   const at = (kind) => spawns.find((s) => s.kind === kind)?.tx ?? 0;
+  // Where a zone begins, by its label: the ruins and the caves moved when the
+  // bog went in in front of them, and their pictures had quietly been showing
+  // the bog and the ruins instead ever since.
+  const zone = (label) => Math.floor((window.zones.find((z) => z.label === label)?.start ?? 0) / 32);
   return {
     boss: at('boss'),
     gallert: at('gallert'),
     thalassa: at('thalassa'),
     hydra: at('hydra'),
     portal: at('portal'),
+    colossus: at('colossus'),
+    wyrm: at('wyrm'),
+    vesper: at('vesper'),
+    ruins: zone('Versunkene Ruinen'),
+    caverns: zone('Kristallhöhlen'),
   };
 });
 await step(30);
@@ -214,7 +223,7 @@ await release('right');
 await shot('06-lava');
 
 /* 07 — the ruins --------------------------------------------------------- */
-await open('?x=168');
+await open(`?x=${marken.ruins + 8}`);
 await step(30);
 await step(24, { right: true });
 await jump(24);
@@ -222,7 +231,7 @@ await release('right');
 await shot('07-ruinen');
 
 /* 08 — climbing the ruins ------------------------------------------------ */
-await open('?x=216');
+await open(`?x=${marken.ruins + 56}`);
 await step(30);
 await step(10, { right: true });
 await jump(6);
@@ -232,7 +241,7 @@ await step(8);
 await shot('08-ruinen-aufstieg');
 
 /* 09 — crystal caverns --------------------------------------------------- */
-await open('?x=282');
+await open(`?x=${marken.caverns + 2}`);
 await step(40);
 await step(24, { right: true });
 await jump(18);
@@ -523,6 +532,79 @@ await page.evaluate(() => {
 await step(60 * 5);
 await shot('19-sieg');
 results.finalState = await page.evaluate(() => window.game.state);
+
+
+/* 25-28 — the new bosses, and the ward that holds them --------------------- */
+
+/**
+ * Fights one of the arena bosses with a plain bot until `when` says the moment
+ * worth a picture has come. The hero is kept on his feet - the pictures are of
+ * the boss.
+ */
+async function arenaMoment(kind, when, maxFrames = 60 * 40) {
+  return page.evaluate(
+    ({ kind, when, maxFrames }) => {
+      const g = window.game;
+      const input = window.input;
+      const ctx = document.querySelector('canvas').getContext('2d');
+      const test = new Function('boss', 'g', `return (${when});`);
+      for (let i = 0; i < maxFrames; i++) {
+        const p = g.player;
+        const boss = g.enemies.find((e) => e.kind === kind && !e.dead);
+        if (!boss) break;
+        const dx = boss.cx - p.cx;
+        input.forceDown('right', dx > 120);
+        input.forceDown('left', dx < -260);
+        input.forceDown('attack', i % 20 < 3);
+        input.forceDown('jump', false);
+        g.update(1 / 60, input);
+        if (p.hp <= 2) p.hp = p.maxHp;
+        if (i > 30 && test(boss, g)) break;
+      }
+      ['left', 'right', 'attack', 'jump'].forEach((a) => input.forceDown(a, false));
+      g.render(ctx);
+    },
+    { kind, when, maxFrames },
+  );
+}
+
+await open(`?x=${marken.colossus - 11}`);
+await arenaMoment('colossus', "boss.beam && boss.beam.stage === 'burn' && boss.beam.t > 0.5");
+await shot('25-tempelkoloss');
+
+await open(`?x=${marken.wyrm - 11}`);
+await arenaMoment('wyrm', "boss.state === 'breach' && boss.hy < boss.floorY - 150 && boss.hvy > -200");
+await shot('26-glutwurm');
+
+// The fire wave is one move in four; for its picture it is asked for.
+await open(`?x=${marken.wyrm - 11}`);
+await arenaMoment('wyrm', "boss.state === 'idle'", 60 * 10);
+await page.evaluate(() => {
+  const boss = window.game.enemies.find((e) => e.kind === 'wyrm');
+  boss.waveDir = boss.cx > window.game.player.cx ? -1 : 1;
+  boss.pillars.length = 0;
+  boss.state = 'waveEdge';
+});
+await arenaMoment('wyrm', "boss.state === 'wave' && boss.pillars.length >= 6", 60 * 10);
+await shot('27-feuerwelle');
+
+await open(`?x=${marken.vesper - 11}`);
+await arenaMoment('vesper', "boss.state === 'diveWind' && boss.timer < 0.25");
+await shot('28-blutfuerst');
+
+// The ward: the hero inside Gallert's bog, the way in shut behind him.
+await open(`?x=${marken.gallert - 13}`);
+await arenaMoment('gallert', 'g.level.arenas[0].fighting && g.player.x > g.level.arenas[0].left + 120', 60 * 8);
+await page.evaluate(() => {
+  const g = window.game;
+  const a = g.level.arenas[0];
+  g.player.x = a.left + 70;
+  g.player.facing = -1;
+  g.camera.snapTo(a.left + 380, g.player.cy - 60);
+  g.update(1 / 60, window.input);
+  g.render(document.querySelector('canvas').getContext('2d'));
+});
+await shot('29-bannwand');
 
 console.log(JSON.stringify(results, null, 2));
 await browser.close();

@@ -4,7 +4,7 @@ import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { Body } from './entity';
 
-export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob' | 'ember';
+export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob' | 'ember' | 'magma' | 'blood';
 
 export class Projectile extends Body {
   friendly = false;
@@ -86,6 +86,21 @@ export class Projectile extends Body {
         this.life = 3.2;
         this.damage = 2;
         break;
+      case 'magma':
+        // Ignivor's spit: a clot of molten rock on an arc. Where it lands it
+        // keeps burning - the wyrm watches for that and leaves a pool.
+        this.w = 18;
+        this.h = 18;
+        this.life = 3.2;
+        this.damage = 1;
+        break;
+      case 'blood':
+        // Vesperon's crescent: thrown flat, curving a little towards the hero.
+        this.w = 26;
+        this.h = 16;
+        this.life = 2.6;
+        this.damage = 1;
+        break;
     }
   }
 
@@ -162,6 +177,40 @@ export class Projectile extends Body {
           shape: 'circle',
         });
       }
+    } else if (this.kind === 'magma') {
+      if (!this.friendly) this.vy += 980 * dt;
+      if (world.time % 0.035 < dt) {
+        world.particles.spawn({
+          x: this.cx + rand(-4, 4),
+          y: this.cy + rand(-4, 4),
+          vx: rand(-20, 20),
+          vy: -rand(10, 50),
+          gravity: -30,
+          color: this.friendly ? 'rgba(255,236,170,0.75)' : Math.random() < 0.5 ? 'rgba(255,120,40,0.75)' : 'rgba(90,60,50,0.6)',
+          size: rand(2, 3.5),
+          life: 0.4,
+          shape: 'circle',
+        });
+      }
+    } else if (this.kind === 'blood') {
+      // A slight pull towards the hero while it is still his.
+      if (!this.friendly && this.age < 0.9) {
+        const dy = world.player.cy - this.cy;
+        this.vy += Math.sign(dy) * Math.min(Math.abs(dy) * 3, 260) * dt;
+      }
+      if (world.time % 0.04 < dt) {
+        world.particles.spawn({
+          x: this.cx - Math.sign(this.vx) * 10,
+          y: this.cy + rand(-4, 4),
+          vx: -this.vx * 0.05,
+          vy: rand(-10, 30),
+          gravity: 200,
+          color: this.friendly ? 'rgba(255,210,220,0.7)' : 'rgba(200,20,50,0.7)',
+          size: rand(1.5, 3),
+          life: 0.35,
+          shape: 'circle',
+        });
+      }
     } else if (this.kind === 'blob') {
       // Heavier than it looks, so the arc is short and readable.
       this.vy += 1150 * dt;
@@ -229,6 +278,10 @@ export class Projectile extends Body {
         return this.friendly ? '#bdf0a0' : '#8fd45c';
       case 'ember':
         return this.friendly ? '#ffe9b0' : '#ff9a44';
+      case 'magma':
+        return this.friendly ? '#ffe9b0' : '#ff7a2a';
+      case 'blood':
+        return this.friendly ? '#ffd0dc' : '#d0203c';
       case 'shockwave':
         return this.water ? '#9fe4dc' : '#ff9a5c';
       default:
@@ -328,6 +381,63 @@ export class Projectile extends Body {
         ctx.beginPath();
         ctx.arc(0, 0, hot ? 5 : 4.2, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'magma': {
+        // A clot of rock with fire showing through its cracks.
+        const hot = this.friendly;
+        glow(ctx, cx, cy, 22, hot ? 'rgba(255,230,160,0.55)' : 'rgba(255,110,40,0.5)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(this.spin * 0.6);
+        ctx.fillStyle = hot ? '#ffe7a8' : '#3a2320';
+        ctx.beginPath();
+        ctx.moveTo(-8, -3);
+        ctx.lineTo(-3, -8);
+        ctx.lineTo(6, -6);
+        ctx.lineTo(9, 2);
+        ctx.lineTo(3, 8);
+        ctx.lineTo(-6, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = hot ? '#fffbe8' : '#ff9a3a';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-5, -1);
+        ctx.lineTo(0, 1);
+        ctx.lineTo(4, -3);
+        ctx.moveTo(0, 1);
+        ctx.lineTo(1, 6);
+        ctx.stroke();
+        ctx.restore();
+        break;
+      }
+      case 'blood': {
+        // A crescent of blood, the tips swept back the way it came from.
+        const dir = Math.sign(this.vx) || 1;
+        const fade = Math.max(0, Math.min(1, this.life / 0.4));
+        const hot = this.friendly;
+        glow(ctx, cx, cy, 24 * fade, hot ? 'rgba(255,200,215,0.45)' : 'rgba(220,30,60,0.45)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(dir, 1);
+        for (const [w, color] of [
+          [1, hot ? '#ff9fb4' : '#8a0a22'],
+          [0.6, hot ? '#fff0f3' : '#ff4a68'],
+        ] as const) {
+          ctx.globalAlpha = fade;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(13 * w, 0);
+          ctx.quadraticCurveTo(2 * w, -11 * w, -13 * w, -9 * w);
+          ctx.quadraticCurveTo(-2 * w, 0, -13 * w, 9 * w);
+          ctx.quadraticCurveTo(2 * w, 11 * w, 13 * w, 0);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
         ctx.restore();
         break;
       }

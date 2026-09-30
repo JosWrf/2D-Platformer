@@ -341,7 +341,7 @@ export class Player extends Body {
         this.jumpBuffer = 0;
         this.jumpHeld = true;
         this.squash = -0.3;
-        audio.play('jump', 1.25);
+        audio.play('doubleJump');
         for (let i = 0; i < 12; i++) {
           const a = (i / 12) * Math.PI * 2;
           world.particles.spawn({
@@ -460,6 +460,7 @@ export class Player extends Body {
     this.moveAndCollide(level, dt);
     if (this.touching.down && wasFalling > 420) {
       this.squash = Math.min(0.45, wasFalling / 1600);
+      audio.play('land', 0.8 + Math.min(0.4, 420 / wasFalling));
       world.particles.burst(this.cx, this.bottom, 8, 'rgba(210,220,240,0.5)', {
         speed: 110,
         gravity: 300,
@@ -778,7 +779,7 @@ export class Player extends Body {
       p.deflect(this.facing);
       this.aimFire(p);
       world.particles.burst(p.cx, p.cy, 10, '#dff3ff', { speed: 150, gravity: 60, shape: 'spark' });
-      audio.play('hit', 1.4);
+      audio.play('deflect');
     }
   }
 

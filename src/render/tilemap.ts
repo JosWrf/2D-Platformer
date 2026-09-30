@@ -185,6 +185,9 @@ export function drawTilemap(
         case Tile.LairGate:
           if (level.lairClosed) drawLairGate(ctx, px, py, time, ty);
           break;
+        case Tile.Ward:
+          drawWard(ctx, level, tx, ty, px, py, time);
+          break;
         case Tile.Platform:
           drawPlatform(ctx, px, py, colors, noise);
           break;
@@ -347,6 +350,104 @@ function drawGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: n
   // Cursed glow seeping between the bars.
   const pulse = 0.35 + Math.sin(time * 2.2 + ty) * 0.15;
   glow(ctx, px + TILE / 2, py + TILE / 2, 26, `rgba(200,40,40,${pulse.toFixed(2)})`);
+}
+
+/** The colour a ward burns in, per zone, as "r,g,b". */
+function wardRgb(x: number): string {
+  switch (zoneAt(x).name) {
+    case 'forest':
+      return '176,236,120';
+    case 'ruins':
+      return '255,196,112';
+    case 'caverns':
+      return '255,138,70';
+    case 'drowned':
+      return '120,232,220';
+    case 'castle':
+      return '255,86,110';
+    default:
+      return '196,150,255';
+  }
+}
+
+/**
+ * A boss arena's ward: a curtain of light hung between the floor and the sky,
+ * with a rune every third tile. Standing, it is unmistakably a wall. Open, the
+ * way in still shows where it will come down - a faint line of runes on the
+ * floor - so the moment it rises behind the hero is not a surprise but a
+ * promise kept. It moves slowly on purpose: a column of flicker is the last
+ * thing a fight needs next to it.
+ */
+function drawWard(
+  ctx: CanvasRenderingContext2D,
+  level: Level,
+  tx: number,
+  ty: number,
+  px: number,
+  py: number,
+  time: number,
+): void {
+  const rgb = wardRgb(px);
+  const arena = level.arenaAt(px);
+  const closed = level.wardClosed(tx);
+  const floorBelow = level.solidAt(tx, ty + 1) && level.tileAt(tx, ty + 1) !== Tile.Ward;
+  if (!closed) {
+    if (!arena || arena.cleared || !floorBelow) return;
+    // The sleeping ward: a seam of runes in the floor where it will stand.
+    const a = 0.22 + Math.sin(time * 1.4 + tx) * 0.06;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(${rgb},${a.toFixed(3)})`;
+    ctx.fillRect(px + 13, py + TILE - 4, 6, 4);
+    ctx.fillRect(px + 15, py + TILE - 12, 2, 6);
+    ctx.restore();
+    return;
+  }
+
+  const topCap = !level.solidAt(tx, ty - 1) || ty === 0;
+  const breath = 0.5 + Math.sin(time * 1.6 + ty * 0.35) * 0.5;
+  ctx.save();
+  // A dark core, so the light has something to stand in front of.
+  ctx.fillStyle = 'rgba(6,4,12,0.55)';
+  ctx.fillRect(px + 6, py, TILE - 12, TILE);
+  ctx.globalCompositeOperation = 'lighter';
+  const sheet = ctx.createLinearGradient(px, 0, px + TILE, 0);
+  sheet.addColorStop(0, `rgba(${rgb},0)`);
+  sheet.addColorStop(0.5, `rgba(${rgb},${(0.2 + breath * 0.1).toFixed(3)})`);
+  sheet.addColorStop(1, `rgba(${rgb},0)`);
+  ctx.fillStyle = sheet;
+  ctx.fillRect(px - 6, py, TILE + 12, TILE);
+  // Strands of light running up the curtain, slowly.
+  ctx.fillStyle = `rgba(${rgb},0.5)`;
+  for (let i = 0; i < 3; i++) {
+    const sx = px + 9 + i * 7;
+    const run = (time * (18 + i * 5) + i * 13 + ty * 11) % TILE;
+    ctx.fillRect(sx, py + TILE - run - 10, 1.6, 10);
+  }
+  // The edges, bright and steady.
+  ctx.fillStyle = `rgba(${rgb},0.5)`;
+  ctx.fillRect(px + 6, py, 1, TILE);
+  ctx.fillRect(px + TILE - 7, py, 1, TILE);
+  // A rune every third tile, and a knot where it meets the floor.
+  if (ty % 3 === 1 || floorBelow) {
+    const cx = px + TILE / 2;
+    const cy = py + TILE / 2;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.35 + breath * 0.35).toFixed(3)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 8);
+    ctx.lineTo(cx + 6, cy);
+    ctx.lineTo(cx, cy + 8);
+    ctx.lineTo(cx - 6, cy);
+    ctx.closePath();
+    ctx.moveTo(cx, cy - 4);
+    ctx.lineTo(cx, cy + 4);
+    ctx.stroke();
+    glow(ctx, cx, cy, 22, `rgba(${rgb},${(0.25 + breath * 0.2).toFixed(3)})`);
+  }
+  if (topCap) glow(ctx, px + TILE / 2, py, 30, `rgba(${rgb},0.3)`);
+  if (floorBelow) glow(ctx, px + TILE / 2, py + TILE, 34, `rgba(${rgb},0.45)`);
+  ctx.restore();
 }
 
 /**

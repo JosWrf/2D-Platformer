@@ -2,6 +2,7 @@ import { audio } from './core/audio';
 import { Input } from './core/input';
 import { Loop } from './core/loop';
 import { Game, VIEW_H, VIEW_W } from './game';
+import { ZONES } from './render/palette';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
@@ -65,8 +66,12 @@ declare global {
     game: Game;
     input: Input;
     loop: Loop;
+    audio: typeof audio;
+    zones: typeof ZONES;
   }
 }
 window.game = game;
 window.input = input;
 window.loop = loop;
+window.audio = audio;
+window.zones = ZONES;
