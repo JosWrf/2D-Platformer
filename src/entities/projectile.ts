@@ -2,9 +2,23 @@ import { Rect, rand, rectsOverlap } from '../core/math';
 import { PALETTE } from '../render/palette';
 import { glow } from '../render/sprites';
 import type { World } from '../world/context';
+import { TILE } from '../world/tiles';
 import { Body } from './entity';
 
-export type ProjectileKind = 'orb' | 'bone' | 'shockwave' | 'rock' | 'beam' | 'blob' | 'ember' | 'magma' | 'blood';
+export type ProjectileKind =
+  | 'orb'
+  | 'bone'
+  | 'shockwave'
+  | 'rock'
+  | 'beam'
+  | 'blob'
+  | 'ember'
+  | 'magma'
+  | 'blood'
+  | 'quake'
+  | 'shard'
+  | 'coin'
+  | 'web';
 
 export class Projectile extends Body {
   friendly = false;
@@ -24,6 +38,28 @@ export class Projectile extends Body {
    * same thing his are.
    */
   water = false;
+  /**
+   * Thrown by the hero's shadow: his own crescent and his own quake, in its
+   * colours. The same shapes have to read as the enemy's when they come at him.
+   */
+  dark = false;
+  /**
+   * What this one passes through without harm: whatever the swing that threw
+   * it has already struck. Ankhor's quake carries the heavy strike further;
+   * it is not a second blow on the thing the blade just hit. Measured with it
+   * landing on top: the heavy strike went from 3.4 to 6.6 damage a second
+   * standing in reach, which is not a longer arm but a second one.
+   */
+  spare: ReadonlySet<object> | null = null;
+  /**
+   * A coin of Gierschlund's that has come down and lies on the floor: it
+   * hurts nobody there, and a swing sends it back. They used to burst on the
+   * floor like everything else, and the only time a blade could turn one was
+   * the single frame it spent in front of the hero before it hit him from
+   * above - measured, a bot swinging at every coin that came near batted back
+   * none of forty-five.
+   */
+  resting = false;
   damage = 1;
   life = 4;
   spin = 0;
@@ -101,6 +137,37 @@ export class Projectile extends Body {
         this.life = 2.6;
         this.damage = 1;
         break;
+      case 'quake':
+        // Ankhor's fist in the hero's hands: a wave of broken stone along the
+        // floor. Short - it is the heavy strike reaching further, not a gun.
+        this.w = 26;
+        this.h = 24;
+        this.life = 0.8;
+        this.damage = 2;
+        break;
+      case 'shard':
+        // The warden's splinters, thrown off a parry.
+        this.w = 12;
+        this.h = 10;
+        this.life = 0.42;
+        this.damage = 1;
+        break;
+      case 'coin':
+        // Gierschlund's gold, spat in a fan. Heavy, so the arc is short.
+        this.w = 12;
+        this.h = 12;
+        this.life = 3;
+        this.damage = 1;
+        break;
+      case 'web':
+        // A ball of Arachna's silk. Where it comes down, the floor goes
+        // sticky; whoever it comes down on is stuck in it for a moment - it
+        // binds, it does not wound.
+        this.w = 16;
+        this.h = 16;
+        this.life = 3;
+        this.damage = 0;
+        break;
     }
   }
 
@@ -110,6 +177,17 @@ export class Projectile extends Body {
 
   deflect(dir: number): void {
     this.friendly = true;
+    if (this.kind === 'coin') {
+      // Off the floor at knee height and flat back the way it came, to the
+      // mouth that spat it.
+      if (this.resting) this.y -= 14;
+      this.resting = false;
+      this.vx = 430 * dir;
+      this.vy = 0;
+      this.life = Math.max(this.life, 1.4);
+      this.damage = 2;
+      return;
+    }
     if (this.kind === 'ember') {
       /*
        * Her fire flies flat once it has been turned. That is the whole of the
@@ -161,6 +239,36 @@ export class Projectile extends Body {
       }
     } else if (this.kind === 'bone' || this.kind === 'rock') {
       this.vy += 900 * dt;
+    } else if (this.kind === 'coin') {
+      if (!this.friendly && !this.resting) this.vy += 950 * dt;
+      if (world.time % 0.07 < dt) {
+        world.particles.spawn({
+          x: this.cx + rand(-3, 3),
+          y: this.cy + rand(-3, 3),
+          vx: 0,
+          vy: rand(-10, 10),
+          gravity: 60,
+          color: this.friendly ? 'rgba(255,250,220,0.7)' : 'rgba(255,214,110,0.7)',
+          size: 1.8,
+          life: 0.25,
+          shape: 'spark',
+        });
+      }
+    } else if (this.kind === 'web') {
+      if (!this.friendly) this.vy += 700 * dt;
+    } else if (this.kind === 'shard') {
+      if (world.time % 0.03 < dt) {
+        world.particles.spawn({
+          x: this.cx,
+          y: this.cy,
+          vx: -this.vx * 0.06,
+          vy: rand(-14, 14),
+          color: 'rgba(210,170,255,0.7)',
+          size: 2,
+          life: 0.18,
+          shape: 'spark',
+        });
+      }
     } else if (this.kind === 'ember') {
       // Falls until it is turned; a turned ember carries its own fire.
       if (!this.friendly) this.vy += 1000 * dt;
@@ -245,7 +353,7 @@ export class Projectile extends Body {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
-    if (this.kind === 'shockwave') {
+    if (this.kind === 'shockwave' || this.kind === 'quake') {
       // Rides along the floor and dies against a wall.
       const level = world.level;
       if (level.rectHitsSolid(this.x, this.y, this.w, this.h)) {
@@ -255,6 +363,7 @@ export class Projectile extends Body {
       const drop = world.level.groundBelow(this.cx, this.y + this.h - 4, 3);
       if (drop > 6) this.y += Math.min(drop, 260 * dt);
     } else if (world.level.rectHitsSolid(this.x, this.y, this.w, this.h)) {
+      if (this.kind === 'coin' && !this.friendly && this.vy > 0 && this.settle(world)) return;
       this.dead = true;
       world.particles.burst(this.cx, this.cy, 10, this.hitColor(), { speed: 130 });
     }
@@ -262,6 +371,22 @@ export class Projectile extends Body {
     if (this.x < -80 || this.x > world.level.pixelWidth + 80 || this.y > world.level.pixelHeight + 80) {
       this.dead = true;
     }
+  }
+
+  /**
+   * A coin coming down onto a floor lies there instead of bursting - see
+   * resting. False if what it hit was not a floor it can lie on.
+   */
+  private settle(world: World): boolean {
+    const top = Math.floor((this.y + this.h) / TILE) * TILE;
+    if (world.level.rectHitsSolid(this.x, top - this.h, this.w, this.h)) return false;
+    this.y = top - this.h;
+    this.vx = 0;
+    this.vy = 0;
+    this.resting = true;
+    this.life = Math.min(this.life, 1.3);
+    world.particles.burst(this.cx, this.y + this.h - 2, 6, '#ffd36a', { speed: 90, gravity: 400, shape: 'spark' });
+    return true;
   }
 
   private hitColor(): string {
@@ -284,6 +409,14 @@ export class Projectile extends Body {
         return this.friendly ? '#ffd0dc' : '#d0203c';
       case 'shockwave':
         return this.water ? '#9fe4dc' : '#ff9a5c';
+      case 'quake':
+        return '#e8c98e';
+      case 'shard':
+        return '#d6b8ff';
+      case 'coin':
+        return '#ffd36a';
+      case 'web':
+        return '#e6eef8';
       default:
         return '#ff9a5c';
     }
@@ -306,15 +439,19 @@ export class Projectile extends Body {
           cx,
           cy,
           26 * fade * size,
-          this.water
-            ? `rgba(140,235,220,${(0.35 * fade).toFixed(2)})`
-            : `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`,
+          this.dark
+            ? `rgba(150,80,255,${(0.45 * fade).toFixed(2)})`
+            : this.water
+              ? `rgba(140,235,220,${(0.35 * fade).toFixed(2)})`
+              : `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`,
         );
         ctx.save();
         ctx.translate(cx, cy);
         ctx.scale(dir * size, size);
-        ctx.globalCompositeOperation = 'lighter';
-        const [edge, core] = this.water ? ['#3fc8b8', '#dcfaf2'] : ['#5ec8ff', '#e8fbff'];
+        // The shadow's crescent is a cut of darkness with a violet edge: drawn
+        // over, not added on, or it would come out as light.
+        ctx.globalCompositeOperation = this.dark ? 'source-over' : 'lighter';
+        const [edge, core] = this.dark ? ['#8a4cff', '#14061f'] : this.water ? ['#3fc8b8', '#dcfaf2'] : ['#5ec8ff', '#e8fbff'];
         for (const [w, alpha, color] of [
           [1, 0.5 * fade, edge],
           [0.62, 0.85 * fade, core],
@@ -481,6 +618,117 @@ export class Projectile extends Body {
         ctx.fill();
         ctx.fillStyle = '#8a7460';
         ctx.fillRect(-4, -4, 5, 4);
+        ctx.restore();
+        break;
+      }
+      case 'quake': {
+        // Stone thrown up off the floor in a running crest, golden with the
+        // light that is still in it - his fist, not the knight's fire.
+        const a = Math.min(1, this.life / 0.35);
+        const dir = Math.sign(this.vx) || 1;
+        const base = this.y + this.h;
+        glow(ctx, cx, base - 6, 30, this.dark ? 'rgba(150,90,255,0.4)' : 'rgba(255,214,140,0.4)', a);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.translate(cx, base);
+        ctx.scale(dir, 1);
+        ctx.fillStyle = this.dark ? '#24123a' : '#6e5a44';
+        ctx.beginPath();
+        ctx.moveTo(-14, 0);
+        ctx.lineTo(-6, -12 - Math.sin(this.spin * 2) * 2);
+        ctx.lineTo(2, -20);
+        ctx.lineTo(9, -10);
+        ctx.lineTo(14, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = this.dark ? '#9a6aff' : '#e8c98e';
+        ctx.beginPath();
+        ctx.moveTo(-4, 0);
+        ctx.lineTo(2, -13);
+        ctx.lineTo(8, 0);
+        ctx.closePath();
+        ctx.fill();
+        // Chips flying off the crest.
+        ctx.fillStyle = '#b89a6a';
+        for (let i = 0; i < 3; i++) {
+          const t = (this.spin * 0.7 + i * 0.33) % 1;
+          ctx.fillRect(-8 - t * 10, -14 - t * 10 + t * t * 18, 3, 3);
+        }
+        ctx.restore();
+        break;
+      }
+      case 'shard': {
+        // A violet splinter, pointing the way it flies.
+        glow(ctx, cx, cy, 14, 'rgba(200,160,255,0.45)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.atan2(this.vy, this.vx));
+        ctx.fillStyle = '#c79bff';
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-2, -4);
+        ctx.lineTo(-8, 0);
+        ctx.lineTo(-2, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#f3eaff';
+        ctx.fillRect(-2, -1, 7, 2);
+        ctx.restore();
+        break;
+      }
+      case 'coin': {
+        // A gold coin turning over in the air: a disc that narrows and widens.
+        // One lying on the floor lies flat, and winks.
+        const turn = this.resting ? 1 : Math.abs(Math.cos(this.spin * 1.4));
+        if (this.resting) {
+          const wink = Math.max(0, Math.sin(this.spin * 0.9));
+          glow(ctx, cx, cy, 12 + wink * 6, `rgba(255,214,110,${(0.3 + wink * 0.35).toFixed(2)})`);
+          ctx.save();
+          ctx.translate(cx, cy + 3);
+          ctx.fillStyle = '#d9a028';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 6.5, 2.6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffe08a';
+          ctx.beginPath();
+          ctx.ellipse(-1, -0.8, 4, 1.3, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          break;
+        }
+        glow(ctx, cx, cy, 14, this.friendly ? 'rgba(255,250,220,0.45)' : 'rgba(255,200,90,0.4)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.fillStyle = this.friendly ? '#fff3c4' : '#d9a028';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 1.5 + 5 * turn, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = this.friendly ? '#ffffff' : '#ffe08a';
+        ctx.beginPath();
+        ctx.ellipse(-0.8 * turn, -1, 0.8 + 2.6 * turn, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'web': {
+        // A clot of silk: a pale knot with loose threads trailing off it.
+        glow(ctx, cx, cy, 16, 'rgba(220,232,246,0.3)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(this.spin * 0.4);
+        ctx.strokeStyle = this.friendly ? 'rgba(255,255,255,0.9)' : 'rgba(226,234,244,0.85)';
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * -9, Math.sin(a) * -9);
+          ctx.lineTo(Math.cos(a) * 9, Math.sin(a) * 9);
+          ctx.stroke();
+        }
+        ctx.fillStyle = 'rgba(236,242,250,0.85)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
         break;
       }

@@ -471,6 +471,8 @@ const result = await page.evaluate(() => {
     p.dead = false;
     p.invuln = 999;
     const mark = g.enemies.find((e) => e !== boss && !e.dead) ?? boss;
+    // Already sized up for the hero's relics: this measures the blade, not that.
+    mark.hardened = true;
     mark.hp = mark.maxHp = 40;
     mark.dead = false;
     mark.x = p.x + targetGap;

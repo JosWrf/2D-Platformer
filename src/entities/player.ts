@@ -8,6 +8,7 @@ import type { Level } from '../world/level';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
+import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, SILK_REGROW, type RelicId } from './relics';
 
 const MAX_RUN = 235;
 const ACCEL = 1500;
@@ -63,8 +64,12 @@ const CHARGED_SWING = 3;
 
 /** How long the attack key has to be held before the blade is ready. */
 const CHARGE_TIME = 0.42;
+/** And with Ankhor's fist in it. */
+const QUAKE_CHARGE_TIME = 0.3;
 /** The window in which an incoming blow can be turned aside. */
 const PARRY_WINDOW = 0.18;
+/** And with the warden's splinters in the guard. */
+const SPLINTER_PARRY_WINDOW = 0.26;
 /** Dead time after a parry, so it cannot simply be held down. */
 const PARRY_RECOVERY = 0.38;
 
@@ -107,6 +112,13 @@ export class Player extends Body {
   dashTimer = 0;
   private dashCooldown = 0;
   private dashesLeft = 1;
+  /**
+   * Seconds since the last roll began. The rolls only come back once this has
+   * run out, on the ground: with the shadow step's quick second roll, a refill
+   * that only waited for the cooldown let a hero roll every quarter second for
+   * as long as he liked - three quarters of the time untouchable.
+   */
+  private sinceDash = 9;
 
   attackTimer = 0;
   attackCombo = 0;
@@ -130,6 +142,35 @@ export class Player extends Body {
     return this.beamTier > 0;
   }
   private beamFired = false;
+  /** A heavy strike with Ankhor's fist in it, waiting for its blade to land. */
+  private quakePending = false;
+
+  /** What the bosses have left him, for the rest of the run. See relics.ts. */
+  readonly relics = new Set<RelicId>();
+  has(id: RelicId): boolean {
+    return this.relics.has(id);
+  }
+  /** Seidenmantel: up and waiting for a blow, or growing back. */
+  shieldUp = false;
+  /** Quiet seconds still needed before it is back. */
+  shieldTimer = 0;
+  /** Blutdurst: damage dealt towards the next heart. Fills, then waits. */
+  bloodMeter = 0;
+  /** Goldzahn: gems towards the next heart. Fills, then waits. */
+  goldCount = 0;
+  /** Zweiter Atem: still unspent in this life. */
+  secondWind = false;
+  /** Hydrablut: seconds until a lost heart grows back. */
+  regrowTimer = HYDRA_REGROW;
+  /**
+   * Arachna's silk on the floor: while this runs he is stuck in it - slow to
+   * run through and low to jump out of. Whatever lays the silk keeps it topped
+   * up while he stands in it.
+   */
+  sticky = 0;
+  /** Runs after something has saved him, for the effect drawn round him. */
+  saveFlash = 0;
+  private saveColor = '#ffffff';
 
   charged = false;
   chargeTimer = 0;
@@ -180,6 +221,20 @@ export class Player extends Body {
     return this.attackTimer > 0;
   }
 
+  /** Counts every swing started, so something can tell one swing from the next. */
+  swingId = 0;
+
+  /** True while the running swing's blade can actually hit something. */
+  get bladeLive(): boolean {
+    const elapsed = ATTACK_TOTAL - this.attackTimer;
+    return this.attackTimer > 0 && elapsed >= ATTACK_WINDUP && elapsed <= ATTACK_WINDUP + ATTACK_ACTIVE;
+  }
+
+  /** What the running swing does to whatever it lands on. */
+  get swingDamage(): number {
+    return (this.charged ? 3 : this.attackCombo === 3 ? 2 : 1) + (this.glowing ? 1 : 0);
+  }
+
   get isDashing(): boolean {
     return this.dashTimer > 0;
   }
@@ -206,9 +261,98 @@ export class Player extends Body {
     this.sheathTimer = 0;
     this.dashTimer = 0;
     this.dashCooldown = 0;
+    this.sinceDash = 9;
     this.dead = false;
     this.respawning = false;
     this.trail.length = 0;
+    // A new life: the shield is woven, the second breath is back.
+    this.shieldUp = this.has('seidenmantel');
+    this.shieldTimer = 0;
+    this.secondWind = this.has('zweiteratem');
+    this.regrowTimer = HYDRA_REGROW;
+    this.saveFlash = 0;
+  }
+
+  /** How long the blade takes to wind up for the heavy strike. */
+  get chargeTime(): number {
+    return this.has('bebenfaust') ? QUAKE_CHARGE_TIME : CHARGE_TIME;
+  }
+
+  /** How long a parry stays open. */
+  get parryWindow(): number {
+    return this.has('splitterparade') ? SPLINTER_PARRY_WINDOW : PARRY_WINDOW;
+  }
+
+  /** Rolls between two touches of the ground. */
+  private get maxDashes(): number {
+    return this.has('schattenschritt') ? 2 : 1;
+  }
+
+  /**
+   * A relic has just been taken: whatever it carries starts now rather than
+   * at the next life.
+   */
+  onRelic(id: RelicId): void {
+    if (id === 'seidenmantel') this.shieldUp = true;
+    if (id === 'zweiteratem') this.secondWind = true;
+    if (id === 'schattenschritt') this.dashesLeft = Math.max(this.dashesLeft, 2);
+  }
+
+  /**
+   * Damage that actually landed on something - plates that ring and lids that
+   * are shut do not count. Blutdurst drinks from it.
+   */
+  onDamageDealt(amount: number): void {
+    if (amount <= 0 || !this.has('blutdurst')) return;
+    this.bloodMeter = Math.min(BLOOD_PER_HEART, this.bloodMeter + amount);
+  }
+
+  /** A gem has been picked up. The Goldzahn counts it. */
+  onGem(): void {
+    if (!this.has('goldzahn')) return;
+    this.goldCount = Math.min(GOLD_PER_HEART, this.goldCount + 1);
+  }
+
+  /**
+   * The relics that run on their own: a shield growing back, blood and gold
+   * paid out as hearts the moment one is missing - never wasted on a full
+   * bar - and the hydra's blood regrowing what was lost.
+   */
+  private updateRelics(dt: number, world: World): void {
+    this.saveFlash = Math.max(0, this.saveFlash - dt * 1.6);
+    if (this.has('seidenmantel') && !this.shieldUp) {
+      this.shieldTimer -= dt;
+      if (this.shieldTimer <= 0) {
+        this.shieldUp = true;
+        audio.play('magic', 1.6);
+        world.particles.burst(this.cx, this.cy, 14, 'rgba(225,235,245,0.9)', { speed: 90, gravity: -20, shape: 'spark' });
+      }
+    }
+    if (this.hp >= this.maxHp || this.dead) {
+      this.regrowTimer = HYDRA_REGROW;
+      return;
+    }
+    if (this.bloodMeter >= BLOOD_PER_HEART) {
+      this.bloodMeter -= BLOOD_PER_HEART;
+      this.mend(world, '#ff4a68');
+    } else if (this.goldCount >= GOLD_PER_HEART) {
+      this.goldCount -= GOLD_PER_HEART;
+      this.mend(world, '#ffd166');
+    } else if (this.has('hydrablut')) {
+      this.regrowTimer -= dt;
+      if (this.regrowTimer <= 0) {
+        this.regrowTimer = HYDRA_REGROW;
+        this.mend(world, '#9fe07a');
+      }
+    }
+  }
+
+  /** One heart back, from a relic, and visibly so. */
+  private mend(world: World, color: string): void {
+    this.heal(1);
+    audio.play('heal', 1.1);
+    world.particles.burst(this.cx, this.cy, 12, color, { speed: 110, gravity: -60, shape: 'circle' });
+    world.particles.text(this.cx, this.y - 12, '+1', color);
   }
 
   update(dt: number, input: Input, world: World): void {
@@ -216,12 +360,15 @@ export class Player extends Body {
     this.flash = Math.max(0, this.flash - dt * 6);
     this.invuln = Math.max(0, this.invuln - dt);
     this.dashCooldown = Math.max(0, this.dashCooldown - dt);
+    this.sinceDash += dt;
     this.dropTimer = Math.max(0, this.dropTimer - dt);
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
     this.sheathTimer = Math.max(0, this.sheathTimer - dt);
     this.parryTimer = Math.max(0, this.parryTimer - dt);
     this.parryCooldown = Math.max(0, this.parryCooldown - dt);
     this.parryFlash = Math.max(0, this.parryFlash - dt * 3.5);
+    this.sticky = Math.max(0, this.sticky - dt);
+    this.updateRelics(dt, world);
 
     for (let i = this.trail.length - 1; i >= 0; i--) {
       this.trail[i].life -= dt * 3.2;
@@ -235,8 +382,11 @@ export class Player extends Body {
     /* ---------------------------------------------------------- dash */
     if (!stunned && input.pressed('dash') && this.dashCooldown <= 0 && this.dashesLeft > 0) {
       this.dashTimer = DASH_TIME;
-      this.dashCooldown = DASH_COOLDOWN;
       this.dashesLeft--;
+      // The knight's shadow step: a second roll straight out of the first,
+      // and then the same rest as ever.
+      this.dashCooldown = this.dashesLeft > 0 ? DASH_TIME + 0.06 : DASH_COOLDOWN;
+      this.sinceDash = 0;
       this.vy = 0;
       audio.play('dash');
       world.particles.burst(this.cx, this.cy, 12, 'rgba(150,200,255,0.9)', {
@@ -258,8 +408,9 @@ export class Player extends Body {
     } else {
       /* ------------------------------------------------------ walking */
       const accel = this.onGround ? ACCEL : AIR_ACCEL;
+      const run = this.sticky > 0 ? MAX_RUN * 0.55 : MAX_RUN;
       if (axis !== 0) {
-        this.vx = approach(this.vx, axis * MAX_RUN, accel * dt);
+        this.vx = approach(this.vx, axis * run, accel * dt);
       } else if (this.onGround) {
         this.vx = approach(this.vx, 0, FRICTION * dt);
       } else {
@@ -276,7 +427,7 @@ export class Player extends Body {
     if (this.onGround) {
       this.coyote = COYOTE_TIME;
       this.jumpsLeft = 2;
-      this.dashesLeft = 1;
+      if (this.sinceDash >= DASH_COOLDOWN) this.dashesLeft = this.maxDashes;
     } else {
       this.coyote = Math.max(0, this.coyote - dt);
     }
@@ -323,7 +474,7 @@ export class Player extends Body {
     if (!stunned && !droppingThrough && this.jumpBuffer > 0 && !this.isDashing) {
       const grounded = this.onGround || this.coyote > 0;
       if (grounded) {
-        this.vy = -JUMP_VELOCITY;
+        this.vy = -JUMP_VELOCITY * (this.sticky > 0 ? 0.8 : 1);
         this.jumpsLeft = 1;
         this.coyote = 0;
         this.jumpBuffer = 0;
@@ -360,8 +511,8 @@ export class Player extends Body {
 
     /* ----------------------------------------------------------- parry */
     if (!stunned && !this.isDashing && input.pressed('parry') && this.parryCooldown <= 0) {
-      this.parryTimer = PARRY_WINDOW;
-      this.parryCooldown = PARRY_WINDOW + PARRY_RECOVERY;
+      this.parryTimer = this.parryWindow;
+      this.parryCooldown = this.parryWindow + PARRY_RECOVERY;
       this.chargeTimer = 0;
       this.chargeReady = false;
       audio.play('parry', 1.35);
@@ -383,6 +534,10 @@ export class Player extends Body {
         if (this.bladeBeam && !this.beamFired) {
           this.beamFired = true;
           this.throwBeam(world);
+        }
+        if (this.quakePending && elapsed > ATTACK_WINDUP + ATTACK_ACTIVE * 0.6) {
+          this.quakePending = false;
+          this.quake(world);
         }
         this.emitSwingSparks(world, elapsed);
         if (this.attackCombo === 3 && !this.finisherDone && elapsed > ATTACK_WINDUP + ATTACK_ACTIVE * 0.72) {
@@ -417,7 +572,7 @@ export class Player extends Body {
     if (canCharge && input.isDown('attack')) {
       const before = this.chargeTimer;
       this.chargeTimer += dt;
-      if (before < CHARGE_TIME && this.chargeTimer >= CHARGE_TIME) {
+      if (before < this.chargeTime && this.chargeTimer >= this.chargeTime) {
         this.chargeReady = true;
         audio.play('charge');
         world.particles.burst(this.cx, this.cy, 14, 'rgba(180,225,255,0.9)', {
@@ -449,6 +604,8 @@ export class Player extends Body {
         this.vx += this.facing * 130;
         world.hitStop(0.05);
         world.camera.addShake(3);
+        // The quake rolls out once the blade has landed, past whatever it hit.
+        this.quakePending = this.has('bebenfaust') && this.onGround;
       }
       this.chargeTimer = 0;
       this.chargeReady = false;
@@ -497,6 +654,7 @@ export class Player extends Body {
     this.finisherDone = charged;
     this.beamFired = false;
     this.sheathTimer = 0;
+    this.swingId++;
     this.hitThisSwing.clear();
     if (charged) audio.play('chargeRelease');
     else audio.play('swing', this.attackCombo === 3 ? 0.8 : 1 + this.attackCombo * 0.08);
@@ -523,6 +681,27 @@ export class Player extends Body {
     world.spawnProjectile(beam);
     audio.play('shoot', this.charged ? 0.8 : 1.25);
     world.particles.burst(hand.x, hand.y, 6, sharp ? '#cdf3ff' : '#a6ecdf', { speed: 120, shape: 'spark' });
+  }
+
+  /**
+   * Ankhor's fist: a heavy strike on the ground sends a wave of broken stone
+   * along it. It rides the floor and stops at a wall, like his own.
+   */
+  private quake(world: World): void {
+    const wave = new Projectile('quake', this.cx - 13 + this.facing * 24, this.bottom - 24, this.facing * 330, 0);
+    wave.friendly = true;
+    wave.damage = 2;
+    wave.spare = new Set(this.hitThisSwing);
+    world.spawnProjectile(wave);
+    audio.play('slam', 1.3);
+    world.camera.addShake(4);
+    world.particles.burst(this.cx + this.facing * 20, this.bottom - 3, 14, '#d8c49a', {
+      speed: 170,
+      gravity: 600,
+      size: 3,
+      angle: this.facing > 0 ? -0.4 : Math.PI + 0.4,
+      spread: 1.2,
+    });
   }
 
   /**
@@ -582,6 +761,15 @@ export class Player extends Body {
     world.hitStop(0.13);
     world.camera.addShake(6);
     world.particles.text(this.cx, this.y - 14, 'PARIERT!', '#bfe9ff');
+    // The warden's splinters: the guard throws three of its own.
+    if (this.has('splitterparade')) {
+      for (const lift of [-0.32, 0, 0.32]) {
+        const shard = new Projectile('shard', this.cx - 7 + this.facing * 14, this.cy - 6, this.facing * Math.cos(lift) * 420, Math.sin(lift) * 420);
+        shard.friendly = true;
+        world.spawnProjectile(shard);
+      }
+      audio.play('magic', 1.5);
+    }
     world.particles.burst(this.cx + this.facing * 16, this.cy, 18, '#dff3ff', {
       speed: 210,
       gravity: 120,
@@ -755,20 +943,29 @@ export class Player extends Body {
     };
   }
 
+  /** True for the swings Ignivor's ember rides on: the finisher and the heavy strike. */
+  private get glowing(): boolean {
+    return this.has('glutklinge') && (this.charged || this.attackCombo === 3);
+  }
+
   private applySwordHits(world: World): void {
     const box = this.swordRect();
-    const damage = this.charged ? 3 : this.attackCombo === 3 ? 2 : 1;
+    const damage = this.swingDamage;
     for (const enemy of world.enemies) {
       if (enemy.dead || this.hitThisSwing.has(enemy)) continue;
       if (!enemy.overlaps(box)) continue;
       this.hitThisSwing.add(enemy);
+      const before = enemy.hp;
       enemy.hurt(damage, this.facing, world);
+      this.onDamageDealt(Math.max(0, before - Math.max(0, enemy.hp)));
       this.onHitLanded(world, enemy.cx, enemy.cy, damage);
     }
     const boss = world.boss;
     if (boss && !boss.dead && !this.hitThisSwing.has(boss) && boss.overlaps(box) && boss.vulnerable) {
       this.hitThisSwing.add(boss);
+      const before = boss.hp;
       boss.hurt(damage, this.facing, world);
+      this.onDamageDealt(Math.max(0, before - Math.max(0, boss.hp)));
       this.onHitLanded(world, boss.cx, boss.cy - 10, damage);
     }
     // Deflect projectiles with the blade - the ones that can be.
@@ -792,6 +989,11 @@ export class Player extends Body {
       shape: 'spark',
       size: 3,
     });
+    if (this.glowing) {
+      // The ember in the blade: it flares where it lands, and keeps glowing.
+      world.particles.burst(x, y, 12, '#ff9a3a', { speed: 150, gravity: -80, shape: 'circle', size: 3 });
+      world.particles.burst(x, y, 6, '#ffe2a0', { speed: 220, gravity: 200, shape: 'spark' });
+    }
     // A little forward hop keeps combos feeling connected.
     this.vx += this.facing * 40;
   }
@@ -806,6 +1008,23 @@ export class Player extends Body {
     }
     if (!ignoreIFrames && this.isInvulnerable) return;
     if (ignoreIFrames && this.invuln > 0) return;
+    // Every blow, caught or not, starts the silk growing back from nothing.
+    this.shieldTimer = SILK_REGROW;
+    if (this.shieldUp) {
+      // Arachna's silk takes it instead: torn, and the blow with it.
+      this.shieldUp = false;
+      this.invuln = 0.7;
+      this.vx = -fromDir * 120;
+      this.saveFlash = 1;
+      this.saveColor = '#e6eef8';
+      audio.play('clank', 1.7);
+      audio.play('swing', 1.4);
+      world.camera.addShake(3);
+      world.hitStop(0.05);
+      world.particles.burst(this.cx, this.cy, 18, 'rgba(230,238,248,0.95)', { speed: 200, gravity: 120, shape: 'spark' });
+      world.particles.text(this.cx, this.y - 14, 'SEIDE!', '#e6eef8');
+      return;
+    }
     this.hp -= amount;
     this.invuln = 1.15;
     this.hurtTimer = 0.28;
@@ -817,6 +1036,20 @@ export class Player extends Body {
     world.camera.addShake(7);
     world.hitStop(0.09);
     world.particles.burst(this.cx, this.cy, 16, PALETTE.hearts, { speed: 190, gravity: 400 });
+    if (this.hp <= 0 && this.secondWind) {
+      // The shadow he beat in the rift takes the blow that would have ended
+      // him. Once a life.
+      this.secondWind = false;
+      this.hp = 1;
+      this.invuln = 1.8;
+      this.saveFlash = 1;
+      this.saveColor = '#c9b8ff';
+      audio.play('phase', 1.2);
+      world.hitStop(0.2);
+      world.particles.burst(this.cx, this.cy, 34, '#c9b8ff', { speed: 230, gravity: -40, shape: 'spark' });
+      world.particles.text(this.cx, this.y - 16, 'ZWEITER ATEM!', '#d9ccff');
+      return;
+    }
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
@@ -879,7 +1112,7 @@ export class Player extends Body {
     const cy = this.cy - 2;
 
     if (this.chargeTimer > 0) {
-      const t = Math.min(1, this.chargeTimer / CHARGE_TIME);
+      const t = Math.min(1, this.chargeTimer / this.chargeTime);
       // A ring drawing inwards while winding up, a steady halo once ready.
       const radius = this.chargeReady ? 26 + Math.sin(this.runCycle * 8) * 2 : 46 - t * 20;
       ctx.save();
@@ -895,7 +1128,7 @@ export class Player extends Body {
 
     if (this.parryTimer > 0) {
       // A guard arc on the side the hero is facing.
-      const t = this.parryTimer / PARRY_WINDOW;
+      const t = this.parryTimer / this.parryWindow;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = `rgba(210,244,255,${(0.35 + t * 0.5).toFixed(2)})`;
@@ -912,6 +1145,36 @@ export class Player extends Body {
       ctx.globalCompositeOperation = 'lighter';
       ctx.strokeStyle = `rgba(220,246,255,${(this.parryFlash * 0.8).toFixed(2)})`;
       ctx.lineWidth = 3 * this.parryFlash + 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (this.shieldUp) {
+      // Arachna's silk: a few fine threads wound round him, catching the light.
+      // Thin and still on purpose - it is there to be noticed when it is gone.
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'rgba(220,232,246,0.32)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 3; i++) {
+        const tilt = -0.5 + i * 0.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 15, 22 - i * 2, tilt, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (this.saveFlash > 0) {
+      // Something just stood between him and the blow: a ring in its colour.
+      const r = 18 + (1 - this.saveFlash) * 60;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = this.saveFlash;
+      ctx.strokeStyle = this.saveColor;
+      ctx.lineWidth = 2 + 3 * this.saveFlash;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.stroke();

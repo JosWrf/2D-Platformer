@@ -19,6 +19,7 @@ import { Checkpoint, Pickup } from './entities/pickup';
 import { PLAYER_MAX_HP, Player } from './entities/player';
 import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
+import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, RELICS, SILK_REGROW, type RelicId, relic } from './entities/relics';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
 import { Decor } from './render/decor';
@@ -29,7 +30,7 @@ import { Scatter } from './render/scatter';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
-import { drawBossBar, drawHeart, drawPanel, drawTextCentered, font } from './ui/hud';
+import { drawBossBar, drawHeart, drawPanel, drawRelicBadge, drawTextCentered, font } from './ui/hud';
 import type { World } from './world/context';
 import { Arena, Level } from './world/level';
 import { TILE, Tile } from './world/tiles';
@@ -62,6 +63,9 @@ const ARENA_TITLES: Partial<Record<EnemyKind, string>> = {
   colossus: 'ANKHOR, DER TEMPELKOLOSS',
   wyrm: 'IGNIVOR, DER GLUTWURM',
   vesper: 'VESPERON, DER BLUTFÜRST',
+  mimic: 'GIERSCHLUND, DIE GIERIGE TRUHE',
+  spider: 'ARACHNA, DIE NETZKÖNIGIN',
+  shadow: 'UMBRA, DEIN SCHATTEN',
 };
 
 /** The fight each boss is fought to. */
@@ -74,6 +78,137 @@ const BOSS_TRACK: Partial<Record<EnemyKind, TrackName>> = {
   vesper: 'bossBlood',
   hydra: 'bossHydra',
   prismarch: 'bossCrystal',
+  mimic: 'bossGold',
+  spider: 'bossWeb',
+  shadow: 'bossShadow',
+};
+
+/**
+ * What each boss leaves, and what is said over it. The words come first and
+ * the relic once they have been read, the way the bog and the drowned crown
+ * always did it: a reward handed over without a word reads as a number going
+ * up, not as something taken from the one who held it.
+ */
+interface BossRelic {
+  relic: RelicId;
+  /** Over the arena as it falls, before anything is said. */
+  fell: string;
+  speaker: string;
+  lines: string[];
+}
+
+const BOSS_RELIC: Record<string, BossRelic> = {
+  gallert: {
+    relic: 'herzkern',
+    fell: 'GALLERT ZERFLIESST',
+    speaker: 'DAS MOOR',
+    lines: [
+      'Was hier zusammengelaufen ist, war einmal alles, was in mir gestorben ist.',
+      'Du hast es auseinandergenommen. Der Kern gehört jetzt dir.',
+      'Er schlägt weiter — in deiner Brust, nicht in seiner.',
+    ],
+  },
+  mimic: {
+    relic: 'goldzahn',
+    fell: 'GIERSCHLUND IST LEER',
+    speaker: 'DIE SCHATZKAMMER',
+    lines: [
+      'Alles, was in diese Kammer kam, hat er gefressen: Gold, Steine, Diebe.',
+      'Ein Zahn aus Gold ist von ihm übrig, und der hungert noch immer.',
+      'Füttere ihn mit Edelsteinen. Jeder zehnte gibt dir ein Herz zurück.',
+    ],
+  },
+  colossus: {
+    relic: 'bebenfaust',
+    fell: 'ANKHOR ZERFÄLLT',
+    speaker: 'DAS TEMPELHERZ',
+    lines: [
+      'Solange der Tempel steht, hat er diesen Hof gehalten, ohne einen Schritt zu tun.',
+      'Seine Faust ist zersprungen. Was in ihr war, liegt jetzt in deiner.',
+      'Halte den Schlag, bis er voll ist — dann bebt der Boden für dich.',
+    ],
+  },
+  spider: {
+    relic: 'seidenmantel',
+    fell: 'ARACHNA STÜRZT',
+    speaker: 'DIE NETZKAMMER',
+    lines: [
+      'Jeden Faden in dieser Höhle hat sie selbst gesponnen.',
+      'Der letzte gehört dir: ein Mantel, so fein, dass man ihn kaum sieht.',
+      'Er fängt einen Schlag ab — und webt sich neu, wenn du ihm Ruhe lässt.',
+    ],
+  },
+  wyrm: {
+    relic: 'glutklinge',
+    fell: 'IGNIVOR ERLISCHT',
+    speaker: 'DIE GLUTKAMMER',
+    lines: [
+      'Das Feuer, das in ihm lief, sucht sich einen neuen Weg.',
+      'Es nimmt den durch deine Klinge.',
+      'Der dritte Hieb und der Ladeschlag treffen von nun an mit Glut.',
+    ],
+  },
+  thalassa: {
+    relic: 'flutklinge',
+    fell: 'THALASSA VERSINKT',
+    speaker: 'DIE ERTRUNKENE KRONE',
+    lines: [
+      'Tausend Jahre habe ich das Wasser dieser Halle gehalten.',
+      'Nimm es. Halten kann ich es nicht mehr.',
+      'Jeder deiner Hiebe wirft von nun an ein Stück davon voraus —',
+      'kurz, aber weiter als ein Schwert reicht.',
+    ],
+  },
+  vesper: {
+    relic: 'blutdurst',
+    fell: 'VESPERON ZERSTIEBT',
+    speaker: 'DER BLUTTURM',
+    lines: [
+      'Hundert Jahre hat er vom Blut anderer gelebt.',
+      'Jetzt lebt sein Durst in dir.',
+      'Was deine Klinge austeilt, kommt dir als Herz zurück.',
+    ],
+  },
+  knight: {
+    relic: 'schattenschritt',
+    fell: 'DAS SIEGEL BRICHT',
+    speaker: 'MORVAINS SCHATTEN',
+    lines: [
+      'Ich habe diesen Thron gehalten, bis einer kam, der schneller war als ich.',
+      'Nimm meinen Schritt. Im Riss wirst du ihn brauchen.',
+      'Zwei Rollen ohne Atem dazwischen — auch in der Luft.',
+    ],
+  },
+  shadow: {
+    relic: 'zweiteratem',
+    fell: 'DEIN SCHATTEN WEICHT',
+    speaker: 'DEIN SCHATTEN',
+    lines: [
+      'Ich war alles, was du geworden wärst, wenn du stehen geblieben wärst.',
+      'Jetzt stehe ich hinter dir.',
+      'Wenn dich etwas fällen will, fange ich es auf. Einmal in jedem Leben.',
+    ],
+  },
+  warden: {
+    relic: 'splitterparade',
+    fell: 'DER SPLITTERWÄCHTER ZERSPRINGT',
+    speaker: 'DER RISS',
+    lines: [
+      'Was an Stelle des Ritters gewachsen ist, liegt in Splittern.',
+      'Sie sammeln sich an deiner Klinge.',
+      'Eine Parade hält jetzt länger — und wirft sie zurück.',
+    ],
+  },
+  hydra: {
+    relic: 'hydrablut',
+    fell: 'DAS TOR IST OFFEN',
+    speaker: 'DER SCHLUND',
+    lines: [
+      'Fünf Hälse, und jeder wuchs nach — bis du ihr eigenes Feuer gegen sie gewendet hast.',
+      'Ihr Blut wächst jetzt in dir nach.',
+      'Was du verlierst, kommt mit der Zeit zurück. Und das Tor ist offen.',
+    ],
+  },
 };
 
 /** And the piece each zone is walked to. */
@@ -199,6 +334,9 @@ export class Game implements World {
         case 'colossus':
         case 'wyrm':
         case 'vesper':
+        case 'mimic':
+        case 'spider':
+        case 'shadow':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -308,6 +446,7 @@ export class Game implements World {
   }
 
   spawnEnemy(enemy: Enemy): void {
+    enemy.harden(this.player.relics);
     this.enemies.push(enemy);
   }
 
@@ -349,6 +488,11 @@ export class Game implements World {
     audio.play('bossDown');
     audio.play('victory');
     this.camera.addShake(10);
+    this.player.heal(this.player.maxHp);
+    // His words come once the seal has had its moment: a dialogue on top of
+    // the break would freeze the shake mid-swing and cover the very thing the
+    // player is watching.
+    this.queueRelic('knight', 1.6);
   }
 
   /**
@@ -451,69 +595,39 @@ export class Game implements World {
     this.camera.addShake(10);
     audio.play('victory');
     this.zoneBanner = { text: 'DAS TOR IST OFFEN', timer: 4.2 };
+    this.player.heal(this.player.maxHp);
+    this.offerRelic('hydra');
   }
 
   /**
    * Gallert comes apart, at the end of the forest, and leaves the core that
    * held him together. It is worth a heart: six become seven for the rest of
    * the run, and the hero is topped up on the spot.
-   *
-   * He is the first boss in the game and the only reward that is not about the
-   * blade, which is the point - the run should have something to show for its
-   * first hour that is not a bigger number on a swing.
    */
   onMireBossDefeated(): void {
-    if (this.player.maxHp > PLAYER_MAX_HP || this.state !== 'playing') return;
+    if (this.player.has('herzkern') || this.state !== 'playing') return;
     this.flashWhite = 1;
     this.camera.addShake(7);
     audio.play('victory');
-    this.player.vx = 0;
-    if (this.dialogue) {
-      // Something is already being read. Skipping the words is fine; dropping
-      // the reward is not.
-      this.takeHeartCore();
-      return;
-    }
-    this.dialogue = {
-      speaker: 'DAS MOOR',
-      lines: [
-        'Was hier zusammengelaufen ist, war einmal alles, was in mir gestorben ist.',
-        'Du hast es auseinandergenommen. Der Kern gehört jetzt dir.',
-        'Er schlägt weiter — in deiner Brust, nicht in seiner.',
-      ],
-      index: 0,
-      after: () => this.takeHeartCore(),
-    };
+    this.offerRelic('gallert');
   }
 
   /**
-   * Ankhor, Ignivor or Vesperon falls. They hold nothing for the blade, so
-   * what they give is the thing a hero wants most after a long fight: every
-   * heart back, and the wards down.
+   * An arena boss falls. Every one of them leaves something now - Ankhor,
+   * Ignivor and Vesperon used to give back the hearts and nothing more, and the
+   * warden gave nothing at all. The hearts still come back, and the relic comes
+   * on top: see BOSS_RELIC.
    */
   onBossFelled(kind: EnemyKind, x: number, y: number): void {
     if (this.state !== 'playing') return;
-    const words: Partial<Record<EnemyKind, string>> = {
-      colossus: 'ANKHOR ZERFÄLLT',
-      wyrm: 'IGNIVOR ERLISCHT',
-      vesper: 'VESPERON ZERSTIEBT',
-    };
     this.flashWhite = 0.9;
     this.camera.addShake(9);
     this.score += 1500;
     this.particles.text(x, y, '+1500', PALETTE.gold);
     this.player.heal(this.player.maxHp);
-    this.zoneBanner = { text: words[kind] ?? 'BESIEGT', timer: 3.8 };
+    this.zoneBanner = { text: BOSS_RELIC[kind]?.fell ?? 'BESIEGT', timer: 3.8 };
     audio.play('victory');
-  }
-
-  /** One heart more, for good, and full again right away. */
-  private takeHeartCore(): void {
-    audio.play('upgrade');
-    this.player.maxHp = PLAYER_MAX_HP + 1;
-    this.player.hp = this.player.maxHp;
-    this.zoneBanner = { text: 'HERZKERN — EIN HERZ MEHR', timer: 4.2 };
-    this.flashWhite = 0.7;
+    this.offerRelic(kind);
   }
 
   /**
@@ -526,36 +640,57 @@ export class Game implements World {
    * mark, and the Prismarch sharpens what is already there.
    */
   onDrownedCrownDefeated(): void {
-    if (this.player.beamTier > 0 || this.state !== 'playing') return;
-    if (this.dialogue) {
-      // Something is already on the screen to be read. Skipping the words is
-      // fine; silently dropping the reward is not.
-      this.takeFloodIntoBlade();
-      return;
-    }
+    if (this.player.has('flutklinge') || this.state !== 'playing') return;
     this.flashWhite = 1;
     this.camera.addShake(8);
     audio.play('victory');
-    this.player.vx = 0;
-    this.player.vy = 0;
-    this.dialogue = {
-      speaker: 'DIE ERTRUNKENE KRONE',
-      lines: [
-        'Tausend Jahre habe ich das Wasser dieser Halle gehalten.',
-        'Nimm es. Halten kann ich es nicht mehr.',
-        'Jeder deiner Hiebe wirft von nun an ein Stück davon voraus —',
-        'kurz, aber weiter als ein Schwert reicht.',
-      ],
-      index: 0,
-      after: () => this.takeFloodIntoBlade(),
-    };
+    this.player.heal(this.player.maxHp);
+    this.offerRelic('thalassa');
   }
 
-  /** The first tier of the blade, and the word for it on the HUD. */
-  private takeFloodIntoBlade(): void {
+  /** A relic held back for a moment - see the knight. */
+  private pendingRelic: { key: string; timer: number } | null = null;
+
+  private queueRelic(key: string, delay: number): void {
+    this.pendingRelic = { key, timer: delay };
+  }
+
+  /**
+   * A boss has fallen: its words, then its relic. If something is already
+   * being read, the words are skipped and the relic is taken at once -
+   * skipping a speech is fine, silently dropping a reward is not.
+   */
+  private offerRelic(key: string): void {
+    const info = BOSS_RELIC[key];
+    if (!info || this.player.has(info.relic)) return;
+    if (this.dialogue) {
+      this.takeRelic(info.relic);
+      return;
+    }
+    this.player.vx = 0;
+    this.player.vy = 0;
+    this.dialogue = { speaker: info.speaker, lines: info.lines, index: 0, after: () => this.takeRelic(info.relic) };
+  }
+
+  /** On the hero for good, starting now, and named on the banner. */
+  takeRelic(id: RelicId): void {
+    const p = this.player;
+    if (p.has(id)) return;
+    p.relics.add(id);
+    p.onRelic(id);
+    if (id === 'herzkern') {
+      p.maxHp = PLAYER_MAX_HP + 1;
+      p.hp = p.maxHp;
+    }
+    if (id === 'flutklinge' && p.beamTier < 1) p.beamTier = 1;
+    if (id === 'klingenwelle') {
+      // The Prismarch sharpens whatever the blade already throws - or, for a
+      // hero who never had the first tier, hands him both at once.
+      p.relics.add('flutklinge');
+      p.beamTier = 2;
+    }
     audio.play('upgrade');
-    this.player.beamTier = 1;
-    this.zoneBanner = { text: 'FLUTKLINGE — JEDER HIEB SCHNEIDET WEITER', timer: 4.2 };
+    this.zoneBanner = { text: relic(id).banner, timer: 4.2 };
     this.flashWhite = 0.7;
   }
 
@@ -612,10 +747,8 @@ export class Game implements World {
   private leaveCrystalWorld(): void {
     const back = this.returnTo;
     this.inCrystalWorld = false;
-    this.player.beamTier = 2;
+    this.takeRelic('klingenwelle');
     this.flashWhite = 1;
-    this.zoneBanner = { text: 'KLINGENWELLE — JEDER HIEB SCHIESST', timer: 4.2 };
-    audio.play('upgrade');
     if (!back) return;
     this.checkpointX = back.cpX;
     this.checkpointY = back.cpY;
@@ -870,6 +1003,15 @@ export class Game implements World {
     this.playTime += dt;
     this.spawnAmbient(dt);
 
+    if (this.pendingRelic) {
+      this.pendingRelic.timer -= dt;
+      if (this.pendingRelic.timer <= 0 && !this.dialogue) {
+        const key = this.pendingRelic.key;
+        this.pendingRelic = null;
+        this.offerRelic(key);
+      }
+    }
+
     // Checked every frame rather than only in the branch that books a gem.
     // Hanging the one thing a player has to work for off a single line in a
     // loop means any path that ever counts a gem differently loses it silently.
@@ -910,6 +1052,7 @@ export class Game implements World {
         if (this.isVisible(enemy.x, enemy.y, 220)) enemy.active = true;
         else continue;
       }
+      enemy.harden(this.player.relics);
       enemy.update(dt, this);
       // Anything that ends up under the world is gone. Without this it falls
       // for ever, still updated every frame, and the player never meets it -
@@ -937,20 +1080,31 @@ export class Game implements World {
       if (p.dead) continue;
       if (p.friendly) {
         for (const enemy of this.enemies) {
-          if (!enemy.dead && enemy.overlaps(p.rect)) {
+          if (enemy.dead || p.spare?.has(enemy)) continue;
+          if (enemy.overlaps(p.rect)) {
+            const before = enemy.hp;
             enemy.hurt(p.damage, Math.sign(p.vx) || 1, this);
+            this.player.onDamageDealt(Math.max(0, before - Math.max(0, enemy.hp)));
             p.dead = true;
             break;
           }
         }
-        if (!p.dead && this.boss && !this.boss.dead && this.boss.vulnerable && this.boss.overlaps(p.rect)) {
+        if (!p.dead && this.boss && !this.boss.dead && this.boss.vulnerable && !p.spare?.has(this.boss) && this.boss.overlaps(p.rect)) {
+          const before = this.boss.hp;
           this.boss.hurt(p.damage, Math.sign(p.vx) || 1, this);
+          this.player.onDamageDealt(Math.max(0, before - Math.max(0, this.boss.hp)));
           p.dead = true;
         }
-      } else if (!this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
-        this.player.hurt(p.damage, Math.sign(p.vx) || (this.player.cx < p.cx ? -1 : 1), this);
+      } else if (!p.resting && !this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
+        if (p.damage <= 0) {
+          // Silk: it binds rather than wounds.
+          this.player.sticky = Math.max(this.player.sticky, 1.4);
+          this.particles.burst(p.cx, p.cy, 12, '#e6eef8', { speed: 120, shape: 'spark' });
+        } else {
+          this.player.hurt(p.damage, Math.sign(p.vx) || (this.player.cx < p.cx ? -1 : 1), this);
+          this.particles.burst(p.cx, p.cy, 12, '#ff9a5c', { speed: 150 });
+        }
         p.dead = true;
-        this.particles.burst(p.cx, p.cy, 12, '#ff9a5c', { speed: 150 });
       }
     }
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -963,7 +1117,10 @@ export class Game implements World {
       pickup.update(dt, this);
       if (pickup.dead) {
         this.collected.add(pickup.id);
-        if (pickup.kind === 'gem') this.gems++;
+        if (pickup.kind === 'gem') {
+          this.gems++;
+          this.player.onGem();
+        }
       }
     }
 
@@ -1068,6 +1225,11 @@ export class Game implements World {
     this.dialogue = null;
     this.player.beamTier = 0;
     this.player.maxHp = PLAYER_MAX_HP;
+    // Every relic goes with a restart, and whatever they had saved up.
+    this.player.relics.clear();
+    this.player.goldCount = 0;
+    this.player.bloodMeter = 0;
+    this.pendingRelic = null;
     this.felledBosses.clear();
     for (const arena of this.level.arenas) {
       arena.cleared = false;
@@ -1131,7 +1293,13 @@ export class Game implements World {
             ? '255,140,90'
             : p.kind === 'blood'
               ? '255,60,90'
-              : '200,180,160';
+              : p.kind === 'quake' || p.kind === 'coin'
+                ? '255,214,140'
+                : p.kind === 'shard'
+                  ? '200,160,255'
+                  : p.kind === 'web'
+                    ? '220,230,240'
+                    : '200,180,160';
       add(p.cx, p.cy, p.kind === 'bone' ? 40 : 84, rgb, 0.8, 0.34);
     }
     // Every enemy carries some light. A threat the player cannot see is not a
@@ -1159,7 +1327,7 @@ export class Game implements World {
     // The hero carries his own light: it flares when the blade swings, and it
     // swells while a heavy strike is being wound up.
     const swing = this.player.isAttacking ? 1 : 0;
-    const charge = Math.min(1, this.player.chargeTimer / 0.42) * (this.player.chargeReady ? 1 : 0.6);
+    const charge = Math.min(1, this.player.chargeTimer / this.player.chargeTime) * (this.player.chargeReady ? 1 : 0.6);
     const guard = this.player.parryTimer > 0 || this.player.parryFlash > 0.4 ? 0.5 : 0;
     add(
       this.player.cx,
@@ -1442,30 +1610,10 @@ export class Game implements World {
     ctx.fillStyle = '#8b95bd';
     ctx.fillText(`EDELSTEINE ${this.gems}/${this.totalGems}   TODE ${this.deaths}`, 24, 92);
 
-    // The blade upgrade, once it is earned. A power the player cannot see he
-    // has is a power he does not use.
-    if (this.player.bladeBeam) {
-      const sharp = this.player.beamTier === 2;
-      const pulse = 0.75 + Math.sin(this.time * 2.4) * 0.25;
-      ctx.save();
-      ctx.translate(30, 112);
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = pulse;
-      ctx.fillStyle = sharp ? '#9fe6ff' : '#8ce8d4';
-      ctx.beginPath();
-      ctx.moveTo(7, 0);
-      ctx.quadraticCurveTo(1, -6, -7, -4);
-      ctx.quadraticCurveTo(0, 0, -7, 4);
-      ctx.quadraticCurveTo(1, 6, 7, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      ctx.globalAlpha = 0.55 + pulse * 0.45;
-      ctx.font = font(12, 600);
-      ctx.fillStyle = sharp ? '#8fe8ff' : '#7fe3cd';
-      ctx.fillText(sharp ? 'KLINGENWELLE' : 'FLUTKLINGE', 42, 116);
-      ctx.globalAlpha = 1;
-    }
+    // What the bosses have left him, one badge each, in the order the road
+    // hands them out. A power the player cannot see he has is a power he does
+    // not use - and the ones that fill up or wear off show how far.
+    this.drawRelicRow(ctx);
 
     // Progress bar of the whole level.
     const barW = 260;
@@ -1624,6 +1772,83 @@ export class Game implements World {
   }
 
   /**
+   * The badges under the score, six to a row. See drawRelicBadge. In a single
+   * row eleven of them ran out to the middle of the screen, under the banner
+   * a boss's fall puts up - the very moment the newest one arrives.
+   */
+  private drawRelicRow(ctx: CanvasRenderingContext2D): void {
+    const p = this.player;
+    let n = 0;
+    for (const r of RELICS) {
+      if (!p.has(r.id)) continue;
+      // Klingenwelle sharpens the Flutklinge rather than sitting beside it.
+      if (r.id === 'flutklinge' && p.has('klingenwelle')) continue;
+      let lit = true;
+      let fill: number | null = null;
+      switch (r.id) {
+        case 'seidenmantel':
+          lit = p.shieldUp;
+          fill = p.shieldUp ? null : 1 - p.shieldTimer / SILK_REGROW;
+          break;
+        case 'zweiteratem':
+          lit = p.secondWind;
+          break;
+        case 'blutdurst':
+          fill = p.bloodMeter / BLOOD_PER_HEART;
+          break;
+        case 'goldzahn':
+          fill = p.goldCount / GOLD_PER_HEART;
+          break;
+        case 'hydrablut':
+          fill = p.hp < p.maxHp ? 1 - p.regrowTimer / HYDRA_REGROW : null;
+          break;
+      }
+      drawRelicBadge(ctx, r.id, 34 + (n % 6) * 25, 114 + Math.floor(n / 6) * 24, r.color, lit, fill);
+      n++;
+    }
+  }
+
+  /**
+   * The relics, by name and by what they do, for the pause screen - the HUD
+   * can only show a badge, and a badge does not say what it is for.
+   */
+  private drawRelicList(ctx: CanvasRenderingContext2D, top: number): void {
+    const owned = RELICS.filter((r) => this.player.has(r.id));
+    if (owned.length === 0) {
+      drawTextCentered(ctx, 'Noch keine Relikte — jeder Boss hinterlässt eines.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
+      return;
+    }
+    const rowH = 24;
+    const h = owned.length * rowH + 24;
+    // Wide enough for the longest line, and the line held to its column all
+    // the same: it ran on under the boss's name once, measured in the
+    // screenshots, and a list nobody can read is not a list.
+    const w = 860;
+    const left = VIEW_W / 2 - w / 2;
+    drawPanel(ctx, left, top, w, h, 0.7);
+    ctx.font = font(12, 600);
+    const fromRight = left + w - 18;
+    const fromW = Math.max(...owned.map((r) => ctx.measureText(r.from).width));
+    const textX = left + 178;
+    const textW = fromRight - fromW - 20 - textX;
+    owned.forEach((r, i) => {
+      const y = top + 22 + i * rowH;
+      drawRelicBadge(ctx, r.id, left + 26, y - 4, r.color, true, null);
+      ctx.font = font(13, 700);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = r.color;
+      ctx.fillText(r.name, left + 44, y);
+      ctx.font = font(12, 600);
+      ctx.fillStyle = '#aeb8dc';
+      ctx.fillText(r.text, textX, y, textW);
+      ctx.fillStyle = '#5f6a92';
+      ctx.textAlign = 'right';
+      ctx.fillText(r.from, fromRight, y);
+      ctx.textAlign = 'left';
+    });
+  }
+
+  /**
    * The dialogue box. One line at a time, because five lines dumped at once are
    * five lines skipped - and this is the only place in the game that says out
    * loud what is about to happen to the player.
@@ -1679,19 +1904,20 @@ export class Game implements World {
         this.drawTitle(ctx);
         break;
       case 'paused':
-        ctx.fillStyle = 'rgba(4,6,12,0.72)';
+        ctx.fillStyle = 'rgba(4,6,12,0.78)';
         ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-        drawTextCentered(ctx, 'PAUSE', VIEW_W / 2, VIEW_H / 2 - 6, 46, '#f4f7ff');
-        drawTextCentered(ctx, 'P oder LEERTASTE zum Fortsetzen  ·  R für Neustart', VIEW_W / 2, VIEW_H / 2 + 30, 14, '#94a0c8', 600);
+        drawTextCentered(ctx, 'PAUSE', VIEW_W / 2, 92, 46, '#f4f7ff');
+        drawTextCentered(ctx, 'P oder LEERTASTE zum Fortsetzen  ·  R für Neustart', VIEW_W / 2, 124, 14, '#94a0c8', 600);
         drawTextCentered(
           ctx,
           `M  Musik ${audio.musicOff ? 'aus' : 'an'}   ·   N  Ton ${audio.muted ? 'aus' : 'an'}   ·   B  Bildwackeln ${this.camera.motion > 0 ? 'an' : 'aus'}`,
           VIEW_W / 2,
-          VIEW_H / 2 + 56,
+          146,
           12,
           '#6f7ba3',
           600,
         );
+        this.drawRelicList(ctx, 168);
         break;
       case 'dead': {
         const a = clamp(1.1 - this.deathTimer, 0, 1) * 0.78;
@@ -1761,7 +1987,7 @@ export class Game implements World {
     ctx.globalAlpha = 1;
     drawTextCentered(
       ctx,
-      'Acht Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
+      'Elf Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
       VIEW_W / 2,
       502,
       12,

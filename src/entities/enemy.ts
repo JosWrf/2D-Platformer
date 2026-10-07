@@ -6,6 +6,7 @@ import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
+import { type RelicId, mightOf } from './relics';
 
 export type EnemyKind =
   | 'slime'
@@ -22,7 +23,11 @@ export type EnemyKind =
   | 'prismarch'
   | 'colossus'
   | 'wyrm'
-  | 'vesper';
+  | 'vesper'
+  | 'mimic'
+  | 'spider'
+  | 'spiderling'
+  | 'shadow';
 
 /**
  * The kinds that are bosses rather than roster: announced, with a health bar,
@@ -38,25 +43,33 @@ export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
   'colossus',
   'wyrm',
   'vesper',
+  'mimic',
+  'spider',
+  'shadow',
 ]);
 
 /**
- * What a boss becomes when the hero turns up with a blade that throws.
+ * What a boss becomes when the hero turns up with what the others left him.
  *
- * The upgrade is worth roughly two damage a second at no risk at all - most of
- * a sword's output without a sword's danger - and the bosses were built against
- * a sword. Measured on the knight before this: a bot that only held the attack
- * key used to lose the fight eight times over, and with the blade it killed him
- * in fourteen seconds while he got a single move off.
+ * It started with the blade: the upgrade is worth roughly two damage a second
+ * at no risk at all, and the bosses were built against a sword. Measured on the
+ * knight before this: a bot that only held the attack key used to lose the
+ * fight eight times over, and with the blade it killed him in fourteen seconds
+ * while he got a single move off.
  *
- * So every boss takes stock of the blade in front of it, once, when it wakes:
- * more health, and more punishment absorbed before it loses its footing.
- * Nothing shifts mid-fight, and a hero who never found the upgrade meets
- * exactly the boss that was tuned for him.
+ * Every boss leaves a relic now, so every boss takes stock of all of them,
+ * once, when it wakes: more health for everything that makes the hero hit
+ * harder, and a little more for everything that keeps him standing - a longer
+ * fight is the only answer a boss has to a hero who heals. Poise grows faster
+ * than health with the offence alone, so a stronger blade does not turn into
+ * a stunlock. Nothing shifts mid-fight, and the flood blade alone still comes
+ * out at the +22 % and +35 % it always did.
  */
-export function bossScale(beamTier: number): { hp: number; poise: number } {
-  const tier = clamp(beamTier, 0, 2);
-  return { hp: 1 + 0.22 * tier, poise: 1 + 0.35 * tier };
+export function bossScale(relics: ReadonlySet<RelicId>): { hp: number; poise: number } {
+  const might = mightOf(relics);
+  const offense = might.offense - 1;
+  const defense = might.defense - 1;
+  return { hp: 1 + offense + defense * 0.3, poise: 1 + offense * 1.6 };
 }
 
 /** A light in world space, as the lighting pass takes it. */
@@ -193,10 +206,30 @@ export abstract class Enemy extends Body {
    * health, and a poise figure scaled the same way. See bossScale.
    */
   protected sizeUpFor(world: World, poiseBase: number): number {
-    const scale = bossScale(world.player.beamTier);
+    const scale = bossScale(world.player.relics);
     this.maxHp = Math.round(this.maxHp * scale.hp);
     this.hp = this.maxHp;
     return Math.round(poiseBase * scale.poise);
+  }
+
+  /** Set once a roster monster has taken stock of the hero. */
+  hardened = false;
+
+  /**
+   * The roster's answer to the relics: a monster that wakes in front of a
+   * hero who hits harder carries more health, in the same measure. Once, when
+   * it first comes into view - the hero it meets is the hero who is there, not
+   * the one who passed the last checkpoint. Bosses do this for themselves when
+   * they wake; see sizeUpFor.
+   */
+  harden(relics: ReadonlySet<RelicId>): void {
+    if (this.hardened) return;
+    this.hardened = true;
+    if (BOSS_KINDS.has(this.kind)) return;
+    const scaled = Math.round(this.maxHp * mightOf(relics).offense);
+    if (scaled <= this.maxHp) return;
+    this.hp += scaled - this.maxHp;
+    this.maxHp = scaled;
   }
 
   /**
@@ -1383,6 +1416,11 @@ export class Warden extends Enemy {
 
   protected override deathColor(): string {
     return '#8f5fd0';
+  }
+
+  protected override die(world: World): void {
+    super.die(world);
+    world.onBossFelled('warden', this.cx, this.y - 20);
   }
 
   /**

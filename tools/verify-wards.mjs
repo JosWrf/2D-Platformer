@@ -17,6 +17,9 @@
  *     the boss is waiting, asleep, with the way on still shut.
  *   - When the boss falls, both wards go - and stay gone after another death.
  *
+ * Gierschlund, Arachna and Umbra came with their own warded rooms from the
+ * start; they are held to the same promises.
+ *
  * Usage: node tools/verify-wards.mjs
  */
 import { chromium } from 'playwright';
@@ -68,7 +71,7 @@ const result = await page.evaluate(() => {
     g.update(1 / 60, input);
     g.render(ctx);
   };
-  const BOSSES = ['gallert', 'thalassa', 'warden', 'colossus', 'wyrm', 'vesper'];
+  const BOSSES = ['gallert', 'mimic', 'colossus', 'spider', 'wyrm', 'thalassa', 'vesper', 'shadow', 'warden'];
   const bossIn = (arena) =>
     g.enemies.find((e) => BOSSES.includes(e.kind) && !e.dead && e.x + e.w > arena.left - 40 && e.x < arena.right + 40);
   const keep = () => {
@@ -94,6 +97,11 @@ const result = await page.evaluate(() => {
   };
   const dieAndReturn = () => {
     const p = g.player;
+    // By now he carries what the bosses before left him, and Arachna's silk
+    // or the shadow's second breath would each catch this blow. A death is
+    // what is wanted here, not a test of them.
+    p.shieldUp = false;
+    p.secondWind = false;
     p.invuln = 0;
     p.hurt(99, 1, g, true);
     for (let f = 0; f < 60 && g.state === 'playing'; f++) tick();
@@ -192,7 +200,7 @@ console.log(JSON.stringify(result, null, 2));
 await browser.close();
 server.close();
 
-const expected = ['gallert', 'colossus', 'wyrm', 'thalassa', 'vesper', 'warden'];
+const expected = ['gallert', 'mimic', 'colossus', 'spider', 'wyrm', 'thalassa', 'vesper', 'shadow', 'warden'];
 const ok = result.bad.length === 0 && expected.every((k) => result.bosses.includes(k));
 if (!ok) {
   console.error(`FAIL: ${result.bad.length ? `wards broken around ${result.bad.join(', ')}` : 'an expected boss arena is missing'}`);

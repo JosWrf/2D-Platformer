@@ -106,6 +106,9 @@ const result = await page.evaluate(() => {
     g.restart();
     g.state = 'playing';
     const h = find();
+    // The blade comes from Thalassa and the Prismarch, as relics: those are
+    // what a boss sizes itself up against now, the tier only follows them.
+    for (const id of ['flutklinge', 'klingenwelle'].slice(0, tier)) p.relics.add(id);
     p.beamTier = tier;
     p.maxHp = 12;
     p.hp = p.maxHp;

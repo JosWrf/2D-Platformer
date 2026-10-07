@@ -6,8 +6,13 @@ import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
 const WYRM_HP = 58;
-/** Damage to the head, surfaced, before it slams down stunned. */
-const WYRM_POISE = 11;
+/**
+ * Damage to the head, surfaced, before it slams down stunned. Seven, down from
+ * eleven: with the head out for a second and a half at a time, eleven was more
+ * than a careful hero ever landed in one window, so the long window behind it
+ * came about twice a fight.
+ */
+const WYRM_POISE = 7;
 const SEGMENTS = 15;
 const GAP = 21;
 /** How deep he swims under the floor. */
@@ -19,6 +24,20 @@ const PILLAR_H = 82;
  */
 const LOCK = 0.4;
 const PILLAR_W = 34;
+/** Where his head lies when it is down on the floor: in reach of a standing swing. */
+const LIE = 22;
+/**
+ * Where it hangs after the spit. Low enough that a swing from the floor
+ * catches his jaw and a hop takes the whole head - it used to hang at 96, which
+ * only a jump timed to the top of its arc could reach.
+ */
+const LOW_HEAD = 54;
+/** How high he rears for the spit itself. */
+const SPIT_HEAD = 112;
+/** Seconds his head lies stuck where it came down after a breach. */
+const STUCK = 1.5;
+/** Seconds his head hangs low after the spit. */
+const EXPOSED = 2.1;
 
 interface Point {
   x: number;
@@ -55,6 +74,7 @@ type WyrmState =
   | 'rise'
   | 'spitWind'
   | 'exposed'
+  | 'stuck'
   | 'stunned'
   | 'sink'
   | 'waveEdge'
@@ -72,17 +92,28 @@ type WyrmState =
  *
  *   Durchbruch - the floor under the hero starts to glow and follows him, then
  *                holds still for a breath and bursts. Keep moving; when it
- *                stops, leave.
+ *                stops, leave. What goes up comes down: his head slams onto
+ *                the floor beside the hole and sticks there, in reach, for a
+ *                breath and a half.
  *   Glutspeien - he rises out of the floor a little way off and spits clots of
- *                magma that keep burning where they land. Then he stays up,
- *                head low, and that is the time to hit it.
+ *                magma at the hero and past him - never between the two of
+ *                them, so the way to him stays open. Then he stays up, head
+ *                hanging low, and that is the time to hit it.
  *   Feuerwelle - he goes to the far wall and swims the length of the chamber
  *                just under the floor, and it comes up as fire behind him the
  *                whole way. The floor is no place to be; the ledges are.
  *
- * Hurt the head enough while it is up and it comes down onto the floor,
+ * Hurt the head enough while it hangs there and it comes down onto the floor,
  * stunned - the long window. From half health on he breaches twice, and the
  * fire he throws up at the top of a breach comes down again as rain.
+ *
+ * He was too strong, and not because of his numbers: measured, a hero who read
+ * every tell and went for the head every time it showed dealt 0.3 to 0.5 damage
+ * a second, took thirty hearts in two minutes and still had not finished him.
+ * The head was out of a standing swing's reach for nine tenths of the fight,
+ * the spit put its fire on the only path to it, and after a breach he was gone
+ * again before anyone could turn round. Now every one of his moves but the
+ * wave ends with the head where a sword can find it.
  */
 export class Wyrm extends Enemy {
   private state: WyrmState = 'dormant';
@@ -119,6 +150,14 @@ export class Wyrm extends Enemy {
   private burstDone = false;
   /** The fire at the top of this breach has come down. */
   private rained = false;
+  /** Where his neck goes into the rock while the head lies on the floor. */
+  private hole = 0;
+  /** This breach ends with the head on the floor, rather than back under it. */
+  private landing = false;
+  /** The way down from the top of this breach has been picked. */
+  private aimed = false;
+  /** Where the head comes to rest when it is knocked down. */
+  private slumpX = 0;
 
   override castLight = false;
 
@@ -214,6 +253,8 @@ export class Wyrm extends Enemy {
       audio.play('bossRoar', 0.9);
       world.camera.addShake(6);
     }
+    // The breach's landing is its own window and does not chain into the long
+    // one: only the head hanging after a spit can be beaten down.
     const up = this.state === 'exposed' || this.state === 'spitWind' || this.state === 'rise';
     if (up && this.poise <= 0 && this.poiseLock <= 0) this.knockDown(world);
   }
@@ -224,15 +265,23 @@ export class Wyrm extends Enemy {
     this.knockDown(world);
   }
 
-  /** The head comes down onto the floor, and stays there a while. */
+  /**
+   * The head comes down onto the floor, and stays there a while. It slumps
+   * towards whoever put it there - never onto him - and the neck stays in the
+   * hole it came out of, so the way to the head is clear.
+   */
   private knockDown(world: World): void {
     this.poise = this.poiseMax;
     this.poiseLock = 3.5;
     this.state = 'stunned';
-    this.timer = 2.1;
+    this.timer = 2.4;
     this.jaw = 0.2;
     this.hvx = 0;
     this.hvy = 0;
+    const p = world.player;
+    const toward = sign(p.cx - this.hx) || 1;
+    this.hole = this.hx;
+    this.slumpX = clamp(this.hx + toward * clamp(Math.abs(p.cx - this.hx) - 52, 0, 64), this.arenaLeft + 40, this.arenaRight - 40);
     audio.play('slam', 0.9);
     audio.play('bossRoar', 1.3);
     world.camera.addShake(7);
@@ -252,7 +301,13 @@ export class Wyrm extends Enemy {
     world.hitStop(0.14);
   }
 
-  /** Only what is above the floor can touch him, and only the head bites. */
+  /**
+   * Only what is above the floor can touch him, and only while he is coming
+   * through it: the head bites and the plates burn during a breach. A head
+   * lying on the floor or hanging after a spit is the window, not a trap, and
+   * one that is pulling back into the rock is leaving - walking into either to
+   * swing costs nothing. The fire he leaves behind burns whatever he is doing.
+   */
   override touchPlayer(world: World): void {
     const p = world.player;
     if (this.dead || p.dead || this.state === 'dormant' || this.state === 'dying') return;
@@ -269,9 +324,9 @@ export class Wyrm extends Enemy {
         p.hurt(1, sign(p.cx - pillar.x) || 1, world);
       }
     }
-    if (p.isInvulnerable || this.state === 'stunned') return;
+    if (p.isInvulnerable || this.state !== 'breach') return;
     if (this.headUp && rectsOverlap(this.headRect(), p.rect)) {
-      p.hurt(this.state === 'breach' ? 2 : 1, sign(p.cx - this.hx) || 1, world);
+      p.hurt(2, sign(p.cx - this.hx) || 1, world);
       return;
     }
     for (let i = 2; i < this.segs.length; i++) {
@@ -330,6 +385,8 @@ export class Wyrm extends Enemy {
           this.breaches = 0;
           this.burstDone = true;
           this.rained = true;
+          // Showing himself, not attacking: he goes straight back under.
+          this.landing = false;
           audio.play('bossRoar', 0.85);
         }
         break;
@@ -354,6 +411,12 @@ export class Wyrm extends Enemy {
           this.state = 'breach';
           this.burstDone = false;
           this.rained = false;
+          this.aimed = false;
+          this.hole = this.hx;
+          // In his second half the first of a pair goes straight back under
+          // to hunt again; the last breach of a move always comes down on
+          // the floor.
+          this.landing = !(this.phaseTwo && this.breaches === 0);
           audio.play('bossRoar', 1.05);
         }
         break;
@@ -374,7 +437,21 @@ export class Wyrm extends Enemy {
           }
           audio.play('fireball', 0.8);
         }
-        if (this.hvy > 0 && this.hy > this.floorY + DEPTH * 0.6) {
+        // Over the top he turns, and the head comes down beside the hole -
+        // towards the hero, but never onto him: the dodge he was asked for is
+        // what puts him in reach of it.
+        if (this.landing && !this.aimed && this.hvy > 0) {
+          this.aimed = true;
+          const toward = sign(player.cx - this.hole) || (Math.random() < 0.5 ? -1 : 1);
+          const reach = clamp(Math.abs(player.cx - this.hole) - 58, 46, 120);
+          const landX = clamp(this.hole + toward * reach, this.arenaLeft + 40, this.arenaRight - 40);
+          const fall = Math.sqrt((2 * Math.max(20, this.floorY - LIE - this.hy)) / 1850);
+          this.hvx = (landX - this.hx) / fall;
+        }
+        if (this.landing && this.hvy > 0 && this.hy >= this.floorY - LIE) {
+          this.breaches++;
+          this.stick(world);
+        } else if (this.hvy > 0 && this.hy > this.floorY + DEPTH * 0.6) {
           this.hy = this.floorY + DEPTH;
           this.hvy = 0;
           this.hvx = 0;
@@ -393,8 +470,8 @@ export class Wyrm extends Enemy {
         // Up out of the rock at the spot he picked, head reared back.
         this.hx = approach(this.hx, this.riseX, 520 * dt);
         if (Math.abs(this.hx - this.riseX) < 4) {
-          this.hy = approach(this.hy, this.floorY - 128, 520 * dt);
-          if (this.hy <= this.floorY - 126) {
+          this.hy = approach(this.hy, this.floorY - SPIT_HEAD, 520 * dt);
+          if (this.hy <= this.floorY - SPIT_HEAD + 2) {
             this.state = 'spitWind';
             this.timer = 0.72;
             audio.play('tell', 1.2);
@@ -409,21 +486,37 @@ export class Wyrm extends Enemy {
         this.timer -= dt;
         this.throat = 1;
         this.jaw = Math.max(this.jaw, 0.5 + (1 - this.timer / 0.72) * 0.5);
-        this.hy = this.floorY - 128 - Math.sin(this.anim * 6) * 3;
+        this.hy = this.floorY - SPIT_HEAD - Math.sin(this.anim * 6) * 3;
         if (this.timer <= 0) this.spit(world);
         break;
 
       case 'exposed':
         this.timer -= dt;
-        // Head low and swaying: the window.
-        this.hy = approach(this.hy, this.floorY - 96, 200 * dt);
+        // Head low and swaying, breathing smoke: the window.
+        this.hy = approach(this.hy, this.floorY - LOW_HEAD - Math.sin(this.anim * 2.2) * 5, 260 * dt);
         this.hx += Math.sin(this.anim * 2.4) * 18 * dt;
+        this.hangNeck(player);
+        this.smoke(dt, world);
+        if (this.timer <= 0) this.beginSink();
+        break;
+
+      case 'stuck':
+        // Jaws in the rock where the head came down. It shakes, trying to
+        // pull itself free, and that is all it can do.
+        this.timer -= dt;
+        this.hy = this.floorY - LIE;
+        this.hx += Math.sin(this.anim * 21) * (this.timer < 0.4 ? 64 : 30) * dt;
+        this.archTo(this.hole);
+        this.smoke(dt, world);
         if (this.timer <= 0) this.beginSink();
         break;
 
       case 'stunned':
         this.timer -= dt;
-        this.hy = approach(this.hy, this.floorY - 24, 900 * dt);
+        this.hx = approach(this.hx, this.slumpX, 420 * dt);
+        this.hy = approach(this.hy, this.floorY - LIE, 900 * dt);
+        this.archTo(this.hole);
+        this.smoke(dt, world);
         if (this.timer <= 0) this.beginSink();
         break;
 
@@ -563,8 +656,10 @@ export class Wyrm extends Enemy {
         audio.play('rumble', 1.2);
         break;
       case 'spit': {
+        // Close enough to be reached before the window shuts. It used to be
+        // 230 to 300 px off, which is more than a second of running.
         const side = player.cx > (this.arenaLeft + this.arenaRight) / 2 ? -1 : 1;
-        this.riseX = clamp(player.cx + side * rand(230, 300), this.arenaLeft + 60, this.arenaRight - 60);
+        this.riseX = clamp(player.cx + side * rand(150, 200), this.arenaLeft + 60, this.arenaRight - 60);
         this.state = 'rise';
         audio.play('rumble', 1.4);
         break;
@@ -580,13 +675,20 @@ export class Wyrm extends Enemy {
 
   private waveCooldown = 1;
 
+  /**
+   * Clots of magma: one on the hero and the rest beyond him, away from the
+   * head. They used to straddle him, so one of them always came down between
+   * him and the head and its pool burned there for the whole of the window
+   * after - measured, two thirds of what a hero lost to this fight he lost
+   * walking through that fire to get at the head.
+   */
   private spit(world: World): void {
     const player = world.player;
     const count = this.phaseTwo ? 5 : 3;
     const flight = 0.8;
+    const away = sign(player.cx - this.hx) || 1;
     for (let i = 0; i < count; i++) {
-      const spread = (i - (count - 1) / 2) * 72;
-      const tx = player.cx + spread;
+      const tx = clamp(player.cx + away * i * (this.phaseTwo ? 58 : 70), this.arenaLeft + 20, this.arenaRight - 20);
       const vx = (tx - this.hx) / flight;
       const vy = (this.floorY - 10 - this.hy) / flight - 0.5 * 980 * flight;
       const glob = new Projectile('magma', this.hx - 9, this.hy - 9, vx, vy);
@@ -598,7 +700,79 @@ export class Wyrm extends Enemy {
     audio.play('fireball', 0.7);
     audio.play('bossRoar', 1.5);
     this.state = 'exposed';
-    this.timer = 1.6 * this.haste;
+    this.timer = EXPOSED * this.haste;
+  }
+
+  /** The head comes down out of a breach and sticks where it hit. */
+  private stick(world: World): void {
+    this.state = 'stuck';
+    this.timer = STUCK * (this.phaseTwo ? 0.8 : 1);
+    this.hy = this.floorY - LIE;
+    this.hvx = 0;
+    this.hvy = 0;
+    this.jaw = 0.6;
+    this.archTo(this.hole);
+    audio.play('slam', 0.85);
+    audio.play('crumble', 1.1);
+    world.camera.addShake(6);
+    world.hitStop(0.05);
+    world.particles.burst(this.hx, this.floorY - 6, 20, '#6a4a3e', { speed: 230, gravity: 900, size: 4, angle: -Math.PI / 2, spread: 2.4 });
+    world.particles.burst(this.hx, this.floorY - 6, 12, '#ffae54', { speed: 200, gravity: 300, shape: 'spark', angle: -Math.PI / 2, spread: 2.4 });
+    world.particles.text(this.hx, this.floorY - 70, 'ER STECKT FEST!', '#ffd08a');
+  }
+
+  /**
+   * Lays the body as an arch from the head back to where the neck goes into
+   * the rock, and on down out of sight. A head on the floor with the body
+   * standing straight up over it read as a pillar with a skull at its foot.
+   */
+  private archTo(holeX: number): void {
+    const span = Math.abs(holeX - this.hx);
+    this.layNeck(holeX, (this.hx + holeX) / 2, Math.min(this.hy, this.floorY) - 34 - span * 0.3);
+  }
+
+  /**
+   * The neck of a head that hangs low after the spit: up out of the rock a
+   * little behind it, and over, like a snake that has reared and is leaning
+   * in. Following its own path up, the body stood as a column above the head.
+   */
+  private hangNeck(player: { cx: number }): void {
+    const back = sign(this.hx - player.cx) || 1;
+    const holeX = clamp(this.hx + back * 42, this.arenaLeft + 30, this.arenaRight - 30);
+    this.layNeck(holeX, this.hx + back * 30, this.hy - 26);
+  }
+
+  /** A quadratic curve from the head through a control point into the floor at holeX. */
+  private layNeck(holeX: number, mx: number, my: number): void {
+    const x0 = this.hx;
+    const y0 = this.hy;
+    const x1 = holeX;
+    const y1 = this.floorY + 8;
+    const pts: Point[] = [];
+    const steps = 36;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const u = 1 - t;
+      pts.push({ x: u * u * x0 + 2 * u * t * mx + t * t * x1, y: u * u * y0 + 2 * u * t * my + t * t * y1 });
+    }
+    for (let d = 10; d <= 300; d += 10) pts.push({ x: x1, y: y1 + d });
+    this.trail = pts;
+  }
+
+  /** Smoke off a head that has stopped moving: it reads as spent, and as hot. */
+  private smoke(dt: number, world: World): void {
+    if (world.time % 0.09 >= dt) return;
+    world.particles.spawn({
+      x: this.hx + rand(-14, 14),
+      y: this.hy - 10,
+      vx: rand(-12, 12),
+      vy: -rand(30, 60),
+      gravity: -30,
+      color: Math.random() < 0.5 ? 'rgba(120,96,90,0.55)' : 'rgba(255,150,70,0.5)',
+      size: rand(2.5, 4),
+      life: 0.7,
+      shape: 'circle',
+    });
   }
 
   private beginSink(): void {
@@ -934,8 +1108,8 @@ export class Wyrm extends Enemy {
     const heat = 1 - this.cool;
     const neck = this.segs[0] ?? { x: this.hx - 10, y: this.hy + 10 };
     let ang = Math.atan2(this.hy - neck.y, this.hx - neck.x);
-    // Stunned, he lies along the floor facing the way he fell.
-    if (this.state === 'stunned') ang = this.hx > neck.x ? 0.1 : Math.PI - 0.1;
+    // Down on the floor he lies along it, facing away from his neck.
+    if (this.state === 'stunned' || this.state === 'stuck') ang = this.hx > neck.x ? 0.1 : Math.PI - 0.1;
     const flip = Math.cos(ang) < 0;
     const flash = this.flash > 0 ? this.headFlash : 0;
     withHitFlash(ctx, flash, () => {

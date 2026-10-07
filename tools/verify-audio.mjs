@@ -94,9 +94,11 @@ const fights = await page.evaluate(() => {
   for (const [i, arena] of g.level.arenas.entries()) {
     g.warpTo(arena.entryTx + 3);
     let zoneTrack = null;
+    // In, and on towards the boss until it wakes: Gierschlund lies still
+    // until the hero is close enough to bite.
     for (let f = 0; f < 60 * 6 && !arena.fighting; f++) {
       g.player.hp = g.player.maxHp;
-      tick({ right: f < 30 });
+      tick({ right: f < 30 || !g.enemies.some((e) => e.engaged && !e.dead && e.x + e.w > arena.left && e.x < arena.right) });
       if (f === 2) zoneTrack = window.audio.currentTrack;
     }
     for (let f = 0; f < 10; f++) tick();
@@ -164,7 +166,8 @@ server.close();
 
 const bossTracks = Object.entries(fights).map(([k, v]) => [k, v.fightTrack]);
 const tracksOf = (kinds) => bossTracks.filter(([k]) => kinds.includes(k)).map(([, t]) => t);
-const distinct = new Set(tracksOf(['colossus', 'wyrm', 'thalassa', 'vesper', 'knight', 'gallert']));
+const FIGHTS = ['gallert', 'mimic', 'colossus', 'spider', 'wyrm', 'thalassa', 'vesper', 'shadow', 'knight'];
+const distinct = new Set(tracksOf(FIGHTS));
 const checks = [
   ['every effect makes a sound', silentSfx.length === 0],
   ['no effect clips on its own', clippingSfx.length === 0],
@@ -176,11 +179,12 @@ const checks = [
   ['the run starts in the forest, to the forest', started.state === 'playing' && started.track === 'forest'],
   [
     'every boss arena plays a fight, and hands back to the zone after',
-    Object.entries(fights)
-      .filter(([k]) => k !== 'knight')
-      .every(([, v]) => v.fightTrack && v.fightTrack.startsWith('boss') && v.after && !v.after.startsWith('boss')),
+    Object.keys(fights).length === 10 &&
+      Object.entries(fights)
+        .filter(([k]) => k !== 'knight')
+        .every(([, v]) => v.fightTrack && v.fightTrack.startsWith('boss') && v.after && !v.after.startsWith('boss')),
   ],
-  ['six bosses, six different fights', distinct.size === 6],
+  [`${FIGHTS.length} bosses, ${FIGHTS.length} different fights`, distinct.size === FIGHTS.length],
   ['the knight has his own', fights.knight.fightTrack === 'bossKnight'],
   ['M turns the music off, and says so', musicOff.off && /MUSIK AUS/.test(musicOff.banner)],
   ['N turns the sound off, and says so', soundOff.muted && /TON AUS/.test(soundOff.banner)],

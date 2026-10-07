@@ -6,13 +6,13 @@ Läuft direkt im Browser, ohne Installation: **joswrf.github.io/2D-Platformer**
 
 Ein 2D-Jump-'n'-Run in TypeScript: ein schwertschwingender Held kämpft sich
 durch ein großes, zusammenhängendes Level über acht Zonen bis in den Thronsaal
-des Schattenritters Morvain — und darüber hinaus. Acht Bosse stehen auf dem Weg,
-und an keinem führt er vorbei.
+des Schattenritters Morvain — und darüber hinaus. Elf Bosse stehen auf dem Weg,
+an keinem führt er vorbei, und jeder lässt ihm etwas da, das er behält.
 
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
 auf ein `<canvas>` gezeichnet, und alles, was man hört, wird per WebAudio
-synthetisiert: gut vierzig Soundeffekte und achtzehn Musikstücke, keines davon
-aufgenommen.
+synthetisiert: gut vierzig Soundeffekte und einundzwanzig Musikstücke, keines
+davon aufgenommen.
 
 [![Titelbild](screenshots/01-titel.png)](https://joswrf.github.io/2D-Platformer/)
 
@@ -24,7 +24,7 @@ npm run dev      # http://127.0.0.1:5173
 npm run build    # Typecheck + Produktions-Build nach dist/
 ```
 
-Der Build legt genau eine Datei ab: `dist/index.html`, rund 300 kB, mit dem
+Der Build legt genau eine Datei ab: `dist/index.html`, rund 375 kB, mit dem
 gesamten Spiel darin. Sie braucht keinen Server — ein Doppelklick auf die
 Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 
@@ -61,24 +61,27 @@ rechts. Geprüft von 320×240 bis 2560×1440, dazu Hochformat 500×900.
 
 ## Das Level
 
-Ein durchgehendes Level aus 1260 Kacheln (40 320 px) in acht Zonen, plus eine
+Ein durchgehendes Level aus 1394 Kacheln (44 608 px) in acht Zonen, plus eine
 neunte hinter der Welt, die man sich verdienen muss:
 
 1. **Nebelwald** — Einstieg, Abgründe, Schleime, und am Ende das Moor mit
    Gallert darin
-2. **Versunkene Ruinen** — Säulen, Klettertürme, Skelette, und dahinter **das
-   Tempelherz**, der Innenhof, um den die Ruinen gebaut sind: Ankhor, der
-   Tempelkoloss
-3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier, und am
-   Ende **die Glutkammer**, in deren Boden Ignivor schwimmt
+2. **Versunkene Ruinen** — gleich am Eingang **die Schatzkammer**, in der nur
+   noch eine Truhe steht: Gierschlund. Dann Säulen, Klettertürme, Skelette, und
+   dahinter **das Tempelherz**, der Innenhof, um den die Ruinen gebaut sind:
+   Ankhor, der Tempelkoloss
+3. **Kristallhöhlen** — Lavaseen, wandernde Plattformen, dunkle Magier, in der
+   Mitte **die Netzkammer**, unter deren Decke Arachna hängt, und am Ende **die
+   Glutkammer**, in deren Boden Ignivor schwimmt
 4. **Die Ertrunkene Halle** — was das Wasser geholt hat: Algenkanten, Korallen,
    dunkle Magier im Kirchenschiff, und im Chor Thalassa, die den Boden aufmacht
 5. **Burg Nachtfall** — Zinnen, Türme, Stachelfallen, und oben auf dem
    Bergfried **der Blutturm**, über dem Vesperon kreist
 6. **Thronsaal** — Bossarena; das Fallgitter schließt sich hinter dir
-7. **Der Riss** — was hinter dem Thron aufbricht: 328 Kacheln violettes Gestein
-   über dem Abgrund, dunkle Magier, in der Mitte der Splitterwächter — und
-   hinter ihm wieder Riss bis zum Tor nach Hause
+7. **Der Riss** — was hinter dem Thron aufbricht: 372 Kacheln violettes Gestein
+   über dem Abgrund, dunkle Magier, gleich zu Anfang **der Spiegelgrund**, wo
+   der Held seinem eigenen Schatten begegnet, in der Mitte der Splitterwächter —
+   und hinter ihm wieder Riss bis zum Tor nach Hause
 8. **Der Schlund der Fünfkronigen** — grün statt violett, mit Decke und Wänden:
    der einzige Abschnitt des Risses, der ein Raum ist. Ein Rippentor an jedem
    Ende fällt zu, sobald sie wach wird
@@ -102,7 +105,8 @@ Zonen. Die Einstellung bleibt über Sitzungen erhalten, genau wie `M` (Musik) un
 Die Zonengrenzen stehen nicht mehr als Zahlen in der Palette, sondern werden aus
 den Abschnitten abgeleitet. Vorher hätte jeder eingeschobene Abschnitt jede Zone
 dahinter um seine Breite verschoben — drei neue Arenen hätten den Thronsaal wie
-eine Burgmauer beleuchtet.
+eine Burgmauer beleuchtet. Die drei Kammern, die seitdem dazugekommen sind, haben
+das bestätigt: eingeschoben, und jede Zone dahinter saß weiter richtig.
 
 Der Riss hält im Übrigen still: kein wehender Bewuchs, keine treibenden
 Silhouetten, kaum pulsende Kristalle, und ein Sporenfeld, das am Bildschirm
@@ -143,7 +147,8 @@ Die Tür hinter ihm schließt sich nur, wenn er **ganz** drin ist: Ein Boss, der
 aufwacht, während der Held noch in der Tür steht, hätte ihn sonst aus seinem
 eigenen Kampf ausgesperrt — wach, unerreichbar, und für immer im Weg.
 
-`verify:wards` fährt das für alle sechs gebannten Arenen mit echter Physik ab. Ein
+Gierschlund, Arachna und Umbra kamen gleich mit gebannten Kammern ins Spiel.
+`verify:wards` fährt das für alle neun gebannten Arenen mit echter Physik ab. Ein
 Held, der dreißig Sekunden lang springend auf die ferne Wand zurennt und dabei am
 Leben gehalten wird — sodass nur die Wand ihn aufhalten kann —, kommt in keiner
 Arena auch nur einen Pixel weiter als bis an die Wand. Die Tür hinter ihm fällt
@@ -153,6 +158,121 @@ bleibt, was er ist — ein Bonus hinter allen Edelsteinen, aber wer im Hort steh
 kommt dort auch nur über ihn wieder heraus.
 
 ![Die Bannwand im Moor](screenshots/29-bannwand.png)
+
+## Jeder Boss lässt etwas da
+
+Früher belohnten drei von neun Bossen: Gallert gab ein Herz, Thalassa die
+Flutklinge, der Prismarch die Klingenwelle. Ankhor, Ignivor und Vesperon füllten
+die Herzen auf und sonst nichts, und der Ritter, der Splitterwächter und die
+Fünfkronige machten eine Tür auf. Ein Kampf, der nichts einbringt, ist ein
+Kampf, der nur im Weg steht.
+
+Jetzt hinterlässt **jeder** Boss ein **Relikt**, für den Rest des Laufs — zwölf
+Bosse, zwölf Relikte. Erst kommen die Worte über seinem Fall, dann das Relikt,
+mit Banner und Namen: Ein Lohn ohne ein Wort liest sich als eine Zahl, die
+steigt, nicht als etwas, das man jemandem abgenommen hat.
+
+| Boss | Relikt | was es tut |
+| --- | --- | --- |
+| Gallert | **Herzkern** | ein Herz mehr, für den ganzen Lauf |
+| Gierschlund | **Goldzahn** | jeder zehnte Edelstein bringt ein Herz zurück — bei vollem Leben wird gespart |
+| Ankhor | **Bebenfaust** | der Ladeschlag lädt schneller (0,3 statt 0,42 s) und schickt eine Schockwelle über den Boden |
+| Arachna | **Seidenmantel** | fängt einen Treffer ab und webt sich nach zwölf ruhigen Sekunden neu |
+| Ignivor | **Glutklinge** | Abschlusshieb und Ladeschlag treffen mit Glut: ein Schaden mehr |
+| Thalassa | **Flutklinge** | jeder Hieb wirft eine kurze Sichel aus Wasser voraus |
+| Vesperon | **Blutdurst** | je sechzehn ausgeteilte Schaden kommt ein Herz zurück |
+| Morvain | **Schattenschritt** | zwei Ausweichrollen hintereinander, auch in der Luft |
+| Umbra | **Zweiter Atem** | einmal pro Leben bleibt ein tödlicher Schlag bei einem Herz stehen |
+| Splitterwächter | **Splitterparade** | längeres Paradefenster (0,26 statt 0,18 s), und jede Parade wirft drei Splitter |
+| Fünfkronige | **Hydrablut** | alle achtzehn Sekunden wächst ein verlorenes Herz nach |
+| Prismarch | **Klingenwelle** | die Sichel fliegt doppelt so weit und trifft so hart wie der Hieb |
+
+Was rettet, hat immer eine Bedingung: ein Mantel, der nachwachsen muss, Blut,
+das erst fließen muss, ein zweiter Atem pro Leben — und nichts davon verbraucht
+sich an einer vollen Leiste. Unter den Herzen steht für jedes Relikt ein Zeichen,
+und die, die auf etwas warten, zeigen es: der Mantel als Ring, der sich neu webt,
+Blut und Gold als Füllstand, der zweite Atem hell oder verbraucht. Die Pause
+listet alle mit dem, was sie tun.
+
+![Die Relikte in der Pause](screenshots/34-relikte.png)
+
+Die Schockwelle der Bebenfaust geht übrigens durch das hindurch, was die Klinge
+gerade getroffen hat. Sie ist der längere Arm des Ladeschlags, nicht ein zweiter
+— als sie noch obendrauf landete, hob sie den Ladeschlag in Reichweite gemessen
+von 3,4 auf 6,6 Schaden pro Sekunde.
+
+### Und die Monster rechnen mit
+
+Zwölf Relikte sollen einen Helden machen, der anders spielt — keinen, der durch
+alles hindurchläuft. Also sieht sich jedes Monster an, was es vor sich hat,
+einmal, wenn es ihm zum ersten Mal begegnet (ein Boss: beim Aufwachen). Mitten
+im Kampf verschiebt sich nichts.
+
+Jedes Relikt hat dafür einen **Angriffswert A** und einen **Verteidigungswert V**:
+
+* ein **Boss** bekommt Leben × (1 + A + 0,3·V) und Poise × (1 + 1,6·A) — wer
+  härter zuschlägt, braucht länger, wer mehr aushält, ein bisschen; und Poise
+  wächst mit dem Angriff schneller als das Leben, damit eine stärkere Klinge
+  nicht in einen Dauerstun kippt;
+* ein **gewöhnliches Monster** bekommt Leben × (1 + A): ein Skelett, das einem
+  Helden mit Glut, Flut und Bebenfaust begegnet, hat 8 statt 5.
+
+| Relikt | A | V | | Relikt | A | V |
+| --- | --- | --- | --- | --- | --- | --- |
+| Herzkern | 0 | 0 | | Blutdurst | 0 | 0,15 |
+| Goldzahn | 0 | 0,05 | | Schattenschritt | 0 | 0,06 |
+| Bebenfaust | 0,06 | 0 | | Zweiter Atem | 0 | 0,1 |
+| Seidenmantel | 0 | 0,12 | | Splitterparade | 0,04 | 0,04 |
+| Glutklinge | 0,25 | 0 | | Hydrablut | 0 | 0,1 |
+| Flutklinge | 0,22 | 0 | | Klingenwelle | 0,22 | 0 |
+
+Der Herzkern zählt nichts, weil er der Grundstock ist: Jeder Kampf nach dem Moor
+ist für sieben Herzen gebaut. Die Angriffswerte sind gemessen, nicht geraten —
+zwanzig Sekunden gegen ein festgehaltenes Ziel, in Schaden pro Sekunde:
+
+| | Dauerhauen | Ladeschlag | aus 120 px |
+| --- | --- | --- | --- |
+| nur Schwert | 3,70 | 3,35 | 0 |
+| Bebenfaust | 3,70 | 3,95 | 0 |
+| Glutklinge | 4,60 | 4,45 | 0 |
+| Flutklinge | 6,50 | 5,60 | 3,30 |
+| Bebenfaust + Glut + Flut | 7,40 | 7,90 | 3,30 |
+| dazu die Klingenwelle | 8,30 | 9,20 | 4,40 |
+
+Die beiden Klingen behalten die +22 %, mit denen die Kämpfe nach Thalassa gebaut
+und vermessen wurden, obwohl ihre Sichel aus nächster Nähe mehr wert ist — sie
+landet auf dem Hieb, aus dem sie geworfen wurde. Was das unterm Strich heißt,
+zeigt der Ritter: Früher kam der Held mit der Flutklinge bei ihm an, schlug
+1,76-mal so schnell zu wie mit dem Schwert allein, und der Ritter hatte 1,22-mal
+so viel Leben — er fiel also 1,44-mal so schnell. Heute kommt der Held mit
+sieben Relikten an und schlägt doppelt so schnell zu, aber der Ritter hat 111
+statt 68 Leben: 1,23. **Der Held ist stärker geworden, und der Ritter trotzdem
+zäher als vorher.**
+
+Entlang des Weges, jeder Boss mit den Relikten, die man hat, wenn man bei ihm
+ankommt (gemessen, nicht gerechnet):
+
+| Boss | Relikte | Leben | Poise |
+| --- | --- | --- | --- |
+| Gallert | 0 | 22 | 14 |
+| Gierschlund | 1 | 40 | 11 |
+| Ankhor | 2 | 54 → 55 | 8 |
+| Arachna | 3 | 48 → 52 | 9 → 10 |
+| Ignivor | 4 | 58 → 64 | 7 → 8 |
+| Thalassa | 5 | 60 → 82 | 13 → 19 |
+| Vesperon | 6 | 56 → 89 | 9 → 17 |
+| Morvain | 7 | 68 → 111 | |
+| Umbra | 8 | 30 → 58 | 7 → 13 |
+| Splitterwächter | 9 | 16 → 27 | 5 → 9 |
+| Fünfkronige | 10 | 50 → 86 | 8 → 15 |
+
+Umbra rechnet als einziger anders: Sein Leben sind fünf je Herz des Helden, und
+die Relikte trägt er obendrein selbst.
+
+`verify:relics` prüft beide Hälften: dass jeder der zwölf Bosse spricht, sein
+Relikt hergibt und dass es einen Tod übersteht und einen Neustart nicht; und dass
+jedes Relikt genau das tut, was es sagt — am Helden gemessen, nicht an einem
+Schalter abgelesen.
 
 ## Der Boss: Schattenritter Morvain
 
@@ -256,7 +376,7 @@ Was die Messung nach der Änderung sagt, über fünf Läufe je 100 Sekunden: Der
 Draufhauer legt ihn **nicht mehr um** — er kommt im Median auf 50 % seiner
 Leiste und stirbt dabei neun Mal. Ohne die geworfene Klinge sind es 83 %.
 
-#### Bosse nehmen die Klinge zur Kenntnis
+#### Bosse nehmen die Klinge zur Kenntnis — und alles andere auch
 
 Wer mit einer geworfenen Klinge ankommt, trifft auf mehr Boss. Das Upgrade ist
 etwa zwei Schaden pro Sekunde ohne jedes Risiko, und die Bosse waren gegen ein
@@ -270,11 +390,23 @@ gefunden hat, trifft genau den Boss, der für ihn eingestellt wurde:
 | Flutklinge | 83 | 24 |
 | Klingenwelle | 98 | 31 |
 
-Dasselbe gilt für Thalassa, den Splitterwächter, den Prismarchen, Gallert und die
-drei neuen — Ankhor, Ignivor und Vesperon (+22 % Leben und +35 % Poise je Stufe). Auf Distanz stehen bleiben hilft
-seitdem auch nicht mehr: der Ritter wählt weit draußen zweimal so oft den
-Sturmangriff wie das Hinterherlaufen, und ein Bot, der auf 150 px kampierte und
-die Klinge schickte, verliert jetzt statt in 30 s zu gewinnen.
+Dasselbe gilt für jeden anderen Boss — und seit jeder Boss etwas hinterlässt,
+nicht mehr nur für die Klinge: Jedes Relikt geht in diese Rechnung ein, die
+Klinge behält dabei genau ihre alten +22 % Leben und +35 % Poise je Stufe. Mit
+allem, was ein Held bis zum Thron einsammelt, steht Morvain mit **111** Leben da.
+Die ganze Rechnung steht unter [Jeder Boss lässt etwas da](#jeder-boss-lässt-etwas-da).
+Auf Distanz stehen bleiben hilft seitdem auch nicht mehr: der Ritter wählt weit
+draußen zweimal so oft den Sturmangriff wie das Hinterherlaufen, und ein Bot, der
+auf 150 px kampierte und die Klinge schickte, verliert jetzt statt in 30 s zu
+gewinnen.
+
+#### Was er hinterlässt
+
+Sein Fall bricht das Siegel — und eine Atempause später spricht, was von ihm
+übrig ist, und gibt dem Helden den **Schattenschritt**: zwei Ausweichrollen ohne
+Atem dazwischen, auch in der Luft. Die Worte warten 1,6 Sekunden, bis der
+Siegelbruch seinen Moment gehabt hat; vorher redete sonst jemand in das Bild
+hinein, für das der ganze Kampf da war.
 
 #### Und sie bleiben tot
 
@@ -357,11 +489,67 @@ schüttelt ihn immer los. Vorbeilaufen geht **nicht mehr**: das Moor ist gebannt
 und `verify:gallert` prüft jetzt das Gegenteil dessen, was es früher prüfte.
 
 Wer ihn schlägt, bekommt den **Herzkern**: sechs Herzen werden sieben, für den
-ganzen Rest des Laufs, und die Leiste ist sofort wieder voll. Das ist die
-einzige Belohnung im Spiel, die nicht die Klinge betrifft — nach der ersten
-Stunde soll etwas anderes dastehen als eine größere Zahl auf einem Hieb.
+ganzen Rest des Laufs, und die Leiste ist sofort wieder voll. Lange war das eine
+von nur drei Belohnungen im ganzen Spiel; jetzt ist es die erste von zwölf —
+siehe [Jeder Boss lässt etwas da](#jeder-boss-lässt-etwas-da).
 
-### Der zweite Boss: Ankhor, der Tempelkoloss
+### Der zweite Boss: Gierschlund, die gierige Truhe
+
+In der Schatzkammer der Ruinen steht nur noch eine Truhe. Was sonst hier lag, hat
+sie gefressen — Gold, Steine, Diebe. 40 Trefferpunkte, zwei Phasen, und die Regel
+einer Truhe: **Zu ist sie ein Tresor.** Jeder Hieb auf den Deckel klingt und tut
+nichts. Sie öffnet sich nur, um etwas zu nehmen, und offen ist sie nur noch Maul:
+
+* **Schnappbiss** — der Deckel klafft, im Spalt leuchtet ein Auge, sie lehnt sich
+  zurück (0,62 s) und springt mit offenem Maul. Danach steht sie einen Atemzug
+  lang offen da und hechelt: das Fenster. Wer den Biss **pariert**, klemmt den
+  Deckel auf, zweieinhalb Sekunden lang.
+* **Schnapper** — wer an ihr klebt, bekommt den Deckel: ein kurzes Rattern
+  (0,4 s), dann ist er zu. Eine Truhe umarmen ist, wie Truhen einen fressen.
+* **Goldregen** — sie wirft den Deckel zurück und spuckt einen Fächer Münzen,
+  eine auf den Helden und die anderen gut eine Heldenbreite daneben: ein halber
+  Schritt zur Seite, und keine trifft. Die Münzen bleiben einen Moment liegen,
+  tun dort niemandem etwas, und **ein Hieb schlägt eine flach zurück**. Gold, das
+  heimkommt, ist das Einzige, wofür sie den Deckel nicht zuhalten kann — sie
+  reißt ihn auf, und die Münze geht für zwei Schaden ins Maul.
+* **Zunge** — sie rollt sie ein und peitscht sie 230 px über den Boden.
+  Drüberspringen.
+* **Gierschlucken** — ab der Hälfte: Sie atmet ein, und der Boden rutscht zum
+  Maul, mit 120 px/s — langsamer, als der Held läuft (235). Wer stehen bleibt,
+  landet im Maul; wer läuft, kommt heraus.
+
+Zwischen den Zügen hüpft sie ihm mit fest geschlossenem Deckel hinterher. Dann
+gibt es nichts zu tun, als Abstand zu halten und zu warten, bis sie etwas will.
+
+![Gierschlund](screenshots/30-gierschlund.png)
+
+#### Drei Regeln, die nicht stimmten
+
+Alle drei standen im Kommentar ihres Codes, und keine hielt, als `verify:bosses`
+sie nachmaß:
+
+* **Münzen ließen sich nicht zurückschlagen.** Sie kamen steil von oben auf den
+  Helden herunter, und das Schwert trifft vor ihm, auf Brusthöhe. Ein Bot, der
+  nach jeder nahen Münze schlug, traf in neun Läufen keine einzige — es gab genau
+  ein Bild, in dem eine vor ihm und noch nicht in ihm war. Jetzt bleiben sie
+  liegen, und eine liegende Münze fliegt flach zurück: 4 Schaden aus einem
+  einzigen Goldregen im Prüflauf.
+* **Ihr Einatmen zog niemanden.** Es schob am Tempo des Helden, und seine eigene
+  Bodenhaftung fraß das in jedem Bild wieder auf: Wer stillstand, bewegte sich
+  keinen Pixel. Jetzt rutscht der Boden selbst, und wer stehen bleibt, wird von
+  170 auf 32 px herangezogen und gebissen.
+* **Ein parierter Biss klemmte den Deckel nur manchmal.** Die Parade erreicht,
+  was innerhalb von 60 px steht, die Zähne der springenden Truhe erreichen den
+  Helden aber schon aus 64 px — je nachdem, in welchem Bild sie ankam, klemmte
+  der Deckel oder eben nicht. Jetzt merkt sie selbst, wenn ihre Zähne auf eine
+  Parade treffen.
+
+Gemessen, ein Bot, der ihre Ankündigungen liest und in ihre Fenster schlägt:
+72 bis 88 Sekunden, 2 bis 4 Treffer. Einer, der nur draufhaut: 24 bis 26 Treffer
+in gut einer halben Minute — mit sieben Herzen verliert er. Wer sie leert,
+bekommt den **Goldzahn**.
+
+### Der dritte Boss: Ankhor, der Tempelkoloss
 
 Im Innenhof der Ruinen, bis zur Brust im eigenen Pflaster vergraben: ein Wächter
 aus Sandstein mit Nemes-Kopftuch in Lapis und Gold, einem Halskragen aus
@@ -395,7 +583,47 @@ zurück und die Faust ist wieder da.
 
 ![Ankhor](screenshots/25-tempelkoloss.png)
 
-### Der dritte Boss: Ignivor, der Glutwurm
+### Der vierte Boss: Arachna, die Netzkönigin
+
+Mitten in den Kristallhöhlen liegt die Netzkammer, und unter ihrer Decke hängt
+Arachna an einem einzigen Faden, einen Kristall im Rücken. 48 Trefferpunkte, zwei
+Phasen. Oben auf ihrem Faden ist sie vom Boden aus außer Reichweite — ihr Leib
+hängt 164 px über ihm —, und der Kampf dreht sich um die zwei Wege nach unten:
+ihren und den des Helden.
+
+* **Sturzbiss** — unter dem Helden sammelt sich ihr Schatten als Ring auf dem
+  Boden, sie zieht die Beine an (0,7 s) und lässt sich fallen. Der Ring folgt
+  ihm und steht dann eine Viertelsekunde still: raus aus dem Schatten. Wo sie
+  aufkommt, muss sie 1,6 Sekunden sitzen, bevor sie wieder hinaufklettern kann
+  — das Fenster. Wer den Sturz **pariert**, legt sie auf den Rücken.
+* **Netzschuss** — Ballen aus Seide, einer auf den Helden, die anderen links und
+  rechts daneben. Wo einer landet, klebt der Boden: Laufen geht nur noch gut
+  halb so schnell (59 statt 100 px in einer halben Sekunde), Springen nicht mehr
+  so hoch. Ein Ballen auf den Helden bindet ihn, verletzt ihn aber nicht, und
+  ein Hieb schneidet einen Fleck weg.
+* **Brut** — Eiersäcke auf den Boden; was schlüpft, wuselt auf den Helden zu.
+  Ein Hieb sticht einen Sack auf, bevor er schlüpft, und mehr als vier Junge und
+  Eier sind nie draußen.
+* **Pendel** — ab der Hälfte schwingt sie quer durch die Kammer, zur Kugel
+  gerollt: Die Unterkante kommt bis auf 10 px an den Boden, die Oberkante bleibt
+  58 px darüber. Das trifft jeden, der stehen bleibt, und ein Sprung nimmt es mit
+  Luft.
+
+Und der Weg des Helden: Die beiden hohen Absätze stellen ihn auf ihre Höhe. Wer
+sie dort trifft, bringt sie zum Loslassen, wer den Faden über ihr trifft,
+zerschneidet ihn (vier Hiebe). So oder so kommt sie auf dem Rücken herunter, die
+Beine in der Luft, 2,6 Sekunden lang in Reichweite eines Schwerts vom Boden: das
+lange Fenster.
+
+![Arachna](screenshots/31-arachna.png)
+
+Gemessen, ein Bot, der ihre Ankündigungen liest: 76 bis 89 Sekunden, 3 bis 10
+Treffer. Einer, der nur draufhaut, kommt — am Leben gehalten — in 45 bis 58
+Sekunden durch und kassiert dabei 14 bis 21 Treffer, die meisten von ihren
+Stürzen: Mit sieben Herzen stirbt er zwei-, dreimal. Wer sie stürzt, bekommt
+den **Seidenmantel**.
+
+### Der fünfte Boss: Ignivor, der Glutwurm
 
 Fünfzehn Platten aus Obsidian, zwischen denen das Feuer des Berges läuft, ein
 langer Schädel mit zurückgeschwungenen Hörnern und einem Kiefer, der fällt, wenn
@@ -404,31 +632,67 @@ schwimmt — und wer hereinkommt, sieht zuerst gar nichts. Dann grollt es.
 
 58 Trefferpunkte, zwei Phasen, und eine Regel, die jeder Wurm hat: **Die Panzerung
 ist Panzerung.** Eine Klinge auf seinen Platten klingt und tut nichts. Nur der Kopf
-zählt, und der Kopf ist nur draußen, wenn er etwas will:
+zählt — und jeder seiner Züge außer der Welle endet jetzt damit, dass der Kopf
+dort ist, wo ein Schwert vom Boden aus hinkommt:
 
 * **Durchbruch** — der Boden unter dem Helden glüht und folgt ihm, hält dann
   **0,4 Sekunden** still und bricht auf. In Bewegung bleiben; wenn es stehen
   bleibt, gehen. Der Wurm fährt gerade nach oben, nicht dorthin, wohin der Held
-  inzwischen gelaufen ist — sonst bestrafte er genau das, wozu ihn die
-  Ankündigung aufgefordert hat. (Gemessen: vorher zielte der Bogen nach und
-  kostete einen Ausweichenden fast so viel wie einen, der stehen blieb.)
-* **Glutspeien** — er steigt ein Stück weiter aus dem Boden, wirft den Kopf
-  zurück und speit Klumpen aus Magma, die dort weiterbrennen, wo sie landen.
-  Danach bleibt er oben, den Kopf tief und pendelnd — das ist die Zeit, ihn zu
-  treffen.
+  inzwischen gelaufen ist. Was hochgeht, kommt herunter: Der Kopf schlägt neben
+  dem Loch auf den Boden und **steckt fest** — 1,5 Sekunden, in der zweiten
+  Hälfte 1,2. Er landet in Richtung des Helden, aber gut 58 px vor ihm, nie auf
+  ihm: genau das Ausweichen, das die Ankündigung verlangt hat, stellt einen in
+  Reichweite.
+* **Glutspeien** — er steigt 150 bis 200 px vom Helden entfernt aus dem Boden,
+  wirft den Kopf zurück und speit Klumpen aus Magma, die dort weiterbrennen, wo
+  sie landen: einer auf den Helden, die anderen **hinter** ihn, vom Kopf weg. Nie
+  dazwischen — der Weg zum Kopf bleibt frei. Danach hängt der Kopf 2,1 Sekunden
+  tief und pendelnd, 54 px über dem Boden: Ein Hieb vom Boden trifft den Kiefer,
+  ein Hüpfer den ganzen Kopf.
 * **Feuerwelle** — er geht an die ferne Wand und schwimmt die ganze Kammer
   entlang knapp unter dem Boden, und hinter ihm schlägt der Boden als Feuer
   hoch, den ganzen Weg. Der Boden ist kein Ort, an dem man dann sein will; die
   vier Absätze sind es.
 
-Wer den Kopf oben genug trifft, holt ihn herunter: Er schlägt betäubt auf den
-Boden, liegt dort zwei Sekunden, und das ist das lange Fenster. Ab der Hälfte
-bricht er zweimal hintereinander durch, und das Feuer, das er oben am Scheitel
-aufwirft, kommt als Regen wieder herunter.
+Wer den hängenden Kopf genug trifft — 7 Schaden —, holt ihn herunter: Er schlägt
+betäubt auf den Boden, liegt dort 2,4 Sekunden und sackt dabei zum Helden hin,
+nie auf ihn. Das ist das lange Fenster. Ab der Hälfte bricht er zweimal
+hintereinander durch, und das Feuer, das er oben am Scheitel aufwirft, kommt als
+Regen wieder herunter.
 
 | | |
 | --- | --- |
-| ![Ignivor bricht durch](screenshots/26-glutwurm.png) | ![Die Feuerwelle](screenshots/27-feuerwelle.png) |
+| ![Ignivor bricht durch](screenshots/26-glutwurm.png) | ![Er steckt fest](screenshots/33-ignivor-steckt-fest.png) |
+| ![Die Feuerwelle](screenshots/27-feuerwelle.png) | |
+
+#### Zu mächtig, weil kaum zu treffen
+
+Gemessen, bevor er umgebaut wurde: Ein Bot, der jede Ankündigung las und jedes
+Mal auf den Kopf losging, wenn der sich zeigte, machte **0,3 bis 0,5 Schaden pro
+Sekunde**, kassierte in zwei Minuten rund dreißig Herzen und hatte ihn danach
+immer noch nicht erledigt. An seinen Zahlen lag das nicht:
+
+1. Der Kopf war neun Zehntel des Kampfes außer Reichweite eines Hiebs vom Boden.
+   Nach dem Speien hing er 96 px hoch, was nur ein Sprung genau im Scheitel
+   erreichte.
+2. Das Speien legte sein Feuer genau auf den einzigen Weg zum Kopf: Die Klumpen
+   landeten links und rechts vom Helden, einer also immer zwischen ihm und dem
+   Wurm. Zwei Drittel dessen, was ein Held in diesem Kampf verlor, verlor er auf
+   dem Weg durch dieses Feuer.
+3. Nach einem Durchbruch war er wieder im Boden, bevor man sich umgedreht hatte,
+   und zum Speien tauchte er 230 bis 300 px entfernt auf — über eine Sekunde
+   Rennen.
+
+Dazu brauchte es elf Schaden in einem einzigen Fenster, um ihn umzuwerfen; das
+schaffte kaum jemand, und das lange Fenster kam zweimal pro Kampf. Jetzt sind es
+sieben.
+
+Derselbe lesende Bot erledigt ihn jetzt in **63 bis 73 Sekunden** und kassiert
+dabei 5 bis 8 Herzen — mit genau den Relikten, die man bis dahin hat, und damit
+gegen 64 statt 58 Leben. Die Panzerung bleibt Panzerung, die Feuerwelle bleibt,
+wie sie war, und wer stehen bleibt, zahlt weiter: 13 bis 15 Herzen in 45
+Sekunden, gegen keines für den, der liest. Wer ihn löscht, bekommt die
+**Glutklinge**.
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
@@ -541,26 +805,77 @@ auf seine Höhe, und genug Schaden in der Luft wirft ihn aufs Dach.
 
 ![Vesperon](screenshots/28-blutfuerst.png)
 
-#### Gemessen: lesen lohnt sich
+Wer ihn zerstieben lässt, bekommt den **Blutdurst**.
 
-`verify:bosses` stellt für jeden der drei einen Helden hin, der nur dasteht, und
-einen, der die Ankündigungen liest — aus dem Schatten tritt, über die Hand
-springt, die Glut unter sich verlässt, von der Sturzlinie geht und die
-Fledermäuse abwehrt. Beide werden am Leben gehalten; gezählt wird, was durchkommt:
+### Im Spiegelgrund: Umbra, dein Schatten
+
+Gleich hinter dem Thron liegt ein Stück Riss, so still, dass der Boden zeigt, wer
+auf ihm geht. In seiner Mitte liegt ein Fleck Dunkelheit in der Form eines
+Mannes — und wenn der Held nah genug ist, steht er auf.
+
+Umbra ist **der Held**: ein echter Heldenkörper, gesteuert von einem Verstand
+statt von einer Tastatur. Er läuft, wie der Held läuft, schlägt dieselbe Kombo,
+lädt mit demselben Ring, rollt mit derselben Rolle — und trägt dieselben
+Relikte: die Sichel, wenn die Klinge des Helden eine wirft, die Schockwelle, wenn
+Ankhors Faust seine ist, den Mantel, die zweite Rolle, Ignivors Glut. Sein Leben
+sind fünf je Herz des Helden, und darauf kommt dieselbe Rechnung wie bei jedem
+Boss. Je stärker der Held geworden ist, desto stärker das, was er schlagen muss —
+das ist die ganze Antwort dieses Kampfes auf einen Helden, der alles gesammelt
+hat.
+
+Was er nicht hat, ist Geduld, und was er liest, ist die des Helden:
+
+* **Wer blind draufhaut, wird pariert.** Jeder Hieb in schneller Folge macht die
+  nächste Parade wahrscheinlicher, und jede Parade beantwortet er mit einem
+  harten Gegenhieb.
+* **Seine eigenen Angriffe sind die Fenster.** Vor seiner Kombo setzt er die
+  Füße, und seine Augen flammen auf (0,38 s, in der zweiten Hälfte 0,3) — die
+  Kombo des Helden selbst hat gar keine Ankündigung, und ein Spiegel, der ohne
+  Vorwarnung so schnell zuschlägt, wäre ein Münzwurf. Nach der Kombo, nach dem
+  Ladeschlag, nach einer Rolle steht er einen Atemzug lang da: dort trifft man.
+  Eine Parade seines Hiebs bringt ihn ins Wanken wie alles andere.
+* **Ab der Hälfte geht er durch die Dunkelheit**: Er sinkt in den Boden und
+  steigt hinter dem Helden wieder auf, Klinge voran. Die Pfütze, aus der er
+  steigt, zeigt sich vorher — 0,93 Sekunden, bevor er zuschlägt.
+
+Gemessen in `verify:bosses`: Wer nur draufhaut, wird in 25 Sekunden 21-mal
+pariert und kassiert 25 Treffer — mit sechs Herzen sind das vier Leben. Wer
+pariert und auf die Fenster wartet, legt ihn in 31 bis 37 Sekunden um und nimmt
+dabei einen einzigen Treffer.
+
+Wer ihn besiegt, bekommt den **Zweiten Atem**: Der Schatten steht jetzt hinter
+dem Helden, und einmal in jedem Leben fängt er auf, was ihn fällen würde.
+
+![Umbra](screenshots/32-umbra.png)
+
+### Gemessen: lesen lohnt sich
+
+`verify:bosses` stellt für jeden der fünf Arenabosse, die nicht der Held selbst
+sind, einen Helden hin, der nur dasteht, und einen, der die Ankündigungen liest —
+aus dem Schatten tritt, über die Hand und die Zunge springt, zwischen die Münzen
+und die Netzballen tritt, die Glut unter sich verlässt, unter den speienden Kopf
+geht, von der Sturzlinie geht und Fledermäuse wie Spinnenjunge abwehrt. Beide
+werden am Leben gehalten; gezählt wird, was durchkommt, über zwei Läufe:
 
 | | Ankündigung (kürzeste gemessene) | stehen bleiben | lesen |
 | --- | --- | --- | --- |
-| Ankhor, 60 s | Faust 0,95 s + 0,35 s Aufstieg, Wischer 0,78 s, Sonne 0,55 s | 28 Herzen | 2 |
-| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13 Herzen | 0 |
-| Vesperon, 40 s | Sturzflug 0,57 s | 31 Herzen | 9 |
+| Gierschlund, 45 s | Biss 0,63 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 17–28 Herzen | 3–4 |
+| Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
+| Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0 |
+| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13–15 Herzen | 0 |
+| Vesperon, 40 s | Sturzflug 0,57 s | 29–32 Herzen | 9–12 |
 
-Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen. Und die
-Regeln halten: Ankhors Gesicht nimmt 2 statt 1, sein gesackter Kopf reicht bis
-18 px über den Boden herab; Ignivors Platten nehmen 0, sein Kopf 1, und die
-Feuerwelle kostet auf dem Boden 9 Herzen und auf dem Absatz keines. Die Bildzeit
-bleibt in allen drei Kämpfen im 99. Perzentil unter 15 ms.
+Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
+zwei bewussten Ausnahmen: Gierschlunds Schnapper (0,42 s) trifft nur den, der an
+ihr klebt, und Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden selbst. Die
+Regeln halten: Gierschlunds Deckel nimmt 0 und ihr Maul 1, Ankhors Gesicht 2
+statt 1 und sein gesackter Kopf reicht bis 18 px über den Boden herab, Arachna
+ist vom Boden aus unerreichbar und vom hohen Absatz aus nicht, Ignivors Platten
+nehmen 0 und sein Kopf 1 — steckend wie hängend vom Boden aus erreichbar. Die
+Bildzeit bleibt in allen sechs Kämpfen im 99. Perzentil unter 11 ms.
 
-Wer einen der drei schlägt, bekommt alle Herzen zurück, und die Bannwände fallen.
+Wer einen von ihnen schlägt, bekommt alle Herzen zurück und sein Relikt, und die
+Bannwände fallen.
 
 ### Die Klinge: zwei Stufen
 
@@ -689,6 +1004,10 @@ Und sie warf zwei Gluten links und rechts am Helden vorbei, je 34 px: Ein
 Paradefenster ist 52 px breit, zwei Gluten daneben sind zwei, die man nicht
 wenden kann. Jetzt kommt eine auf ihn und die zweite weit daneben.
 
+Ihr Fall öffnet das Tor — und lässt das **Hydrablut** zurück: Was der Held
+verliert, wächst jetzt nach, ein Herz alle achtzehn Sekunden. Für den Weg zum Tor
+ist das wenig; wer danach noch in den Kristallhort will, nimmt es mit.
+
 #### Ihr Saal
 
 Sie bekommt denselben Handel wie der Ritter: Wände, eine Decke und ein Rippentor
@@ -730,6 +1049,10 @@ oder genug Schaden herausriss. `verify:warden` zeigte es die ganze Zeit, wenn
 man genau hinsah — der Nahkampflauf ging *stalk, slamWind, slam* und kam nie
 zurück. Beides ist gerichtet, und beides wird jetzt geprüft.
 
+Wer ihn zerspringen lässt, sammelt seine Splitter an der Klinge: die
+**Splitterparade**. Das Paradefenster wird länger, 0,26 statt 0,18 Sekunden, und
+jede Parade wirft drei Splitter nach vorn.
+
 Die Vorwarnung ist auch die Einladung zur Parade: Wer im richtigen Moment `E`
 drückt, fängt den Schlag ab, statt ihn zu kassieren — der Ritter taumelt und
 steht offen. Geschosse fliegen dabei zurück. Die Parade wirkt nur nach vorn und
@@ -767,9 +1090,12 @@ Sechzehntel-Muster für Bass, Arpeggio, Melodie und Schlagzeug. Er plant die
 Noten einen Sekundenbruchteil voraus auf der Uhr des AudioContext; ein
 Stückwechsel blendet über, statt abzuschneiden. Jede Zone hat ihr Stück — der
 Wald dorisch, die Ruinen phrygisch, die Höhlen mit Tropfen aus Glocken, die Burg
-im Marschtritt —, und jeder Boss seinen Kampf: Ankhor mit Tomtoms, Ignivor
-schnell in harmonisch Moll, Vesperon mit einem Cembalo-Arpeggio über einer Orgel,
-der Ritter, die Fünfkronige und der Prismarch jeder mit eigenem. Die Musik
+im Marschtritt —, und jeder Boss seinen Kampf: Gierschlund hüpfend, mit
+klimpernden Glocken über einem treibenden Bass, Ankhor mit Tomtoms, Arachna mit
+einem langsamen Puls und einem Arpeggio, das sich einen Faden entlangtastet,
+Ignivor schnell in harmonisch Moll, Vesperon mit einem Cembalo-Arpeggio über einer
+Orgel, Umbra noch schneller, mit einer Melodie, die rückwärts läuft, der Ritter,
+die Fünfkronige und der Prismarch jeder mit eigenem. Die Musik
 wechselt, sobald die Bannwand fällt, und gibt nach dem Kampf an die Zone zurück;
 in der Pause, im Dialog und nach einem Tod wird sie gedämpft.
 
@@ -780,8 +1106,9 @@ erhalten. Vor dem ersten Tastendruck läuft nichts — so wollen es die Browser.
 jedes Stück offline und misst Spitze und Mittel. Ein Rezept, das nichts baut,
 käme als Null heraus, eines, das übersteuert, über eins. Danach spielt es mit
 echten Tastendrücken: Titelmusik, Übergabe an den Wald, in jeder Bossarena der
-richtige Kampf und danach wieder die Zone, sechs Bosse mit sechs verschiedenen
-Stücken, `M` und `N` samt Neuladen.
+richtige Kampf und danach wieder die Zone, neun Bosse mit neun verschiedenen
+Stücken (Gallert und der Splitterwächter teilen sich das kurze Lehrstück), `M`
+und `N` samt Neuladen.
 
 ## Aufbau des Codes
 
@@ -792,8 +1119,9 @@ src/
              music.ts (Stücke und Sequencer)
   world/     Level-ASCII, Parser, Kachel-Kollision, World-Interface
   entities/  Physikkörper, Spieler, Gegner, Boss, Projektile, Pickups, Plattformen;
-             colossus.ts, wyrm.ts, vesper.ts für die drei neuen Bosse, und
-             roster.ts, das alle Gegner aus ihrer Art baut
+             mimic.ts, colossus.ts, spider.ts, wyrm.ts, vesper.ts und shadow.ts
+             für die Arenabosse, relics.ts für die Relikte und wie die Monster
+             sie verrechnen, und roster.ts, das alle Gegner aus ihrer Art baut
   render/    Parallax-Hintergrund, Kachel-Renderer, Deko, Sprite-Helfer, Palette
   fx/        Partikel und Schadenszahlen
   ui/        HUD-Bausteine (Herzen, Bossleiste, Panels)
@@ -817,6 +1145,7 @@ W  Splitterwächter (Miniboss)   Y  Thalassa (Boss)   K  Prismarch (Bonusboss)
 Z  Die Fünfkronige (Endboss)
 |  Bannwand (an beiden Enden jeder Bossarena, siehe warded() in levelData.ts)
 A  Ankhor (Boss)   I  Ignivor (Boss)   D  Vesperon (Boss)
+U  Gierschlund (Boss)   N  Arachna (Boss)   E  Umbra (Boss)
 ```
 
 Damit das Level begehbar bleibt, gilt beim Bauen: Bodenlücken höchstens vier
@@ -843,11 +1172,12 @@ npm run verify:ending  # führt der Riss zum Tor, und zählt der Lauf am Tor auc
 npm run verify:warden  # wählt der Splitterwächter seinen Zug, und wehrt er sich?
 npm run verify:hydra   # wächst ein Hals nach, brennt ihr Feuer ihn zu, reicht Stahl allein nicht?
 npm run verify:wards   # hält jede Bannwand, bis ihr Boss fällt - und fällt sie dann für immer?
-npm run verify:bosses  # Ankhor, Ignivor, Vesperon: Züge, Ankündigungen, Regeln, Ende
+npm run verify:bosses  # die sechs Arenabosse: Züge, Ankündigungen, Regeln, Ende, Relikt
 npm run verify:audio   # klingt jeder Effekt, spielt jedes Stück, folgt die Musik dem Kampf?
 npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Klinge
 npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
+npm run verify:relics  # gibt jeder Boss sein Relikt her, und tut jedes, was es sagt?
 npm run suite          # breite Reihe: Zustände, Eingabe, Pickups, Bildzeit je Zone
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
@@ -903,7 +1233,8 @@ nicht mehr: die ferne Bannwand hält, und die hinter ihm ist zu.
 `verify:chain` läuft die ganze Belohnungskette in **einem** Lauf durch, ohne
 Neustart dazwischen: Gallert → Herzkern → Thalassa → Flutklinge → alle 160
 Edelsteine → Kristallhort → Prismarch → Klingenwelle → zurück in die Welt →
-der Ritter (98 TP, pariert die Sicheln) → Siegel → Tor → Sieg. Jedes Glied
+der Ritter (98 TP, pariert die Sicheln) → Schattenschritt und Siegel →
+Fünfkronige und Hydrablut → Tor → Sieg. Jedes Glied
 prüft ein anderes Werkzeug für sich; dieses prüft die **Gelenke**, und die sieht
 sonst niemand an: dass das siebte Herz einen Tod und einen Teleport übersteht,
 dass die Klinge ihre Stufe dabei behält, dass ein gefallener Boss liegen bleibt
@@ -956,24 +1287,53 @@ eigenen Feuer in Sekunden zugehen — jeder von seinem eigenen Absatz aus. Dazu
 klettert derselbe Bot die sechs Stufen mit echter Physik hoch, nicht als
 Sichtprüfung der ASCII-Kunst, sondern als Landung auf jeder einzelnen.
 
-`verify:wards` geht alle sechs gebannten Arenen der Reihe nach ab, jede mit
+`verify:wards` geht alle neun gebannten Arenen der Reihe nach ab, jede mit
 echter Physik: vorher (Weg weiter zu, Weg zurück offen), dreißig Sekunden gegen
 die ferne Wand, acht Sekunden zurück, ein Tod darin, der Fall des Bosses und noch
 ein Tod danach. Der Kampf wird für die Tür übersprungen, nicht gekämpft — ob die
-Bosse fair sind, prüfen ihre eigenen Werkzeuge.
+Bosse fair sind, prüfen ihre eigenen Werkzeuge. Weil der Held dabei einsammelt,
+was die Bosse hinterlassen, fing ab der fünften Arena Arachnas Seidenmantel den
+Schlag ab, der ihn für die Probe sterben lassen sollte; einen echten Tod muss das
+Werkzeug sich jetzt erst einmal verschaffen.
 
-`verify:bosses` bekommt für jeden der drei neuen Bosse eine frische Seite, damit
-kein Kampf in den nächsten hineinleckt, und prüft 28 Dinge: dass jeder Zug
-auftaucht, von drei Stellen im Raum aus; dass jede Ankündigung mindestens eine
-halbe Sekunde dauert — gemessen vom *ersten* Bild des Aufziehens an, denn ein
-Zug, der beim Start der Messung schon lief, maß zu kurz und ließ die Prüfung
-einmal grundlos durchfallen —; dass Lesen weniger als halb so viel kostet wie
-Stehenbleiben; die Regel jedes Bosses; die Bildzeit; und das Ende mit Heilung,
-Banner und offenen Wänden.
+`verify:bosses` bekommt für jeden der sechs Arenabosse eine frische Seite, damit
+kein Kampf in den nächsten hineinleckt, und prüft 63 Dinge: dass jeder Zug
+auftaucht, von mehreren Stellen im Raum aus; dass jede Ankündigung lang genug
+dauert — gemessen vom *ersten* Bild des Aufziehens an, denn ein Zug, der beim
+Start der Messung schon lief, maß zu kurz und ließ die Prüfung einmal grundlos
+durchfallen —; dass Lesen weniger als halb so viel kostet wie Stehenbleiben; die
+Regel jedes Bosses; die Bildzeit; und das Ende mit Heilung, Banner, offenen
+Wänden, Worten und Relikt. Bei Ignivor prüft es inzwischen das Gegenteil von
+früher: Sein Kopf muss nach jedem Durchbruch über eine Sekunde auf dem Boden
+stecken, sein Speien darf nie zwischen Held und Kopf landen, und ein Hieb vom
+Boden muss den Kopf finden — steckend wie hängend. Bei Umbra spielen zwei Bots
+gegeneinander: einer, der nur draufhaut, und einer, der pariert und wartet.
+
+`verify:relics` fällt jeden der zwölf Bosse in seiner eigenen Welt und liest
+mit: dass er spricht, sein Relikt hergibt, dass es einen echten Tod übersteht
+(der Mantel und der zweite Atem werden dafür abgelegt — sie fingen sonst genau
+den Schlag ab, um den es geht) und dass ein Neustart alles wieder nimmt. Dann
+jedes Relikt für sich, am Helden gemessen: sieben Herzen; zehn Edelsteine sind
+ein Herz, bei voller Leiste gespart; die Glut macht aus 1, 1, 2 die Folge 1, 1, 3;
+der Ladeschlag lädt schneller, und seine Schockwelle trifft das Ziel dahinter,
+aber nicht das, das die Klinge schon hatte (1 und 3 vorn, 2 hinten); der Mantel
+wächst nach 12 Sekunden nach, nicht früher; sechzehn Schaden sind ein Herz; zwei
+Rollen in der Luft statt einer, und am Boden keine endlose Kette; ein tödlicher
+Schlag pro Leben, nicht zwei; drei Splitter aus einer Parade und keiner ohne das
+Relikt; ein Herz alle 18 Sekunden. Und dass die Monster mitrechnen: ein Skelett
+mit 8 statt 5 Leben vor einem bewaffneten Helden, Ankhor mit 95 statt 54 vor
+elf Relikten.
 
 `npm run playtest` fällt an den gebannten Arenen jetzt nicht mehr durch die Wände
 — er kämpft fünf Sekunden, meldet, dass er dort war und eingeschlossen wurde, und
 dann wird der Boss für ihn gefällt: Der Bot kann laufen und hauen, nicht lesen.
+Wie weit er kommt, schwankt stark von Lauf zu Lauf. Gegen den Verdacht, die
+Monster seien mit den Relikten zu zäh geworden, liefen je drei Läufe vorher und
+nachher: Beide Stände bleiben manchmal am selben Paar aus Skelett und
+Schildwache kurz hinter dem Moor hängen (vorher zwei von drei Läufen, jetzt einer),
+und der weiteste Lauf kam vorher bis Kachel 861, jetzt bis in den Thronsaal. An
+der Stelle selbst trägt der Held nur den Herzkern, und der zählt bei den Monstern
+nichts — sie sind dort genau so stark wie früher.
 
 `npm run screenshots` leitet jetzt auch die frühen Bilder aus den Zonen ab statt
 aus Kachelzahlen. „Kristallhöhlen" zeigte seit dem Einbau des Moors die Ruinen,

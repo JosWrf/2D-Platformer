@@ -172,6 +172,9 @@ const marken = await page.evaluate(() => {
     colossus: at('colossus'),
     wyrm: at('wyrm'),
     vesper: at('vesper'),
+    mimic: at('mimic'),
+    spider: at('spider'),
+    shadow: at('shadow'),
     ruins: zone('Versunkene Ruinen'),
     caverns: zone('Kristallhöhlen'),
   };
@@ -605,6 +608,86 @@ await page.evaluate(() => {
   g.render(document.querySelector('canvas').getContext('2d'));
 });
 await shot('29-bannwand');
+
+/* 30-34 — three more, Ignivor's head in reach, and what they all leave ---- */
+
+// Gierschlund: lid thrown back, its gold in the air.
+await open(`?x=${marken.mimic - 11}`);
+await arenaMoment('mimic', "boss.state === 'hop'", 60 * 12);
+await page.evaluate(() => {
+  const g = window.game;
+  const boss = g.enemies.find((e) => e.kind === 'mimic');
+  const p = g.player;
+  p.x = boss.cx - 230;
+  p.vx = 0;
+  boss.facing = -1;
+  boss.state = 'spitWind';
+  boss.timer = 0.1;
+});
+await arenaMoment('mimic', "g.projectiles.filter((q) => q.kind === 'coin').length >= 5 && g.projectiles.some((q) => q.kind === 'coin' && q.vy > 0)", 60 * 3);
+await shot('30-gierschlund');
+
+// Arachna: drawn up over her mark, about to let go.
+await open(`?x=${marken.spider - 11}`);
+await arenaMoment('spider', "boss.state === 'dropWind' && boss.timer < 0.3 && g.zoneBanner.timer <= 0", 60 * 40);
+await shot('31-arachna');
+
+// Umbra: the hero's own shape, his own blade, coming at him.
+await open(`?x=${marken.shadow - 11}`);
+await arenaMoment('shadow', "boss.state === 'duel' && boss.body.isAttacking && Math.abs(boss.body.cx - g.player.cx) < 90", 60 * 30);
+await shot('32-umbra');
+
+// Ignivor, come down out of a breach with his head stuck in the floor - in
+// reach, and the hero already swinging at it.
+await open(`?x=${marken.wyrm - 11}`);
+await arenaMoment('wyrm', "boss.state === 'stuck' && boss.timer < 1.2", 60 * 40);
+await page.evaluate(() => {
+  const g = window.game;
+  const boss = g.enemies.find((e) => e.kind === 'wyrm');
+  const p = g.player;
+  const side = Math.sign(p.cx - boss.hx) || -1;
+  p.x = boss.hx + side * 46 - p.w / 2;
+  p.y = boss.floorY - p.h;
+  p.facing = -side;
+  for (let i = 0; i < 9; i++) {
+    window.input.forceDown('attack', i < 2);
+    boss.timer = Math.max(boss.timer, 0.5);
+    g.update(1 / 60, window.input);
+  }
+  window.input.forceDown('attack', false);
+  g.render(document.querySelector('canvas').getContext('2d'));
+});
+await shot('33-ignivor-steckt-fest');
+
+// The relics: a hero at the end of the road, in sight of the gate, and the
+// pause screen that says what each of them does.
+await open(`?x=${marken.portal - 18}`);
+await page.evaluate(() => {
+  const g = window.game;
+  for (const id of [
+    'herzkern',
+    'goldzahn',
+    'bebenfaust',
+    'seidenmantel',
+    'glutklinge',
+    'flutklinge',
+    'blutdurst',
+    'schattenschritt',
+    'zweiteratem',
+    'splitterparade',
+    'hydrablut',
+  ]) {
+    g.takeRelic(id);
+  }
+  g.dialogue = null;
+  g.zoneBanner = { text: '', timer: 0 };
+  g.player.hp = g.player.maxHp - 2;
+});
+await step(90);
+await step(2, { pause: true });
+await release('pause');
+await step(2);
+await shot('34-relikte');
 
 console.log(JSON.stringify(results, null, 2));
 await browser.close();

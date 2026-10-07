@@ -128,6 +128,41 @@ export const ZONES: Zone[] = [
   },
   {
     /*
+     * The treasury: the ruins' stone and sky, with the dark leaning towards
+     * gold - there is a great deal of it lying about in here, and all of it
+     * in the one place.
+     */
+    name: 'ruins',
+    start: ZONE_START.vault,
+    skyTop: '#0c0910',
+    skyBottom: '#1a1410',
+    hillFar: '#2e2418',
+    hillNear: '#211a12',
+    ambient: 'rgba(242,193,78,0.07)',
+    label: 'Die Schatzkammer',
+    sporeRgb: '255,214,120',
+    darkness: 0.76,
+    darkTint: '#0a0706',
+    interior: false,
+    calm: false,
+  },
+  {
+    name: 'ruins',
+    start: ZONE_START.ruinsAgain,
+    skyTop: '#0a0716',
+    skyBottom: '#140f22',
+    hillFar: '#2a2140',
+    hillNear: '#1d1830',
+    ambient: 'rgba(150,110,200,0.06)',
+    label: 'Versunkene Ruinen',
+    sporeRgb: '246,204,150',
+    darkness: 0.76,
+    darkTint: '#080512',
+    interior: false,
+    calm: false,
+  },
+  {
+    /*
      * The temple's inner court, where Ankhor stands. Still the ruins - the same
      * stone, the same sky - with the dark leaning a little towards his amber,
      * so the room reads as somewhere before the banner says so.
@@ -149,6 +184,38 @@ export const ZONES: Zone[] = [
   {
     name: 'caverns',
     start: ZONE_START.caverns,
+    skyTop: '#03080d',
+    skyBottom: '#071620',
+    hillFar: '#0f2634',
+    hillNear: '#0a1a25',
+    ambient: 'rgba(80,220,255,0.07)',
+    label: 'Kristallhöhlen',
+    sporeRgb: '255,220,150',
+    darkness: 0.88,
+    darkTint: '#01060c',
+    interior: true,
+    calm: false,
+  },
+  {
+    // Her chamber: the caves gone pale and cold, silk catching what light
+    // there is.
+    name: 'caverns',
+    start: ZONE_START.web,
+    skyTop: '#04080c',
+    skyBottom: '#0a141c',
+    hillFar: '#16242e',
+    hillNear: '#0e1a22',
+    ambient: 'rgba(200,225,240,0.06)',
+    label: 'Die Netzkammer',
+    sporeRgb: '210,232,246',
+    darkness: 0.88,
+    darkTint: '#02060a',
+    interior: true,
+    calm: false,
+  },
+  {
+    name: 'caverns',
+    start: ZONE_START.cavernsAgain,
     skyTop: '#03080d',
     skyBottom: '#071620',
     hillFar: '#0f2634',
@@ -258,6 +325,37 @@ export const ZONES: Zone[] = [
   {
     name: 'rift',
     start: ZONE_START.rift,
+    sporeRgb: '206,178,255',
+    darkness: 0.86,
+    darkTint: '#08040f',
+    skyTop: '#080312',
+    skyBottom: '#160a26',
+    hillFar: '#1d1030',
+    hillNear: '#130a20',
+    ambient: 'rgba(150,90,255,0.07)',
+    label: 'Der Riss',
+    interior: false,
+    calm: true,
+  },
+  {
+    // Still enough to show a reflection: the rift, darker, holding its breath.
+    name: 'rift',
+    start: ZONE_START.mirror,
+    sporeRgb: '190,160,255',
+    darkness: 0.88,
+    darkTint: '#06030c',
+    skyTop: '#06020e',
+    skyBottom: '#120820',
+    hillFar: '#1a0e2c',
+    hillNear: '#10081c',
+    ambient: 'rgba(130,80,240,0.08)',
+    label: 'Der Spiegelgrund',
+    interior: false,
+    calm: true,
+  },
+  {
+    name: 'rift',
+    start: ZONE_START.riftAgain,
     sporeRgb: '206,178,255',
     darkness: 0.86,
     darkTint: '#08040f',

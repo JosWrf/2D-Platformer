@@ -163,7 +163,7 @@ export class Boss extends Body {
     // He sizes up the blade coming at him, once. See bossScale.
     if (!this.scaled) {
       this.scaled = true;
-      const scale = bossScale(world.player.beamTier);
+      const scale = bossScale(world.player.relics);
       this.maxHp = Math.round(BOSS_MAX_HP * scale.hp);
       this.hp = this.maxHp;
       this.staggerAt = Math.round(STAGGER_DAMAGE * scale.poise);

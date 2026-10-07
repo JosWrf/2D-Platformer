@@ -36,7 +36,10 @@ export type TrackName =
   | 'bossBlood'
   | 'bossKnight'
   | 'bossHydra'
-  | 'bossCrystal';
+  | 'bossCrystal'
+  | 'bossGold'
+  | 'bossWeb'
+  | 'bossShadow';
 
 const SCALES = {
   aeolian: [0, 2, 3, 5, 7, 8, 10],
@@ -256,6 +259,40 @@ const TRACKS: Record<TrackName, Track> = {
     bass: { pattern: 'x.xxx.xxx.xxx.xo', gain: 0.1, style: 'drive' },
     arp: { pattern: 'xxxxxxxxxxxxxxxx', notes: [0, 4, 7, 9, 7, 4], octave: 2, gain: 0.02, type: 'sine', decay: 0.25, wet: 0.6 },
     drums: { kick: 'x.......x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', gain: 0.85 },
+  },
+  /* The treasury: a jaunty, jumpy thing with coins ringing over it. */
+  bossGold: {
+    bpm: 132,
+    root: 55,
+    scale: SCALES.harmonic,
+    prog: [0, 3, 4, 0],
+    pad: { gain: 0.03, cutoff: 1300, wet: 0.4 },
+    bass: { pattern: 'x..x..x.x..x.oo.', gain: 0.11, style: 'drive' },
+    lead: { pattern: '0.2.4.7.6h4.2...0.2.4.2.1h0hh...', octave: 1, gain: 0.028, type: 'square', wet: 0.3 },
+    drums: { kick: 'x.....x...x.....', snare: '....x.......x...', hat: 'x.xxx.xxx.xxx.xx', gain: 0.85 },
+    bells: { chance: 0.12, octave: 2, gain: 0.025 },
+  },
+  /* Her chamber: a slow pulse and something picking its way along a thread. */
+  bossWeb: {
+    bpm: 112,
+    root: 49,
+    scale: SCALES.phrygian,
+    prog: [0, 1, 0, 5],
+    pad: { gain: 0.045, cutoff: 800, type: 'triangle', wet: 0.75 },
+    bass: { pattern: 'x...x...x.x.x...', gain: 0.11, style: 'pulse' },
+    arp: { pattern: 'x.xx.xx.x.xx.xx.', notes: [0, 1, 4, 7, 8, 7, 4, 1], octave: 1, gain: 0.026, type: 'triangle', decay: 0.22, wet: 0.5 },
+    drums: { kick: 'x.......x.......', tom: '...l......l..l..', hat: '..g...g...g...g.', gain: 0.8 },
+  },
+  /* The shadow: fast, and the line on top runs backwards. */
+  bossShadow: {
+    bpm: 144,
+    root: 47,
+    scale: SCALES.harmonic,
+    prog: [0, 6, 5, 4],
+    pad: { gain: 0.04, cutoff: 1000, wet: 0.6 },
+    bass: { pattern: 'xoxox.xoxoxox.xo', gain: 0.1, style: 'drive' },
+    lead: { pattern: '7h6h4h2h0hhh....2h4h6h4h2hhh1h0h', octave: 1, gain: 0.03, type: 'sawtooth', wet: 0.45 },
+    drums: { kick: 'x..x....x..x....', snare: '....x.......x.gg', hat: 'x.x.x.x.x.x.x.x.', gain: 0.9 },
   },
 };
 

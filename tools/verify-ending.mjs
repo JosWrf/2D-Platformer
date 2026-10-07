@@ -69,12 +69,12 @@ const result = await page.evaluate(() => {
     g.render(ctx);
   };
   // The rift is only open once the knight has fallen; skip the fight itself.
-  // The hydra in the shaft holds the gate shut on top of that, and the
-  // warden's arena is warded until he falls - and this tool is about the road
-  // and the door rather than their fights: verify:hydra, verify:warden and
-  // verify:wards are.
+  // The hydra in the shaft holds the gate shut on top of that, and Umbra's
+  // and the warden's arenas are warded until they fall - and this tool is
+  // about the road and the door rather than their fights: verify:hydra,
+  // verify:bosses, verify:warden and verify:wards are.
   const fellTheHydra = () => {
-    for (const e of g.enemies) if (e.kind === 'hydra' || e.kind === 'warden') e.dead = true;
+    for (const e of g.enemies) if (e.kind === 'hydra' || e.kind === 'warden' || e.kind === 'shadow') e.dead = true;
   };
   const openTheWay = () => {
     g.level.exitSealed = false;

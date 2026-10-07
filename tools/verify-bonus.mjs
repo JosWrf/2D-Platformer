@@ -266,6 +266,8 @@ const result = await page.evaluate(() => {
   for (const e of g.enemies) if (e.kind !== 'prismarch') e.dead = true;
   const target = g.spawnEnemyOfKind('skeleton', p.x + 130, 18 * 32);
   target.active = true;
+  // Already sized up for the hero's relics: this measures the blade, not that.
+  target.hardened = true;
   const hitAtGap = (gap) => {
     target.hp = target.maxHp = 20;
     target.x = p.x + gap;

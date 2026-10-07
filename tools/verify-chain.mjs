@@ -4,7 +4,8 @@
  *   Gallert -> the Herzkern (six hearts become seven) -> Thalassa -> the
  *   Flutklinge -> every gem -> the crystal hall -> the Prismarch -> the
  *   Klingenwelle -> back into the world -> the knight, sized up for the blade
- *   and batting its crescents aside -> the seal -> the gate -> victory.
+ *   and batting its crescents aside -> his Schattenschritt and the seal ->
+ *   the hydra and her Hydrablut -> the gate -> victory.
  *
  * Every one of those links is checked on its own by another tool. This one is
  * about the joints between them, which nothing else looks at: that the extra
@@ -152,7 +153,16 @@ const out = await page.evaluate(() => {
     t({ right: d > 46, left: d < -46, attack: f2 % 11 < 4 });
   }
   for (let i = 0; i < 60 * 5; i++) t();
-  melde('Siegel', { ritterTot: g.boss.dead, siegelOffen: !g.level.exitSealed, sekunden: +(f2 / 60).toFixed(1), zustand: g.state });
+  // Sein Schritt, nach seinen Worten: Morvain lässt jetzt auch etwas da.
+  const ritterZeilen = lesen();
+  melde('Siegel', {
+    ritterTot: g.boss.dead,
+    siegelOffen: !g.level.exitSealed,
+    sekunden: +(f2 / 60).toFixed(1),
+    zustand: g.state,
+    dialogzeilen: ritterZeilen,
+    relikt: p.has('schattenschritt'),
+  });
 
   /* 8. Die Fünfkronige: sie hält das Tor zu, bis der letzte Kopf fällt */
   const hydraKachel = spawnKachel('hydra');
@@ -184,7 +194,10 @@ const out = await page.evaluate(() => {
   sie.struck = sie.necks.findIndex((n) => n.kind === 'flame');
   sie.hurt(999, 1, g);
   for (let f = 0; f < 60 * 3; f++) { p.hp = p.maxHp; p.invuln = 999; t(); }
+  const hydraZeilen = lesen();
   melde('Fünfkronige', {
+    dialogzeilen: hydraZeilen,
+    relikt: p.has('hydrablut'),
     geweckt,
     torZuBeiIhr,
     lebteVorDemLetzten,
@@ -251,12 +264,17 @@ const ok =
   // And the run can still be finished.
   seal.ritterTot === true &&
   seal.siegelOffen === true &&
+  // Morvain's fall leaves his step, after his words.
+  seal.dialogzeilen >= 3 &&
+  seal.relikt === true &&
   // Und das Tor gehört ihr, bis der fünfte Kopf fällt.
   hydra.geweckt === true &&
   hydra.torZuBeiIhr === true &&
   hydra.lebteVorDemLetzten === true &&
   hydra.gefallen === true &&
   hydra.torWiederOffen === true &&
+  hydra.dialogzeilen >= 3 &&
+  hydra.relikt === true &&
   hydra.herzen === 7 &&
   hydra.stufe === 2 &&
   gate.zustand === 'victory' &&
@@ -279,6 +297,6 @@ if (!ok) {
 }
 console.log(
   'OK: the bog leaves a seventh heart, the drowned crown a blade that throws, the crystal heart ' +
-    'sharpens it, everything survives a death and a teleport, the knight answers the crescent, ' +
-    'and the gate still ends the run.',
+    'sharpens it, everything survives a death and a teleport, the knight answers the crescent and ' +
+    'leaves his step, the hydra her blood, and the gate still ends the run.',
 );

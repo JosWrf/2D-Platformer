@@ -16,7 +16,8 @@
  *   T  torch            X  crystal            M/V moving platform (h/v)
  *   |  arena ward (see warded() below)
  *   A  Ankhor, the temple colossus   I  Ignivor, the ember wyrm
- *   D  Vesperon, the blood lord
+ *   D  Vesperon, the blood lord      U  Gierschlund, the greedy chest
+ *   N  Arachna, the web queen        E  Umbra, the hero's shadow
  */
 
 export const CHUNK_H = 22;
@@ -234,6 +235,37 @@ const RUINS_TEMPLE = c(40, [
   '========================================',
 ]);
 
+/**
+ * The temple's treasury, roofless now, and the one chest in it that nobody has
+ * ever opened and walked away from. Flat ground for it to hop across, a plank
+ * either side to get over its tongue, and nothing to pick up: whatever was in
+ * here, it ate.
+ */
+const RUINS_VAULT = warded(c(44, [
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '...............----...........----..........',
+  '............................................',
+  '..C..H.T......T...........U........T........',
+  '============================================',
+  '============================================',
+  '============================================',
+  '============================================',
+]), [8, 43]);
+
 const RUINS_CLIMB = c(40, [
   '........................................',
   '........................................',
@@ -367,6 +399,36 @@ const CAVERN_DEEP = c(40, [
   '======lll=====lll======lll==============',
   '======lll=====lll======lll==============',
 ]);
+
+/**
+ * Arachna's chamber: a cave with a flat roof for her thread to run along, two
+ * low steps and two high ones. The floor is where she comes down on the hero;
+ * the high steps put him level with her, and with the thread above her.
+ */
+const CAVERN_WEB = warded(c(46, [
+  '##############################################',
+  '##############################################',
+  '##############################################',
+  '..........X.....................X.............',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '.............-----..........-----.............',
+  '..............................................',
+  '..............................................',
+  '..........-----................-----..........',
+  '..............................................',
+  '..C..H.X...X...........N..........X......X....',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
 
 const CAVERN_CRYSTAL = c(40, [
   '########################################',
@@ -694,6 +756,36 @@ const RIFT_SHARDS = c(40, [
   '==========....======...======...========',
 ]);
 
+/**
+ * Der Spiegelgrund: a stretch of the rift so still that the floor shows the
+ * one who walks on it. Flat, with a step either side - the hero's own kind of
+ * ground, because the thing waiting on it fights the way he does.
+ */
+const RIFT_MIRROR = warded(c(44, [
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '............................................',
+  '.............----..............----.........',
+  '............................................',
+  '..C..H.T..............E...............T.....',
+  '============================================',
+  '============================================',
+  '============================================',
+  '============================================',
+]), [8, 43]);
+
 /** After the seal breaks: a quiet descent, to let the fight settle. */
 const RIFT_HOLLOW = c(40, [
   '........................................',
@@ -909,11 +1001,13 @@ export const LEVEL_CHUNKS: Chunk[] = [
   FOREST_LAVA,
   FOREST_MIRE,
   RUINS_TEMPLE,
+  RUINS_VAULT,
   RUINS_CLIMB,
   RUINS_GAUNTLET,
   RUINS_COLOSSUS,
   CAVERN_ENTRY,
   CAVERN_DEEP,
+  CAVERN_WEB,
   CAVERN_CRYSTAL,
   CAVERN_WYRM,
   DROWNED_STAIR,
@@ -926,6 +1020,7 @@ export const LEVEL_CHUNKS: Chunk[] = [
   THRONE,
   RIFT_ENTRY,
   RIFT_SHARDS,
+  RIFT_MIRROR,
   RIFT_HOLLOW,
   RIFT_WARDEN,
   RIFT_ASCENT,
@@ -955,8 +1050,12 @@ function startOf(chunk: Chunk): number {
 export const ZONE_START = {
   forest: 0,
   ruins: startOf(RUINS_TEMPLE),
+  vault: startOf(RUINS_VAULT),
+  ruinsAgain: startOf(RUINS_CLIMB),
   temple: startOf(RUINS_COLOSSUS),
   caverns: startOf(CAVERN_ENTRY),
+  web: startOf(CAVERN_WEB),
+  cavernsAgain: startOf(CAVERN_CRYSTAL),
   forge: startOf(CAVERN_WYRM),
   drowned: startOf(DROWNED_STAIR),
   castle: startOf(CASTLE_WALLS),
@@ -964,6 +1063,8 @@ export const ZONE_START = {
   castleEnd: startOf(CASTLE_FINAL),
   throne: startOf(THRONE),
   rift: startOf(RIFT_ENTRY),
+  mirror: startOf(RIFT_MIRROR),
+  riftAgain: startOf(RIFT_HOLLOW),
   lair: startOf(HYDRA_SHAFT),
   riftend: startOf(RIFT_SHRINE),
   crystalworld: startOf(CRYSTAL_HALL),
