@@ -705,9 +705,12 @@ results.mimic = await page.evaluate(() => {
 
   let jumpHold = 0;
   let dodgeTo = null;
+  /** Running round it, and which way: see below. */
+  let passing = 0;
   const fight = (seconds, post, dodge) => {
     h.hits = 0;
     prev = null;
+    passing = 0;
     for (let f = 0; f < 60 * seconds; f++) {
       const a = {};
       if (dodge) {
@@ -715,7 +718,16 @@ results.mimic = await page.evaluate(() => {
         const dist = Math.abs(boss.cx - p.cx);
         const away = boss.cx > p.cx ? 'left' : 'right';
         const toward = boss.cx > p.cx ? 'right' : 'left';
-        if (['biteWind', 'bite', 'snapWind', 'snap', 'gulpWind', 'gulp'].includes(s)) {
+        const open = s === 'gape' || s === 'jammed';
+        if (passing !== 0) {
+          // On past it, until well clear - or clear enough, once it shuts.
+          const beyond = passing > 0 ? p.cx - boss.cx : boss.cx - p.cx;
+          if (beyond > 110 || (!open && beyond > 50)) passing = 0;
+          else a[passing > 0 ? 'right' : 'left'] = true;
+        }
+        if (passing !== 0) {
+          // (running)
+        } else if (['biteWind', 'bite', 'snapWind', 'snap', 'gulpWind', 'gulp'].includes(s)) {
           // Out of the jaws' way: a bite lunges a good hundred pixels.
           if (dist < 240) a[away] = true;
         } else if (s === 'tongueWind' || s === 'tongue') {
@@ -724,6 +736,14 @@ results.mimic = await page.evaluate(() => {
         } else if (s === 'hop') {
           if (dist < 140) a[away] = true;
           else if (dist > 260) a[toward] = true;
+        } else if (open) {
+          // Backing off from every lunge ends in a corner, and a chest that
+          // has someone in a corner snaps. Its windows are the time to get
+          // round it - open and panting, it does not hurt to pass.
+          const chestRight = boss.cx > p.cx;
+          const behind = chestRight ? p.cx - h.arena.left : h.arena.right - p.cx;
+          const room = chestRight ? h.arena.right - boss.cx : boss.cx - h.arena.left;
+          if (behind < 200 && room > behind + 120 && boss.timer > 0.45) passing = chestRight ? 1 : -1;
         }
         // The coins come down on him and either side of him, a little over a
         // hero's width apart: half a gap aside is out from under all of them.
@@ -1286,7 +1306,13 @@ results.shadow = await page.evaluate(() => {
       lastState = boss.state;
     }
   };
-  /** Back to the start of the duel: full health, first half, a little way off. */
+  /**
+   * Back to the start of the duel: full health, first half, both of them in
+   * the middle of the floor a little way apart. Placing him beside it wherever
+   * it stood once put him on the far side of the ward, with it pinning him
+   * there for the rest of the run.
+   */
+  const mid = (h.arena.left + h.arena.right) / 2;
   const reset = () => {
     boss.hp = boss.maxHp;
     boss.phaseTwo = false;
@@ -1295,9 +1321,16 @@ results.shadow = await page.evaluate(() => {
     boss.state = 'duel';
     b.beamTier = p.beamTier;
     boss.setPlan('stalk', 0.4);
-    p.x = b.cx - 130 - p.w / 2;
+    b.x = mid + 65 - b.w / 2;
+    b.y = boss.floorY - b.h;
+    b.vx = 0;
+    b.vy = 0;
+    p.x = mid - 65 - p.w / 2;
+    p.y = boss.floorY - p.h;
     p.vx = 0;
+    p.vy = 0;
     p.hp = p.maxHp;
+    p.invuln = 0;
   };
 
   let jumpHold = 0;

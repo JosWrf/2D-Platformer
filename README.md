@@ -690,7 +690,7 @@ sieben.
 Derselbe lesende Bot erledigt ihn jetzt in **63 bis 73 Sekunden** und kassiert
 dabei 5 bis 8 Herzen — mit genau den Relikten, die man bis dahin hat, und damit
 gegen 64 statt 58 Leben. Die Panzerung bleibt Panzerung, die Feuerwelle bleibt,
-wie sie war, und wer stehen bleibt, zahlt weiter: 13 bis 15 Herzen in 45
+wie sie war, und wer stehen bleibt, zahlt weiter: 13 bis 17 Herzen in 45
 Sekunden, gegen keines für den, der liest. Wer ihn löscht, bekommt die
 **Glutklinge**.
 
@@ -838,10 +838,11 @@ Was er nicht hat, ist Geduld, und was er liest, ist die des Helden:
   steigt hinter dem Helden wieder auf, Klinge voran. Die Pfütze, aus der er
   steigt, zeigt sich vorher — 0,93 Sekunden, bevor er zuschlägt.
 
-Gemessen in `verify:bosses`: Wer nur draufhaut, wird in 25 Sekunden 21-mal
-pariert und kassiert 25 Treffer — mit sechs Herzen sind das vier Leben. Wer
+Gemessen in `verify:bosses`, über vier Läufe: Wer nur draufhaut, wird in 20 bis
+25 Sekunden 15- bis 21-mal pariert und kassiert 18 bis 25 Treffer — mit sechs
+Herzen sind das drei bis vier Leben. Wer
 pariert und auf die Fenster wartet, legt ihn in 31 bis 37 Sekunden um und nimmt
-dabei einen einzigen Treffer.
+dabei höchstens einen Treffer.
 
 Wer ihn besiegt, bekommt den **Zweiten Atem**: Der Schatten steht jetzt hinter
 dem Helden, und einmal in jedem Leben fängt er auf, was ihn fällen würde.
@@ -853,16 +854,17 @@ dem Helden, und einmal in jedem Leben fängt er auf, was ihn fällen würde.
 `verify:bosses` stellt für jeden der fünf Arenabosse, die nicht der Held selbst
 sind, einen Helden hin, der nur dasteht, und einen, der die Ankündigungen liest —
 aus dem Schatten tritt, über die Hand und die Zunge springt, zwischen die Münzen
-und die Netzballen tritt, die Glut unter sich verlässt, unter den speienden Kopf
-geht, von der Sturzlinie geht und Fledermäuse wie Spinnenjunge abwehrt. Beide
-werden am Leben gehalten; gezählt wird, was durchkommt, über zwei Läufe:
+und die Netzballen tritt, an der offenen Truhe vorbeiläuft, statt sich von ihr in
+die Ecke treiben zu lassen, die Glut unter sich verlässt, unter den speienden
+Kopf geht, von der Sturzlinie geht und Fledermäuse wie Spinnenjunge abwehrt.
+Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Läufe:
 
 | | Ankündigung (kürzeste gemessene) | stehen bleiben | lesen |
 | --- | --- | --- | --- |
-| Gierschlund, 45 s | Biss 0,63 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 17–28 Herzen | 3–4 |
+| Gierschlund, 45 s | Biss 0,63 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 16–28 Herzen | 0–2 |
 | Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
-| Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0 |
-| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13–15 Herzen | 0 |
+| Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0–1 |
+| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13–17 Herzen | 0 |
 | Vesperon, 40 s | Sturzflug 0,57 s | 29–32 Herzen | 9–12 |
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
