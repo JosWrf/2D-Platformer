@@ -7,15 +7,34 @@ import { Projectile } from './projectile';
 
 /**
  * Health before the hero is sized up. The second boss of the run, after
- * Gallert's twenty-two and before Ankhor's fifty-four.
+ * Gallert's twenty-two and before Ankhor's fifty-four. 32, down from 40: see
+ * the windows below - with them a hero who reads it lands about twice what he
+ * used to, and at 40 that made a second boss longer than the fifth.
  */
-const MIMIC_HP = 40;
+const MIMIC_HP = 32;
 /**
- * Damage taken in the open before the lid jams. Eleven, measured: at eight a
- * hero who simply stood against it and swung jammed it open every other time
- * it opened, and finished it in eighteen seconds for two bites.
+ * Damage taken in the open before the lid jams. Eleven was measured against a
+ * hero who simply stood against it and swung: at eight he jammed it open every
+ * other time it opened. He no longer can - a chest he clings to snaps, and its
+ * windows are where it is, not where he is - so eight it is again: a hero who
+ * gets to the mouth in time jams it about every third window.
  */
-const MIMIC_POISE = 11;
+const MIMIC_POISE = 8;
+/**
+ * How long it stays open after each move: the windows. They used to be 0.85
+ * to 1.15 s, and less in its second half - shorter than it takes to see one
+ * open, a quarter of a second, and run the hundred pixels or more its own move
+ * has just put between it and the hero. Measured with a hero who sees it that
+ * late, a window was worth one swing, and the fight took over two minutes.
+ */
+const GAPE = { bite: 1.9, snap: 0.9, spit: 1.5, tongue: 1.7, gulp: 1.6 };
+/**
+ * Seconds a hero has to stand against it before it snaps. It used to snap at
+ * whoever was close when it next chose a move - which, right after a window,
+ * was everyone who had used the window, with 0.4 s of rattle to get out.
+ * Now a hero leaving a window gets a hop back; only clinging gets the lid.
+ */
+const CLING = 0.9;
 /** How fast its breath drags the hero across the floor, against MAX_RUN's 235. */
 const GULP_PULL = 120;
 /** How far the tongue reaches along the floor, from the front of the chest. */
@@ -65,8 +84,9 @@ interface Plank {
  *   Schnappbiss  - the lid cracks, an eye lights in the gap, and it lunges with
  *                  its jaws wide. Afterwards it gapes for a breath - the window.
  *                  Parry the bite and the lid jams open.
- *   Schnapper    - whoever stands against it gets the lid: a short rattle and
- *                  a snap on the spot. Hugging a chest is how chests eat you.
+ *   Schnapper    - whoever clings to it gets the lid: a short rattle and a
+ *                  snap on the spot. Hugging a chest is how chests eat you -
+ *                  using a window is not hugging it, and gets a hop back.
  *   Goldregen    - it throws its lid back and spits a fan of coins. They
  *                  come down around the hero and lie there a moment, and a
  *                  swing bats one back - and gold coming home is the one thing
@@ -79,6 +99,14 @@ interface Plank {
  *
  * Between moves it hops after the hero with its lid shut tight, so there is
  * nothing to do about it then but keep clear and wait for it to want something.
+ *
+ * It was far too strong for a second boss, and the bot it was measured with
+ * could not tell: that one saw every move the frame it began. One that sees it
+ * a quarter of a second late, as a player does, needed over two minutes and
+ * lost eleven to fifteen hearts - its windows were shorter than seeing one and
+ * running to it, the snap took whoever had used the last one, and its hops
+ * came down on him. See GAPE and CLING; now the same bot needs about half a
+ * minute.
  */
 export class Mimic extends Enemy {
   private state: MimicState = 'dormant';
@@ -100,6 +128,8 @@ export class Mimic extends Enemy {
   private phaseTwo = false;
   /** Set for the first bite of a pair in the second half. */
   private chain = false;
+  /** How long the hero has stood against it, without a break. See CLING. */
+  private clinging = 0;
   private struck: 'shell' | 'mouth' | 'tongue' | null = null;
   private planks: Plank[] = [];
   private arenaLeft = 0;
@@ -263,9 +293,13 @@ export class Mimic extends Enemy {
     world.hitStop(0.14);
   }
 
-  /** Only a chest in motion hurts: a hop landing, a lunge, a lash. */
+  /**
+   * Only a chest in motion hurts: a hop landing, a lunge, a lash. A hop hurts
+   * on its way down only - one on its way up is leaving, and a hero walking
+   * in to meet a window was being hit by the chest hopping off out of it.
+   */
   override touchPlayer(world: World): void {
-    if (this.state !== 'hop' || this.onGround) return;
+    if (this.state !== 'hop' || this.onGround || this.vy < 0) return;
     super.touchPlayer(world);
   }
 
@@ -279,6 +313,7 @@ export class Mimic extends Enemy {
     this.eye = Math.max(0, this.eye - dt * 2);
     this.squash = approach(this.squash, 0, dt * 3);
     this.coinGlint = Math.max(0, this.coinGlint - dt);
+    this.clinging = dist < 72 && !player.dead ? this.clinging + dt : 0;
 
     if (this.arenaRight === 0) {
       const arena = world.level.arenaAt(this.cx);
@@ -337,8 +372,9 @@ export class Mimic extends Enemy {
             if (dist < 200 || this.hops >= 2 || (dist < 320 && this.hops >= 1 && Math.random() < 0.5)) {
               this.chooseMove(world, dist);
             } else {
+              // After him - but down short of him, not on him.
               this.vy = -400;
-              this.vx = sign(dx) * Math.min(190, dist * 1.4);
+              this.vx = sign(dx) * Math.min(190, Math.max(0, dist - 110) * 1.75);
               this.squash = -0.6;
               this.hops++;
               this.timer = 0.36 * this.haste;
@@ -359,7 +395,9 @@ export class Mimic extends Enemy {
           this.state = 'bite';
           this.timer = 0.34;
           this.hitThisMove = false;
-          this.vx = this.facing * 540;
+          // 480, down from 540: the lunge outran a hero who had started back
+          // the moment he saw the lid crack.
+          this.vx = this.facing * 480;
           this.lidTarget = 1;
           audio.play('dash', 0.7);
         }
@@ -380,13 +418,13 @@ export class Mimic extends Enemy {
           audio.play('slam', 1.5);
           world.camera.addShake(3);
           if (this.chain) {
-            // The second of a pair: no breath between them.
+            // The second of a pair: hardly a breath between them.
             this.chain = false;
             this.state = 'biteWind';
-            this.timer = 0.38;
+            this.timer = 0.5;
             audio.play('tell', 1.3);
           } else {
-            this.gape(1.15);
+            this.gape(GAPE.bite);
           }
         }
         break;
@@ -411,9 +449,10 @@ export class Mimic extends Enemy {
         const jaws = { x: this.x - 14, y: this.y - 10, w: W + 28, h: H + 10 };
         if (!this.hitThisMove && !player.dead && rectsOverlap(jaws, player.rect)) {
           this.hitThisMove = true;
-          this.chomp(world, sign(player.cx - this.cx) || this.facing);
+          // One heart: it is the lid, not the bite.
+          this.chomp(world, sign(player.cx - this.cx) || this.facing, 1);
         }
-        if (this.timer <= 0 && this.state === 'snap') this.gape(0.45);
+        if (this.timer <= 0 && this.state === 'snap') this.gape(GAPE.snap);
         break;
       }
 
@@ -433,7 +472,7 @@ export class Mimic extends Enemy {
         this.coinGlint = 0.6;
         if (this.timer <= 0) {
           this.spit(world);
-          this.gape(0.85);
+          this.gape(GAPE.spit);
         }
         break;
 
@@ -466,7 +505,7 @@ export class Mimic extends Enemy {
         }
         if (this.timer <= 0 || (elapsed > 0.4 && this.tongue < 4)) {
           this.tongue = 0;
-          this.gape(1.0);
+          this.gape(GAPE.tongue);
         }
         break;
       }
@@ -514,7 +553,7 @@ export class Mimic extends Enemy {
           if (!player.dead && Math.abs(player.cx - front) < 52 && Math.abs(player.bottom - this.bottom) < 40) {
             this.chomp(world, this.facing);
           }
-          if (this.state === 'gulp') this.gape(1.0);
+          if (this.state === 'gulp') this.gape(GAPE.gulp);
         }
         break;
       }
@@ -555,10 +594,10 @@ export class Mimic extends Enemy {
    * lunging chest is often a little further than that when its jaws arrive:
    * measured, two parried bites in three left it shut.
    */
-  private chomp(world: World, dir: number): void {
+  private chomp(world: World, dir: number, damage = 2): void {
     const p = world.player;
     const guarding = p.parryTimer > 0;
-    p.hurt(2, dir, world);
+    p.hurt(damage, dir, world);
     if (guarding && p.parryTimer === 0 && p.parryFlash > 0.95 && this.state !== 'jammed') this.onParried(world);
   }
 
@@ -576,20 +615,22 @@ export class Mimic extends Enemy {
     this.lidTarget = 0;
   }
 
+  /** Open, after a move. Its second half hurries everything but this. */
   private gape(seconds: number): void {
     this.state = 'gape';
-    this.timer = seconds * this.haste;
+    this.timer = seconds;
   }
 
   private chooseMove(world: World, dist: number): void {
     const player = world.player;
-    // Against it: the lid, at once - or it hops off to get some room.
+    // Against it: the lid, if he has been clinging - otherwise it hops off to
+    // get some room. See CLING.
     if (dist < 72) {
       this.facing = player.cx > this.cx ? 1 : -1;
-      if (this.lastMove !== 'snap' || Math.random() < 0.6) {
+      if (this.clinging >= CLING) {
         this.lastMove = 'snap';
         this.state = 'snapWind';
-        this.timer = 0.4;
+        this.timer = 0.5;
         audio.play('tell', 1.6);
       } else {
         this.lastMove = 'back';
@@ -614,8 +655,9 @@ export class Mimic extends Enemy {
       case 'bite':
         this.state = 'biteWind';
         // The bite's warning is the longest of its moves: it is the one that
-        // hurts most.
-        this.timer = 0.62;
+        // hurts most. 0.75, up from 0.62 - a hero who sees the lid crack a
+        // quarter of a second late still has half a second to get out.
+        this.timer = 0.75;
         this.chain = this.phaseTwo;
         audio.play('tell', 1.1);
         break;

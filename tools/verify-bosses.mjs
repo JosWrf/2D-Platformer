@@ -152,6 +152,10 @@ async function stage(kind, relics = []) {
       const times = [];
       for (let f = 0; f < 60 * seconds; f++) {
         const boss = h.find();
+        // Whole before every frame: this is a measure of what a frame costs,
+        // not a fight. Gierschlund, once its windows were long enough to use,
+        // died in it - and every test after it failed on a dead chest.
+        if (boss && boss.hp > 0) boss.hp = boss.maxHp;
         const dx = boss ? boss.cx - g.player.cx : 0;
         const t0 = performance.now();
         h.tick({ attack: f % 20 < 3, right: dx > 90, left: dx < -90 });

@@ -325,7 +325,7 @@ ankommt (gemessen, nicht gerechnet):
 | Boss | Relikte | Leben | Poise |
 | --- | --- | --- | --- |
 | Gallert | 0 | 22 | 14 |
-| Gierschlund | 1 | 40 | 11 |
+| Gierschlund | 1 | 32 | 8 |
 | Ankhor | 2 | 54 → 55 | 8 |
 | Arachna | 3 | 48 → 52 | 9 → 10 |
 | Ignivor | 4 | 44 → 49 | 5 |
@@ -566,16 +566,18 @@ siehe [Jeder Boss lässt etwas da](#jeder-boss-lässt-etwas-da).
 ### Der zweite Boss: Gierschlund, die gierige Truhe
 
 In der Schatzkammer der Ruinen steht nur noch eine Truhe. Was sonst hier lag, hat
-sie gefressen — Gold, Steine, Diebe. 40 Trefferpunkte, zwei Phasen, und die Regel
+sie gefressen — Gold, Steine, Diebe. 32 Trefferpunkte, zwei Phasen, und die Regel
 einer Truhe: **Zu ist sie ein Tresor.** Jeder Hieb auf den Deckel klingt und tut
 nichts. Sie öffnet sich nur, um etwas zu nehmen, und offen ist sie nur noch Maul:
 
 * **Schnappbiss** — der Deckel klafft, im Spalt leuchtet ein Auge, sie lehnt sich
-  zurück (0,62 s) und springt mit offenem Maul. Danach steht sie einen Atemzug
-  lang offen da und hechelt: das Fenster. Wer den Biss **pariert**, klemmt den
+  zurück (0,75 s) und springt mit offenem Maul. Danach steht sie 1,9 Sekunden
+  offen da und hechelt: das Fenster. Wer den Biss **pariert**, klemmt den
   Deckel auf, zweieinhalb Sekunden lang.
-* **Schnapper** — wer an ihr klebt, bekommt den Deckel: ein kurzes Rattern
-  (0,4 s), dann ist er zu. Eine Truhe umarmen ist, wie Truhen einen fressen.
+* **Schnapper** — wer an ihr klebt, bekommt den Deckel: Steht der Held fast
+  eine Sekunde am Stück an ihr, rattert sie kurz (0,5 s), dann ist er zu — ein
+  Herz. Eine Truhe umarmen ist, wie Truhen einen fressen. Wer nur ein Fenster
+  genutzt hat, bekommt dagegen einen Hüpfer zurück, keinen Deckel.
 * **Goldregen** — sie wirft den Deckel zurück und spuckt einen Fächer Münzen,
   eine auf den Helden und die anderen gut eine Heldenbreite daneben: ein halber
   Schritt zur Seite, und keine trifft. Die Münzen bleiben einen Moment liegen,
@@ -583,13 +585,16 @@ nichts. Sie öffnet sich nur, um etwas zu nehmen, und offen ist sie nur noch Mau
   heimkommt, ist das Einzige, wofür sie den Deckel nicht zuhalten kann — sie
   reißt ihn auf, und die Münze geht für zwei Schaden ins Maul.
 * **Zunge** — sie rollt sie ein und peitscht sie 230 px über den Boden.
-  Drüberspringen.
+  Drüberspringen. Danach liegt sie 1,7 Sekunden hechelnd da.
 * **Gierschlucken** — ab der Hälfte: Sie atmet ein, und der Boden rutscht zum
   Maul, mit 120 px/s — langsamer, als der Held läuft (235). Wer stehen bleibt,
   landet im Maul; wer läuft, kommt heraus.
 
-Zwischen den Zügen hüpft sie ihm mit fest geschlossenem Deckel hinterher. Dann
-gibt es nichts zu tun, als Abstand zu halten und zu warten, bis sie etwas will.
+Zwischen den Zügen hüpft sie ihm mit fest geschlossenem Deckel hinterher — und
+landet ein Stück vor ihm, nicht auf ihm. Dann gibt es nichts zu tun, als Abstand
+zu halten und zu warten, bis sie etwas will. Nach dem Goldregen steht sie 1,5 s
+offen, nach dem Gierschlucken 1,6 s, und ihre zweite Hälfte macht alles
+schneller außer diesen Fenstern.
 
 ![Gierschlund](screenshots/30-gierschlund.png)
 
@@ -616,8 +621,45 @@ sie nachmaß:
 
 Gemessen, ein Bot, der ihre Ankündigungen liest und in ihre Fenster schlägt:
 72 bis 88 Sekunden, 2 bis 4 Treffer. Einer, der nur draufhaut: 24 bis 26 Treffer
-in gut einer halben Minute — mit sieben Herzen verliert er. Wer sie leert,
-bekommt den **Goldzahn**.
+in gut einer halben Minute — mit sieben Herzen verliert er.
+
+#### Viel zu stark — gemessen wie ein Mensch
+
+Der lesende Bot von damals reagierte im selben Bild, in dem sie etwas tat. Mit
+einem, der sie wie ein Mensch **0,3 Sekunden zu spät** sieht und nur vom Boden aus
+in ihr offenes Maul schlägt, dauerte der zweite Boss des Spiels **127 bis über
+150 Sekunden** und kostete **11 bis 15 Herzen** — bei sieben Herzen ein bis zwei
+Tode. Woran es lag:
+
+1. **Ihre Fenster waren kürzer als der Weg zu ihr.** 0,85 bis 1,15 Sekunden
+   stand sie offen, in der zweiten Hälfte noch ein Fünftel weniger — und ihr
+   eigener Zug hatte gerade hundert Pixel und mehr zwischen sie und den Helden
+   gelegt. Eine Viertelsekunde, um das Fenster zu sehen, eine halbe, um
+   hinzulaufen: ein Hieb pro Fenster, wenn überhaupt.
+2. **Wer ein Fenster nutzte, bekam den Deckel.** Sie schnappte nach jedem, der
+   nah war, wenn sie den nächsten Zug wählte — also direkt nach jedem Fenster
+   nach dem, der es genutzt hatte, mit 0,4 s Rattern. Das war die Hälfte aller
+   verlorenen Herzen.
+3. **Ihre Hüpfer landeten auf dem Helden**, und auch beim Abspringen tat sie weh.
+4. **Ihr Biss lief einem davon**, der beim ersten Klaffen des Deckels
+   zurückwich: 540 px/s nach 0,62 s Ansage.
+
+Jetzt steht sie nach dem Biss 1,9 s offen, nach der Zunge 1,7 s, nach dem
+Goldregen 1,5 s, nach dem Gierschlucken 1,6 s — in beiden Hälften. Der
+Schnapper kommt nur noch nach knapp einer Sekunde Klammern, nach 0,5 s Rattern
+und für ein Herz statt zwei. Ihre Hüpfer landen vor dem Helden und tun nur noch
+im Fallen weh, der Biss kündigt sich 0,75 s an und springt mit 480 px/s. 8
+Schaden klemmen den Deckel (statt 11), und sie hat 32 statt 40 Leben.
+
+Derselbe menschenähnliche Bot:
+
+| | vorher | jetzt |
+| --- | --- | --- |
+| bis sie leer ist | 127 bis über 150 s | 23–44 s |
+| verlorene Herzen | 11–15 | 0–2 (mit 0,4 s Verspätung 0–3) |
+
+Wer stehen bleibt, zahlt weiter (siehe die Tabelle unter „Gemessen: lesen lohnt
+sich“). Wer sie leert, bekommt den **Goldzahn** — und ihren **Goldregen**.
 
 ### Der dritte Boss: Ankhor, der Tempelkoloss
 
@@ -970,15 +1012,16 @@ Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Lä
 
 | | Ankündigung (kürzeste gemessene) | stehen bleiben | lesen |
 | --- | --- | --- | --- |
-| Gierschlund, 45 s | Biss 0,63 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 16–28 Herzen | 0–2 |
+| Gierschlund, 45 s | Biss 0,75 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 14–19 Herzen | 0–1 |
 | Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
 | Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0–1 |
 | Ignivor, 45 s | Durchbruch 0,55 s Stillstand | 7–12 Herzen | 0–5 |
 | Vesperon, 40 s | Sturzflug 0,57 s | 29–32 Herzen | 9–12 |
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
-zwei bewussten Ausnahmen: Gierschlunds Schnapper (0,42 s) trifft nur den, der an
-ihr klebt, und Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden selbst. Die
+einer bewussten Ausnahme: Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden
+selbst. Gierschlunds Schnapper war die zweite (0,42 s); er hat jetzt 0,52 s und
+kommt nur noch nach knapp einer Sekunde Klammern. Die
 Regeln halten: Gierschlunds Deckel nimmt 0 und ihr Maul 1, Ankhors Gesicht 2
 statt 1 und sein gesackter Kopf reicht bis 18 px über den Boden herab, Arachna
 ist vom Boden aus unerreichbar und vom hohen Absatz aus nicht, Ignivors Platten
