@@ -166,7 +166,7 @@ server.close();
 
 const bossTracks = Object.entries(fights).map(([k, v]) => [k, v.fightTrack]);
 const tracksOf = (kinds) => bossTracks.filter(([k]) => kinds.includes(k)).map(([, t]) => t);
-const FIGHTS = ['gallert', 'mimic', 'colossus', 'spider', 'wyrm', 'thalassa', 'vesper', 'shadow', 'knight'];
+const FIGHTS = ['gallert', 'boar', 'mimic', 'colossus', 'spider', 'wyrm', 'twins', 'thalassa', 'clock', 'vesper', 'shadow', 'knight'];
 const distinct = new Set(tracksOf(FIGHTS));
 const checks = [
   ['every effect makes a sound', silentSfx.length === 0],
@@ -179,7 +179,7 @@ const checks = [
   ['the run starts in the forest, to the forest', started.state === 'playing' && started.track === 'forest'],
   [
     'every boss arena plays a fight, and hands back to the zone after',
-    Object.keys(fights).length === 10 &&
+    Object.keys(fights).length === 13 &&
       Object.entries(fights)
         .filter(([k]) => k !== 'knight')
         .every(([, v]) => v.fightTrack && v.fightTrack.startsWith('boss') && v.after && !v.after.startsWith('boss')),

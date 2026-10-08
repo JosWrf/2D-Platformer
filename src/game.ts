@@ -67,6 +67,9 @@ const ARENA_TITLES: Partial<Record<EnemyKind, string>> = {
   mimic: 'GIERSCHLUND, DIE GIERIGE TRUHE',
   spider: 'ARACHNA, DIE NETZKÖNIGIN',
   shadow: 'UMBRA, DEIN SCHATTEN',
+  boar: 'GRIMMZAHN, DER KEILER',
+  twins: 'SOL UND LUNA, DIE STERNZWILLINGE',
+  clock: 'TICKMAR, DAS UHRWERK',
 };
 
 /** The fight each boss is fought to. */
@@ -82,6 +85,9 @@ const BOSS_TRACK: Partial<Record<EnemyKind, TrackName>> = {
   mimic: 'bossGold',
   spider: 'bossWeb',
   shadow: 'bossShadow',
+  boar: 'bossBoar',
+  twins: 'bossTwins',
+  clock: 'bossClock',
 };
 
 /**
@@ -198,6 +204,36 @@ const BOSS_RELIC: Record<string, BossRelic> = {
       'Was an Stelle des Ritters gewachsen ist, liegt in Splittern.',
       'Sie sammeln sich an deiner Klinge.',
       'Eine Parade hält jetzt länger — und wirft sie zurück.',
+    ],
+  },
+  boar: {
+    relic: 'keilerhaut',
+    fell: 'GRIMMZAHN FÄLLT',
+    speaker: 'DER KEILERBAU',
+    lines: [
+      'Kein Baum in diesem Wald, den er nicht umgerannt hätte.',
+      'Seine Haut war dicker als jede Rinde.',
+      'Jetzt ist sie deine: Was dich trifft, wirft dich nicht mehr um.',
+    ],
+  },
+  twins: {
+    relic: 'zwillingsstern',
+    fell: 'SOL UND LUNA ERLÖSCHEN',
+    speaker: 'DER STERNENALTAR',
+    lines: [
+      'Solange einer von ihnen leuchtete, rief er den anderen zurück.',
+      'Jetzt leuchten sie zusammen — an deiner Klinge.',
+      'Jede Parade ruft deinen Angriff zurück, wie sie einander riefen.',
+    ],
+  },
+  clock: {
+    relic: 'taktgeber',
+    fell: 'TICKMAR STEHT STILL',
+    speaker: 'DER UHRTURM',
+    lines: [
+      'Hundert Jahre hat er die Stunden dieser Burg geschlagen.',
+      'Sein Takt schlägt jetzt in dir.',
+      'Was dir die Bosse beigebracht haben, kommt schneller wieder.',
     ],
   },
   hydra: {
@@ -341,6 +377,9 @@ export class Game implements World {
         case 'mimic':
         case 'spider':
         case 'shadow':
+        case 'boar':
+        case 'twins':
+        case 'clock':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -1709,6 +1748,7 @@ export class Game implements World {
     // The arena bosses that carry their own name for the bar.
     const named = this.enemies.find((e) => e.engaged && !e.dead && e.barName() !== null);
     if (named) {
+      const marks = named.barPips();
       drawBossBar(
         ctx,
         VIEW_W,
@@ -1719,6 +1759,9 @@ export class Game implements World {
           maxHp: named.maxHp,
           ghost: Math.max(0, named.hp),
           phase: named.barPhase(),
+          pips: marks?.pips,
+          pipUrgency: marks?.urgency,
+          pipColors: marks?.colors,
         },
         0,
       );
@@ -1882,10 +1925,11 @@ export class Game implements World {
       // Q and a pip for every attack learned, the picked one lit.
       ctx.fillStyle = '#f2c14e';
       ctx.fillText('Q', x + 46, y + 43);
+      const gap = owned.length > 12 ? 4.6 : 6;
       owned.forEach((k, i) => {
         ctx.fillStyle = k.id === info.id ? k.color : 'rgba(150,165,210,0.35)';
         ctx.beginPath();
-        ctx.arc(x + 60 + i * 6, y + 40, 2, 0, Math.PI * 2);
+        ctx.arc(x + 60 + i * gap, y + 40, 1.8, 0, Math.PI * 2);
         ctx.fill();
       });
     }
@@ -1902,7 +1946,8 @@ export class Game implements World {
       drawTextCentered(ctx, 'Noch keine Angriffe — jeder Boss bringt dir einen seiner bei.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
       return;
     }
-    const rowH = 24;
+    // Fifteen rows at 24 ran off the bottom of the screen.
+    const rowH = owned.length > 12 ? 20 : 24;
     const h = owned.length * rowH + 24;
     const w = 860;
     const left = VIEW_W / 2 - w / 2;
@@ -1939,7 +1984,8 @@ export class Game implements World {
       drawTextCentered(ctx, 'Noch keine Relikte — jeder Boss hinterlässt eines.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
       return;
     }
-    const rowH = 24;
+    // Fifteen rows at 24 ran off the bottom of the screen.
+    const rowH = owned.length > 12 ? 20 : 24;
     const h = owned.length * rowH + 24;
     // Wide enough for the longest line, and the line held to its column all
     // the same: it ran on under the boss's name once, measured in the
@@ -2119,7 +2165,7 @@ export class Game implements World {
     ctx.globalAlpha = 1;
     drawTextCentered(
       ctx,
-      'Elf Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
+      'Vierzehn Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
       VIEW_W / 2,
       502,
       12,

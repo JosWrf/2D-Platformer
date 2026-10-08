@@ -175,8 +175,15 @@ const marken = await page.evaluate(() => {
     mimic: at('mimic'),
     spider: at('spider'),
     shadow: at('shadow'),
+    boar: at('boar'),
+    twins: at('twins'),
+    clock: at('clock'),
     ruins: zone('Versunkene Ruinen'),
     caverns: zone('Kristallhöhlen'),
+    // The drowned hall and the castle, by their first chunk: the twins' and
+    // the clock's arenas went in after them and moved every spawn behind.
+    drowned: zone('Die Ertrunkene Halle'),
+    castle: zone('Burg Nachtfall'),
   };
 });
 await step(30);
@@ -252,7 +259,7 @@ await release('right');
 await shot('09-kristallhoehlen');
 
 /* 10 — the drowned hall --------------------------------------------------- */
-await open(`?x=${marken.thalassa - 86}`);
+await open(`?x=${marken.drowned + 17}`);
 await step(30);
 await step(40, { right: true });
 await release('right');
@@ -384,7 +391,7 @@ await shot('22-klinge-pariert');
 
 
 /* 12 — castle ------------------------------------------------------------- */
-await open(`?x=${marken.boss - 146}`);
+await open(`?x=${marken.castle + 40}`);
 await step(30);
 await step(40, { right: true });
 await release('right');
@@ -711,6 +718,31 @@ await step(1, { skill: true, left: true });
 await release('skill', 'left');
 await step(15);
 await shot('36-feuerwelle');
+
+/* 37-39 — the boar in his den, the twins at the star altar, the clock ------ */
+
+// Grimmzahn against the ward of his den, seeing stars.
+await open(`?x=${marken.boar - 11}`);
+await arenaMoment('boar', "boss.state === 'dazed' && boss.timer < 1.6 && g.zoneBanner.timer <= 0", 60 * 40);
+await shot('37-grimmzahn');
+
+// One twin down, and the other calling it back - what the fight is about.
+// Sol is put down by hand once the fight is on: the plain bot here fells him
+// in some runs and not in others.
+await open(`?x=${marken.twins - 11}`);
+await arenaMoment('twins', "boss.state === 'fight' && g.zoneBanner.timer <= 0", 60 * 20);
+await page.evaluate(() => {
+  const g = window.game;
+  const boss = g.enemies.find((e) => e.kind === 'twins' && !e.dead);
+  if (boss) boss.fall(boss.sol, g);
+});
+await arenaMoment('twins', 'boss.revive && boss.revive.left < 5.5', 60 * 10);
+await shot('38-sternzwillinge');
+
+// Tickmar's pendulum on its way out along the floor.
+await open(`?x=${marken.clock - 11}`);
+await arenaMoment('clock', "boss.pendMode === 'sweep' && boss.inState >= 1 && g.zoneBanner.timer <= 0", 60 * 40);
+await shot('39-tickmar');
 
 console.log(JSON.stringify(results, null, 2));
 await browser.close();

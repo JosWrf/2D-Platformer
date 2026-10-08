@@ -27,7 +27,10 @@ export type EnemyKind =
   | 'mimic'
   | 'spider'
   | 'spiderling'
-  | 'shadow';
+  | 'shadow'
+  | 'boar'
+  | 'twins'
+  | 'clock';
 
 /**
  * The kinds that are bosses rather than roster: announced, with a health bar,
@@ -46,6 +49,9 @@ export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
   'mimic',
   'spider',
   'shadow',
+  'boar',
+  'twins',
+  'clock',
 ]);
 
 /**
@@ -194,6 +200,14 @@ export abstract class Enemy extends Body {
   /** Which notch of the boss bar it is in. */
   barPhase(): number {
     return 1;
+  }
+
+  /**
+   * Marks under the boss bar, for a boss that is more than one bar coming
+   * down - see BossBarInfo.pips. Null for one that is not.
+   */
+  barPips(): { pips: ('head' | 'stump' | 'sealed')[]; urgency: number[]; colors?: string[] } | null {
+    return null;
   }
 
   /**

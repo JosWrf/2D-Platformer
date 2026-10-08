@@ -54,11 +54,14 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 const ROAD = [
   ['herzkern', 'klatschsprung'],
+  ['keilerhaut', 'felswurf'],
   ['goldzahn', 'goldregen'],
   ['bebenfaust', 'sonnenblick'],
   ['seidenmantel', 'netzschuss'],
   ['glutklinge', 'feuerwelle'],
+  ['zwillingsstern', 'mondsichel'],
   ['flutklinge', 'springflut'],
+  ['taktgeber', 'pendelschlag'],
   ['blutdurst', 'blutsicheln'],
   ['schattenschritt', 'schattenwelle'],
   ['zweiteratem', 'schattensprung'],
@@ -148,9 +151,9 @@ results.learning = await page.evaluate((road) => {
     out.taught.push({ relic, skill, has: p.skills.has(skill), picked: p.skill, sub: g.zoneBanner.sub ?? '' });
   }
   out.count = p.skills.size;
-  // Q, thirteen times: round the twelve and back to the first.
+  // Q, once round all of them and one more: back to the first.
   out.cycle = [];
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i <= road.length; i++) {
     h.tick({ cycle: true });
     h.tick();
     out.cycle.push(p.skill);
@@ -163,11 +166,14 @@ results.learning = await page.evaluate((road) => {
 const PLAN = {
   // gap to the dummy, and the least one cast has to land on it
   klatschsprung: [90, 3],
+  felswurf: [150, 2],
   goldregen: [150, 2],
   sonnenblick: [200, 3],
   netzschuss: [160, 1],
   feuerwelle: [140, 2],
+  mondsichel: [120, 2],
   springflut: [200, 2],
+  pendelschlag: [80, 2],
   blutsicheln: [150, 2],
   schattenwelle: [120, 2],
   schattensprung: [150, 3],
@@ -180,6 +186,9 @@ results.casts = await page.evaluate((plan) => {
   const h = window.__h;
   const p = g.player;
   const out = {};
+  // Each at its own cooldown, as the table has it: the Taktgeber runs them all
+  // a third faster, and verify:relics measures that.
+  p.relics.delete('taktgeber');
   for (const [id, [gap]] of Object.entries(plan)) {
     h.quiet();
     p.skill = id;
@@ -395,18 +404,18 @@ const checks = [
   ['F does nothing before an attack is learned', L.emptyPress.effects === 0 && L.emptyPress.picked === null],
   [
     'every relic brings its boss attack, the newest picked and named on the banner',
-    L.taught.every((t) => t.has && t.picked === t.skill && t.sub.includes('NEUER ANGRIFF')) && L.count === 12,
+    L.taught.every((t) => t.has && t.picked === t.skill && t.sub.includes('NEUER ANGRIFF')) && L.count === ROAD.length,
   ],
   [
     'Q runs through them in the order of the road and comes round again',
-    L.cycle.slice(0, 12).join() === ROAD.map(([, s]) => s).join() && L.cycle[12] === ROAD[0][1],
+    L.cycle.slice(0, ROAD.length).join() === ROAD.map(([, s]) => s).join() && L.cycle[ROAD.length] === ROAD[0][1],
   ],
   ...Object.entries(PLAN).map(([id, [, least]]) => [`${id}: one press lands at least ${least}`, C[id].dealt >= least]),
   ['every attack waits out its cooldown, and works again after it', Object.values(C).every((c) => c.blocked && c.again)],
   ['the silk binds, and what it binds lives at a third of its pace', R.silk.held && R.silk.pace < 0.4 && results.casts.netzschuss.snare > 2],
   ['the springtide, the wave of fire and the sickles take three at once', R.crowd.springflut === 3 && R.crowd.feuerwelle === 3 && R.crowd.blutsicheln === 3],
   ['nothing is aimed through the wall of a sealed arena, and nothing steps through it', results.ward.sealed && results.ward.outsideHurt === 0 && results.ward.heroInside],
-  ['the attacks survive a death and go with a restart', K.died && K.kept === K.had && K.had === 12 && K.afterRestart === 0 && K.picked === null],
+  ['the attacks survive a death and go with a restart', K.died && K.kept === K.had && K.had === ROAD.length && K.afterRestart === 0 && K.picked === null],
   [
     'used whenever ready, no attack adds more than half to the sword - and every one adds something',
     Object.keys(PLAN).every((id) => gain(id) > 0 && gain(id) < 0.5),

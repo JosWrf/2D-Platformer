@@ -7,7 +7,8 @@ import { Projectile } from './projectile';
 
 /**
  * Health before the blade is sized up. Between Gallert's twenty-two and
- * Thalassa's sixty: he is the second boss of the game.
+ * Thalassa's sixty: he is the fourth boss of the game, after Gallert,
+ * Grimmzahn and Gierschlund.
  */
 const COLOSSUS_HP = 54;
 /** Damage a hand takes before it shatters and he sags forward. */

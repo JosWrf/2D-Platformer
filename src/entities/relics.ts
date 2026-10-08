@@ -16,11 +16,14 @@
 
 export type RelicId =
   | 'herzkern'
+  | 'keilerhaut'
   | 'goldzahn'
   | 'bebenfaust'
   | 'seidenmantel'
   | 'glutklinge'
+  | 'zwillingsstern'
   | 'flutklinge'
+  | 'taktgeber'
   | 'blutdurst'
   | 'schattenschritt'
   | 'zweiteratem'
@@ -58,6 +61,18 @@ export const RELICS: readonly Relic[] = [
     // Every fight after the bog was built against seven hearts, so the heart
     // the bog gives is the baseline rather than a step above it.
     defense: 0,
+  },
+  {
+    id: 'keilerhaut',
+    name: 'Keilerhaut',
+    text: 'Treffer werfen dich kaum noch zurück und bringen dich nicht mehr ins Taumeln.',
+    banner: 'KEILERHAUT — DU STEHST FEST',
+    color: '#c8946a',
+    from: 'Grimmzahn',
+    offense: 0,
+    // A blow that does not throw him off his feet costs him no swing and no
+    // footing - worth something, not a heart.
+    defense: 0.04,
   },
   {
     id: 'goldzahn',
@@ -100,6 +115,18 @@ export const RELICS: readonly Relic[] = [
     defense: 0,
   },
   {
+    id: 'zwillingsstern',
+    name: 'Zwillingsstern',
+    text: 'Jede gelungene Parade macht deinen gewählten Boss-Angriff sofort wieder bereit.',
+    banner: 'ZWILLINGSSTERN — PARADEN LADEN NACH',
+    color: '#e3d6ff',
+    from: 'Sol und Luna',
+    // It only works on the boss attacks, and the monsters do not reckon those
+    // (see skills.ts) - so they do not reckon this either.
+    offense: 0,
+    defense: 0,
+  },
+  {
     id: 'flutklinge',
     name: 'Flutklinge',
     text: 'Jeder Hieb wirft eine kurze Sichel aus Wasser voraus.',
@@ -107,6 +134,17 @@ export const RELICS: readonly Relic[] = [
     color: '#7fe3cd',
     from: 'Thalassa',
     offense: 0.22,
+    defense: 0,
+  },
+  {
+    id: 'taktgeber',
+    name: 'Taktgeber',
+    text: 'Deine Boss-Angriffe laden ein Drittel schneller nach.',
+    banner: 'TAKTGEBER — ANGRIFFE LADEN SCHNELLER',
+    color: '#f0c27a',
+    from: 'Tickmar',
+    // Like the Zwillingsstern: it only hurries the boss attacks along.
+    offense: 0,
     defense: 0,
   },
   {
@@ -214,3 +252,5 @@ export const BLOOD_PER_HEART = 16;
 export const SILK_REGROW = 12;
 /** Seconds per heart for Hydrablut. */
 export const HYDRA_REGROW = 18;
+/** How much faster the boss attacks come back with the Taktgeber: a third. */
+export const TAKT_PACE = 4 / 3;

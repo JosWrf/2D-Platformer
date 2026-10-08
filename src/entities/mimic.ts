@@ -6,10 +6,10 @@ import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
 /**
- * Health before the hero is sized up. The second boss of the run, after
- * Gallert's twenty-two and before Ankhor's fifty-four. 32, down from 40: see
+ * Health before the hero is sized up. The third boss of the run, after
+ * Gallert and Grimmzahn and before Ankhor's fifty-four. 32, down from 40: see
  * the windows below - with them a hero who reads it lands about twice what he
- * used to, and at 40 that made a second boss longer than the fifth.
+ * used to, and at 40 that made an early boss longer than the fifth.
  */
 const MIMIC_HP = 32;
 /**
@@ -100,7 +100,7 @@ interface Plank {
  * Between moves it hops after the hero with its lid shut tight, so there is
  * nothing to do about it then but keep clear and wait for it to want something.
  *
- * It was far too strong for a second boss, and the bot it was measured with
+ * It was far too strong for so early a boss, and the bot it was measured with
  * could not tell: that one saw every move the frame it began. One that sees it
  * a quarter of a second late, as a player does, needed over two minutes and
  * lost eleven to fifteen hearts - its windows were shorter than seeing one and

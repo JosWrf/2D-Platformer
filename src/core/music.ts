@@ -39,7 +39,10 @@ export type TrackName =
   | 'bossCrystal'
   | 'bossGold'
   | 'bossWeb'
-  | 'bossShadow';
+  | 'bossShadow'
+  | 'bossBoar'
+  | 'bossTwins'
+  | 'bossClock';
 
 const SCALES = {
   aeolian: [0, 2, 3, 5, 7, 8, 10],
@@ -282,6 +285,40 @@ const TRACKS: Record<TrackName, Track> = {
     bass: { pattern: 'x...x...x.x.x...', gain: 0.11, style: 'pulse' },
     arp: { pattern: 'x.xx.xx.x.xx.xx.', notes: [0, 1, 4, 7, 8, 7, 4, 1], octave: 1, gain: 0.026, type: 'triangle', decay: 0.22, wet: 0.5 },
     drums: { kick: 'x.......x.......', tom: '...l......l..l..', hat: '..g...g...g...g.', gain: 0.8 },
+  },
+  /* The boar: a stampede of toms under a stubborn, stamping line. */
+  bossBoar: {
+    bpm: 142,
+    root: 50,
+    scale: SCALES.dorian,
+    prog: [0, 3, 0, 6],
+    pad: { gain: 0.035, cutoff: 1000, wet: 0.35 },
+    bass: { pattern: 'x.x.x.xox.x.x.xo', gain: 0.12, style: 'drive' },
+    lead: { pattern: '0h0h3h2h0hhh....4h3h2h0h2hhh....', octave: 1, gain: 0.028, type: 'square', wet: 0.25 },
+    drums: { kick: 'x...x...x.x.x...', snare: '....x.......x...', tom: 'l.l.....l.l...ll', gain: 0.95 },
+  },
+  /* The twins: two lines, one bright and one cold, answering each other. */
+  bossTwins: {
+    bpm: 126,
+    root: 54,
+    scale: SCALES.lydian,
+    prog: [0, 4, 5, 1],
+    pad: { gain: 0.04, cutoff: 1500, type: 'triangle', wet: 0.7 },
+    bass: { pattern: 'x...x.x.x...x.x.', gain: 0.1, style: 'pulse' },
+    lead: { pattern: '0h2h4hhh........7h6h4hhh........', octave: 1, gain: 0.028, type: 'triangle', wet: 0.5 },
+    arp: { pattern: '....xxxx....xxxx', notes: [7, 4, 2, 0, 2, 4], octave: 2, gain: 0.02, type: 'sine', decay: 0.2, wet: 0.6 },
+    drums: { kick: 'x.......x.......', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', gain: 0.8 },
+  },
+  /* The clock: his tempo is the beat he strikes on - 120, a tick every half second. */
+  bossClock: {
+    bpm: 120,
+    root: 52,
+    scale: SCALES.harmonic,
+    prog: [0, 5, 4, 0],
+    pad: { gain: 0.035, cutoff: 1100, wet: 0.45 },
+    bass: { pattern: 'x...x...x...x...', gain: 0.11, style: 'pulse' },
+    arp: { pattern: 'x.x.x.x.x.x.x.x.', notes: [0, 4, 7, 4, 0, 4, 7, 9], octave: 1, gain: 0.024, type: 'square', decay: 0.08, wet: 0.3 },
+    drums: { kick: 'x.......x.......', snare: '............x...', hat: 'x...x...x...x...', tom: '..............l.', gain: 0.85 },
   },
   /* The shadow: fast, and the line on top runs backwards. */
   bossShadow: {

@@ -26,6 +26,9 @@
     "verify:motion": "node tools/verify-motion.mjs",
     "verify:relics": "node tools/verify-relics.mjs",
     "verify:skills": "node tools/verify-skills.mjs",
+    "verify:boar": "node tools/verify-boar.mjs",
+    "verify:twins": "node tools/verify-twins.mjs",
+    "verify:clock": "node tools/verify-clock.mjs",
     "suite": "node tools/suite.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"

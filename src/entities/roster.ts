@@ -1,7 +1,10 @@
+import { Boar } from './boar';
+import { Clockwork } from './clockwork';
 import { Colossus } from './colossus';
 import { Mimic } from './mimic';
 import { Shadow } from './shadow';
 import { Spider, Spiderling } from './spider';
+import { Twins } from './twins';
 import { Vesper } from './vesper';
 import { Wyrm } from './wyrm';
 import { Enemy, EnemyKind, createBaseEnemy } from './enemy';
@@ -23,6 +26,12 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Spiderling(x, y);
     case 'shadow':
       return new Shadow(x, y);
+    case 'boar':
+      return new Boar(x, y);
+    case 'twins':
+      return new Twins(x, y);
+    case 'clock':
+      return new Clockwork(x, y);
     default:
       return createBaseEnemy(kind, x, y);
   }

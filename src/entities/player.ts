@@ -8,7 +8,7 @@ import type { Level } from '../world/level';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
-import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, SILK_REGROW, type RelicId } from './relics';
+import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, SILK_REGROW, TAKT_PACE, type RelicId } from './relics';
 import { SKILLS, type SkillEffect, type SkillId, castSkill, skillInfo } from './skills';
 
 const MAX_RUN = 235;
@@ -368,11 +368,12 @@ export class Player extends Body {
     this.chargeReady = false;
   }
 
-  /** The attacks in flight, and the cooldowns running down. */
+  /** The attacks in flight, and the cooldowns running down - faster with Tickmar's beat in him. */
   private updateSkills(dt: number, world: World): void {
+    const tick = dt * (this.has('taktgeber') ? TAKT_PACE : 1);
     for (const [id, t] of this.skillCooldowns) {
-      if (t <= dt) this.skillCooldowns.delete(id);
-      else this.skillCooldowns.set(id, t - dt);
+      if (t <= tick) this.skillCooldowns.delete(id);
+      else this.skillCooldowns.set(id, t - tick);
     }
     for (const e of this.skillEffects) e.update(dt, world);
     if (this.skillEffects.some((e) => e.done)) this.skillEffects = this.skillEffects.filter((e) => !e.done);
@@ -846,6 +847,13 @@ export class Player extends Body {
     world.hitStop(0.13);
     world.camera.addShake(6);
     world.particles.text(this.cx, this.y - 14, 'PARIERT!', '#bfe9ff');
+    // The twins' star: a parry calls the picked attack back, the way each of
+    // them called the other.
+    if (this.has('zwillingsstern') && this.skill && this.cooldownLeft(this.skill) > 0) {
+      this.skillCooldowns.delete(this.skill);
+      audio.play('magic', 1.8);
+      world.particles.burst(this.cx, this.cy - 4, 14, '#e3d6ff', { speed: 120, gravity: -40, shape: 'spark' });
+    }
     // The warden's splinters: the guard throws three of its own.
     if (this.has('splitterparade')) {
       for (const lift of [-0.32, 0, 0.32]) {
@@ -1112,11 +1120,13 @@ export class Player extends Body {
     }
     this.hp -= amount;
     this.invuln = 1.15;
-    this.hurtTimer = 0.28;
+    // Grimmzahn's hide: a blow still lands, but it no longer throws him.
+    const firm = this.has('keilerhaut');
+    this.hurtTimer = firm ? 0.1 : 0.28;
     this.flash = 1;
     this.dashTimer = 0;
-    this.vx = -fromDir * 210;
-    this.vy = -260;
+    this.vx = -fromDir * (firm ? 70 : 210);
+    this.vy = firm ? -110 : -260;
     audio.play('hurt');
     world.camera.addShake(7);
     world.hitStop(0.09);

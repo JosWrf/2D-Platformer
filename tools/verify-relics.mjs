@@ -1,7 +1,7 @@
 /**
  * Every boss leaves something, and every something does what it says.
  *
- * Twelve bosses, twelve relics. This tool pins both halves on a fresh page each:
+ * Fifteen bosses, fifteen relics. This tool pins both halves on a fresh page each:
  *
  *   1. Each boss, felled in its own arena, says its piece and hands over its
  *      relic - and the relic is still there after a death and gone after a
@@ -118,11 +118,14 @@ const results = {};
 /** The attack each relic brings with it. See skills.ts. */
 const SKILL_OF = {
   herzkern: 'klatschsprung',
+  keilerhaut: 'felswurf',
   goldzahn: 'goldregen',
   bebenfaust: 'sonnenblick',
   seidenmantel: 'netzschuss',
   glutklinge: 'feuerwelle',
+  zwillingsstern: 'mondsichel',
   flutklinge: 'springflut',
+  taktgeber: 'pendelschlag',
   blutdurst: 'blutsicheln',
   schattenschritt: 'schattenwelle',
   zweiteratem: 'schattensprung',
@@ -133,11 +136,14 @@ const SKILL_OF = {
 
 const ARENA_BOSSES = [
   ['gallert', 'herzkern'],
+  ['boar', 'keilerhaut'],
   ['mimic', 'goldzahn'],
   ['colossus', 'bebenfaust'],
   ['spider', 'seidenmantel'],
   ['wyrm', 'glutklinge'],
+  ['twins', 'zwillingsstern'],
   ['thalassa', 'flutklinge'],
+  ['clock', 'taktgeber'],
   ['vesper', 'blutdurst'],
   ['shadow', 'zweiteratem'],
   ['warden', 'splitterparade'],
@@ -516,6 +522,61 @@ results.splinters = await page.evaluate(() => {
   return { bare: parryOnce([]), armed: parryOnce(['splitterparade']) };
 });
 
+// Keilerhaut, Zwillingsstern and Taktgeber: what the three later bosses
+// leave, each measured on the hero.
+results.later = await page.evaluate(() => {
+  const g = window.game;
+  const h = window.__h;
+  const p = g.player;
+  const out = {};
+  const reset = (...relics) => {
+    h.only(...relics);
+    g.warpTo(14);
+    for (const e of g.enemies) e.dead = true;
+    g.projectiles.length = 0;
+    p.skillEffects = [];
+    p.skillCooldowns.clear();
+    // Long enough for the last parry's recovery and any blow's stagger to
+    // have run out.
+    for (let f = 0; f < 90; f++) h.tick();
+    p.hp = p.maxHp;
+    p.invuln = 0;
+    p.shieldUp = false;
+  };
+  // Keilerhaut: the same blow throws him a third as far and hardly stops him.
+  const knock = (has) => {
+    reset(...(has ? ['keilerhaut'] : []));
+    p.hurt(1, 1, g);
+    return { vx: Math.round(p.vx), stagger: +p.hurtTimer.toFixed(2) };
+  };
+  out.keilerhaut = { without: knock(false), with: knock(true) };
+  // Zwillingsstern: a parry calls the picked attack back.
+  const parryRefresh = (has) => {
+    reset(...(has ? ['zwillingsstern'] : []));
+    p.skills.add('felswurf');
+    p.skill = 'felswurf';
+    p.skillCooldowns.set('felswurf', 3);
+    p.facing = 1;
+    h.tick({ parry: true });
+    p.hurt(1, -p.facing, g);
+    const caught = p.parryFlash > 0.9 && p.hp === p.maxHp;
+    h.tick();
+    return { caught, cooldown: +p.cooldownLeft('felswurf').toFixed(2) };
+  };
+  out.zwillingsstern = { without: parryRefresh(false), with: parryRefresh(true) };
+  // Taktgeber: one second of cooldown, and how much of it ran down.
+  const pace = (has) => {
+    reset(...(has ? ['taktgeber'] : []));
+    p.skills.add('felswurf');
+    p.skill = 'felswurf';
+    p.skillCooldowns.set('felswurf', 3);
+    for (let f = 0; f < 60; f++) h.tick();
+    return +(3 - p.cooldownLeft('felswurf')).toFixed(2);
+  };
+  out.taktgeber = { without: pace(false), with: pace(true) };
+  return out;
+});
+
 // Hydrablut: eighteen seconds hurt, and a heart grows back.
 results.hydrablut = await page.evaluate(() => {
   const g = window.game;
@@ -642,6 +703,19 @@ const checks = [
       results.splinters.armed.shards === 3 &&
       results.splinters.bare.caught &&
       results.splinters.bare.shards === 0,
+  ],
+  [
+    'Keilerhaut: a blow throws him a third as far, and hardly staggers him',
+    Math.abs(results.later.keilerhaut.with.vx) * 2.5 <= Math.abs(results.later.keilerhaut.without.vx) &&
+      results.later.keilerhaut.with.stagger < results.later.keilerhaut.without.stagger,
+  ],
+  [
+    'Zwillingsstern: a parry makes the picked attack ready again',
+    results.later.zwillingsstern.with.caught && results.later.zwillingsstern.with.cooldown === 0 && results.later.zwillingsstern.without.cooldown > 2.5,
+  ],
+  [
+    'Taktgeber: the attacks come back a third faster',
+    Math.abs(results.later.taktgeber.with - 4 / 3) < 0.05 && Math.abs(results.later.taktgeber.without - 1) < 0.05,
   ],
   ['Hydrablut: a lost heart grows back after eighteen seconds', results.hydrablut.grewAt >= 17.5 && results.hydrablut.grewAt <= 18.5],
   ['a skeleton meets an armed hero with more health', results.scaling.armedHp > results.scaling.bareHp],

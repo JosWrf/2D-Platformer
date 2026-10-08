@@ -112,6 +112,25 @@ export const ZONES: Zone[] = [
     calm: false,
   },
   {
+    /*
+     * Grimmzahn's den: still the forest, trampled and darker under the
+     * trees, the mist gone brown with the earth he churns up.
+     */
+    name: 'forest',
+    start: ZONE_START.den,
+    skyTop: '#080a0c',
+    skyBottom: '#14120e',
+    hillFar: '#2a2418',
+    hillNear: '#1e1a12',
+    ambient: 'rgba(200,150,90,0.05)',
+    label: 'Der Keilerbau',
+    sporeRgb: '236,196,140',
+    darkness: 0.74,
+    darkTint: '#07060a',
+    interior: false,
+    calm: false,
+  },
+  {
     name: 'ruins',
     start: ZONE_START.ruins,
     skyTop: '#0a0716',
@@ -261,6 +280,41 @@ export const ZONES: Zone[] = [
     calm: true,
   },
   {
+    /*
+     * The altar of the sun and the moon: the drowned hall, with one half of
+     * its dark warm and the other cold - the twins carry their own light, and
+     * the room lends them both a little.
+     */
+    name: 'drowned',
+    start: ZONE_START.altar,
+    skyTop: '#06070e',
+    skyBottom: '#12162a',
+    hillFar: '#1e2440',
+    hillNear: '#151a30',
+    ambient: 'rgba(210,190,255,0.06)',
+    label: 'Der Sternenaltar',
+    sporeRgb: '230,220,255',
+    darkness: 0.8,
+    darkTint: '#03050c',
+    interior: true,
+    calm: true,
+  },
+  {
+    name: 'drowned',
+    start: ZONE_START.drownedAgain,
+    skyTop: '#03080e',
+    skyBottom: '#08202c',
+    hillFar: '#0e3040',
+    hillNear: '#092230',
+    ambient: 'rgba(50,150,175,0.07)',
+    label: 'Die Ertrunkene Halle',
+    sporeRgb: '150,214,222',
+    darkness: 0.8,
+    darkTint: '#02090f',
+    interior: true,
+    calm: true,
+  },
+  {
     name: 'castle',
     start: ZONE_START.castle,
     skyTop: '#0d0710',
@@ -272,6 +326,25 @@ export const ZONES: Zone[] = [
     sporeRgb: '255,196,126',
     darkness: 0.78,
     darkTint: '#0c0509',
+    interior: false,
+    calm: false,
+  },
+  {
+    /*
+     * The clock tower: brass and lamp-oil, the castle's red gone the colour
+     * of old gold - so the room reads as his before the banner says so.
+     */
+    name: 'castle',
+    start: ZONE_START.clock,
+    skyTop: '#0e0a08',
+    skyBottom: '#1c140c',
+    hillFar: '#2e2214',
+    hillNear: '#20180e',
+    ambient: 'rgba(240,190,110,0.06)',
+    label: 'Der Uhrturm',
+    sporeRgb: '250,214,150',
+    darkness: 0.78,
+    darkTint: '#0b0706',
     interior: false,
     calm: false,
   },

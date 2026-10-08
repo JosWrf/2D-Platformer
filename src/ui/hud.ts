@@ -124,6 +124,40 @@ export function drawRelicBadge(
       ctx.fillStyle = '#fff2f4';
       ctx.fillRect(-1, -1, 2, 2);
       break;
+    case 'keilerhaut':
+      // A tusk, curving up.
+      ctx.beginPath();
+      ctx.moveTo(-5, 5);
+      ctx.quadraticCurveTo(-4, -2, 4, -6);
+      ctx.quadraticCurveTo(0, 0, -1, 6);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'zwillingsstern':
+      // A sun and a moon, side by side.
+      ctx.beginPath();
+      ctx.arc(-3, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(3.5, 0, 3.4, Math.PI * 0.35, Math.PI * 1.65);
+      ctx.arc(5, 0, 2.6, Math.PI * 1.4, Math.PI * 0.6, true);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'taktgeber':
+      // A gear.
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.fillRect(Math.cos(a) * 5 - 1.2, Math.sin(a) * 5 - 1.2, 2.4, 2.4);
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(8,10,20,0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      break;
     case 'goldzahn':
       ctx.beginPath();
       ctx.moveTo(-4.5, -5);
@@ -297,6 +331,47 @@ function drawSkillSign(ctx: CanvasRenderingContext2D, id: string): void {
       ctx.ellipse(0, 5, 6.5, 1.8, 0, 0, Math.PI * 2);
       ctx.stroke();
       break;
+    case 'felswurf':
+      ctx.beginPath();
+      ctx.moveTo(-5, 2);
+      ctx.lineTo(-2, -4);
+      ctx.lineTo(4, -4);
+      ctx.lineTo(6, 2);
+      ctx.lineTo(2, 6);
+      ctx.lineTo(-4, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-7, -2);
+      ctx.quadraticCurveTo(-6, -7, -1, -7);
+      ctx.stroke();
+      break;
+    case 'mondsichel':
+      ctx.beginPath();
+      ctx.arc(0, 0, 6, -1.3, 1.3);
+      ctx.arc(2.5, 0, 4.6, 1.1, -1.1, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(-1, 0, 7.5, 2.2, 4.1);
+      ctx.stroke();
+      break;
+    case 'pendelschlag':
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-3, -7);
+      ctx.lineTo(2, 3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(2.5, 4, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(-3, -7, 9, 0.5, 2.0);
+      ctx.stroke();
+      break;
     case 'goldregen':
       for (const [dx, dy] of [
         [-4, 3],
@@ -460,6 +535,8 @@ export interface BossBarInfo {
   pips?: ('head' | 'stump' | 'sealed')[];
   /** Seconds left on the shortest open stump, 0..1 of its full time. */
   pipUrgency?: number[];
+  /** The colour of each mark while it stands; the hydra's green if not given. */
+  pipColors?: string[];
 }
 
 /**
@@ -473,6 +550,7 @@ function drawPips(
   y: number,
   pips: ('head' | 'stump' | 'sealed')[],
   urgency: number[],
+  colors: string[] = [],
 ): void {
   const gap = 34;
   const first = cx - ((pips.length - 1) * gap) / 2;
@@ -481,7 +559,7 @@ function drawPips(
     ctx.save();
     ctx.translate(px, y);
     if (pip === 'head') {
-      ctx.fillStyle = '#8fd45c';
+      ctx.fillStyle = colors[i] ?? '#8fd45c';
       ctx.beginPath();
       ctx.arc(0, 0, 7, 0, Math.PI * 2);
       ctx.fill();
@@ -550,7 +628,7 @@ export function drawBossBar(
   ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
 
   if (info.pips && info.pips.length) {
-    drawPips(ctx, viewW / 2, y + 24, info.pips, info.pipUrgency ?? []);
+    drawPips(ctx, viewW / 2, y + 24, info.pips, info.pipUrgency ?? [], info.pipColors);
   } else {
     // Phase notches.
     ctx.fillStyle = 'rgba(0,0,0,0.6)';

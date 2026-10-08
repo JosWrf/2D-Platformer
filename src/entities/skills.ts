@@ -31,11 +31,14 @@ import type { RelicId } from './relics';
 
 export type SkillId =
   | 'klatschsprung'
+  | 'felswurf'
   | 'goldregen'
   | 'sonnenblick'
   | 'netzschuss'
   | 'feuerwelle'
+  | 'mondsichel'
   | 'springflut'
+  | 'pendelschlag'
   | 'blutsicheln'
   | 'schattenwelle'
   | 'schattensprung'
@@ -69,6 +72,15 @@ export const SKILLS: readonly Skill[] = [
     from: 'Gallert',
     relic: 'herzkern',
     cooldown: 3.5,
+  },
+  {
+    id: 'felswurf',
+    name: 'Felswurf',
+    text: 'Ein Brocken im Bogen, der dort, wo er aufschlägt, weiterrollt: 2 Schaden an allem, was er trifft.',
+    color: '#d6a27a',
+    from: 'Grimmzahn',
+    relic: 'keilerhaut',
+    cooldown: 4,
   },
   {
     id: 'goldregen',
@@ -107,6 +119,15 @@ export const SKILLS: readonly Skill[] = [
     cooldown: 4,
   },
   {
+    id: 'mondsichel',
+    name: 'Mondsichel',
+    text: 'Eine Sichel aus Mondlicht fliegt hinaus und kehrt zurück: je 1 Schaden auf dem Hin- und dem Rückweg.',
+    color: '#cdd8ff',
+    from: 'Sol und Luna',
+    relic: 'zwillingsstern',
+    cooldown: 3,
+  },
+  {
     id: 'springflut',
     name: 'Springflut',
     text: 'Unter bis zu drei Feinden schießt das Wasser hoch: je 2 Schaden.',
@@ -114,6 +135,15 @@ export const SKILLS: readonly Skill[] = [
     from: 'Thalassa',
     relic: 'flutklinge',
     cooldown: 4.5,
+  },
+  {
+    id: 'pendelschlag',
+    name: 'Pendelschlag',
+    text: 'Ein Pendel aus Messing schwingt vor dir über den Boden: 2 Schaden an allem, was es streift.',
+    color: '#f0c27a',
+    from: 'Tickmar',
+    relic: 'taktgeber',
+    cooldown: 4,
   },
   {
     id: 'blutsicheln',
@@ -1170,6 +1200,263 @@ class CrystalRain extends SkillEffect {
   }
 }
 
+/**
+ * Grimmzahn: a rock dug up and thrown. Where it comes down it rolls on along
+ * the floor, over whatever is in its way, until a wall or an edge stops it.
+ */
+class Boulder extends SkillEffect {
+  private rolling = false;
+  private rolled = 0;
+  private spin = 0;
+  /** Seconds since it stopped, while it crumbles. */
+  private stopped = -1;
+
+  constructor(
+    private x: number,
+    private y: number,
+    private vx: number,
+    private vy: number,
+  ) {
+    super();
+  }
+
+  update(dt: number, world: World): void {
+    if (this.stopped >= 0) {
+      this.stopped += dt;
+      if (this.stopped > 0.25) this.done = true;
+      return;
+    }
+    const dir = sign(this.vx) || 1;
+    this.spin += (this.vx * dt) / 12;
+    if (!this.rolling) {
+      this.vy += 1300 * dt;
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+      if (solid(world, this.x + dir * 12, this.y)) {
+        this.stop(world);
+        return;
+      }
+      if (this.vy > 0 && solid(world, this.x, this.y + 12)) {
+        // Down: it lands, and rolls.
+        this.y = Math.floor((this.y + 12) / TILE) * TILE - 12;
+        this.rolling = true;
+        this.vx = dir * 280;
+        audio.play('slam', 1.3);
+        world.camera.addShake(2);
+        world.particles.burst(this.x, this.y + 10, 10, 'rgba(150,120,90,0.9)', { speed: 140, gravity: 500, angle: -Math.PI / 2, spread: 2 });
+      } else if (this.y > world.level.pixelHeight) {
+        this.done = true;
+        return;
+      }
+    } else {
+      this.x += this.vx * dt;
+      this.rolled += Math.abs(this.vx * dt);
+      if (this.rolled > 240 || solid(world, this.x + dir * 13, this.y) || !floorAt(world, this.x, this.y + 12)) {
+        this.stop(world);
+        return;
+      }
+      if (world.time % 0.05 < dt) {
+        world.particles.spawn({ x: this.x - dir * 8, y: this.y + 11, vx: -dir * 30, vy: -rand(20, 60), gravity: 300, color: 'rgba(140,110,80,0.7)', size: 2.5, life: 0.35 });
+      }
+    }
+    strike(world, { x: this.x - 12, y: this.y - 12, w: 24, h: 24 }, 2, dir, this.struck, '#e8c09a');
+  }
+
+  private stop(world: World): void {
+    this.stopped = 0;
+    audio.play('crumble', 1.4);
+    world.particles.burst(this.x, this.y, 14, 'rgba(160,130,100,0.9)', { speed: 160, gravity: 500, size: 3 });
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    if (this.stopped >= 0) ctx.globalAlpha = 1 - this.stopped / 0.25;
+    ctx.rotate(this.spin);
+    ctx.fillStyle = '#5c4a3c';
+    ctx.beginPath();
+    ctx.moveTo(-12, -3);
+    ctx.lineTo(-7, -11);
+    ctx.lineTo(4, -12);
+    ctx.lineTo(12, -4);
+    ctx.lineTo(11, 7);
+    ctx.lineTo(2, 12);
+    ctx.lineTo(-9, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#7e6852';
+    ctx.beginPath();
+    ctx.moveTo(-7, -9);
+    ctx.lineTo(3, -10);
+    ctx.lineTo(8, -3);
+    ctx.lineTo(-4, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(30,22,16,0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-3, 2);
+    ctx.lineTo(4, 6);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/**
+ * Luna: a sickle of moonlight that flies out, slows, turns, and comes back to
+ * the hand that threw it - striking on the way out and again on the way back.
+ */
+class MoonCrescent extends SkillEffect {
+  private t = 0;
+  private back = false;
+  /** What it has struck on its way out; on the way back it is `struck`. */
+  private readonly outward = new Set<object>();
+  private vx: number;
+  private vy = 0;
+
+  constructor(
+    private x: number,
+    private y: number,
+    private readonly dir: number,
+  ) {
+    super();
+    this.vx = dir * 600;
+  }
+
+  update(dt: number, world: World): void {
+    const p = world.player;
+    this.t += dt;
+    if (!this.back) {
+      this.vx -= this.dir * 820 * dt;
+      if (sign(this.vx) !== this.dir || solid(world, this.x + this.dir * 14, this.y)) {
+        this.back = true;
+        audio.play('swing', 1.5);
+      }
+    } else {
+      // Home to the hand, wherever it has got to.
+      const dx = p.cx - this.x;
+      const dy = p.cy - 4 - this.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const speed = Math.min(620, 200 + this.t * 500);
+      this.vx = (dx / len) * speed;
+      this.vy = (dy / len) * speed;
+      if (len < 18 || this.t > 2.4) {
+        this.done = true;
+        return;
+      }
+    }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    const set = this.back ? this.struck : this.outward;
+    strike(world, { x: this.x - 13, y: this.y - 13, w: 26, h: 26 }, 1, sign(this.vx) || this.dir, set, '#dfe6ff');
+    if (world.time % 0.04 < dt) {
+      world.particles.spawn({ x: this.x, y: this.y, vx: 0, vy: 0, gravity: 0, color: 'rgba(205,216,255,0.6)', size: 2.5, life: 0.25, shape: 'circle' });
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.t * 16 * this.dir);
+    ctx.globalCompositeOperation = 'lighter';
+    glow(ctx, 0, 0, 22, 'rgba(180,200,255,0.45)');
+    ctx.fillStyle = '#dfe6ff';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, -1.2, 1.2);
+    ctx.arc(4, 0, 9, 1.0, -1.0, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  override lights(): GlowLight[] {
+    return [{ x: this.x, y: this.y, radius: 80, rgb: '190,205,255', strength: 0.7, tint: 0.35 }];
+  }
+}
+
+/**
+ * Tickmar: a brass pendulum swung from above and in front of the hero. It
+ * comes down behind him, sweeps the floor ahead and swings up again, and
+ * strikes whatever it brushes once.
+ */
+class Pendulum extends SkillEffect {
+  private static readonly TIME = 0.55;
+  private static readonly REACH = 140;
+  private t = 0;
+  private readonly px: number;
+  private readonly py: number;
+  private readonly dir: number;
+
+  constructor(world: World) {
+    super();
+    const p = world.player;
+    this.dir = p.facing;
+    this.px = p.cx + this.dir * 70;
+    this.py = p.bottom - 150;
+    audio.play('swing', 0.55);
+    audio.play('clank', 0.8);
+  }
+
+  private get angle(): number {
+    const k = clamp(this.t / Pendulum.TIME, 0, 1);
+    // Fast through the bottom, slow at the ends, like a pendulum.
+    const eased = 0.5 - Math.cos(k * Math.PI) / 2;
+    return (-1 + 2 * eased) * 1.15 * this.dir;
+  }
+
+  private get bob(): { x: number; y: number } {
+    const a = this.angle;
+    return { x: this.px + Math.sin(a) * Pendulum.REACH, y: this.py + Math.cos(a) * Pendulum.REACH };
+  }
+
+  update(dt: number, world: World): void {
+    this.t += dt;
+    if (this.t > Pendulum.TIME + 0.12) {
+      this.done = true;
+      return;
+    }
+    const b = this.bob;
+    strike(world, { x: b.x - 18, y: b.y - 18, w: 36, h: 36 }, 2, this.dir, this.struck, '#ffe0a0');
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    const b = this.bob;
+    const fade = this.t > Pendulum.TIME ? 1 - (this.t - Pendulum.TIME) / 0.12 : 1;
+    ctx.save();
+    ctx.globalAlpha = fade;
+    // The arc it sweeps, faintly.
+    ctx.strokeStyle = 'rgba(240,194,122,0.25)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(this.px, this.py, Pendulum.REACH, Math.PI / 2 - 1.15, Math.PI / 2 + 1.15);
+    ctx.stroke();
+    ctx.strokeStyle = '#8a6a3a';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(this.px, this.py);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.fillStyle = '#c9963e';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 16, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#f6d88e';
+    ctx.beginPath();
+    ctx.arc(b.x - 4, b.y - 4, 6, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#5a4020';
+    ctx.beginPath();
+    ctx.arc(this.px, this.py, 4, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  override lights(): GlowLight[] {
+    const b = this.bob;
+    return [{ x: b.x, y: b.y, radius: 70, rgb: '240,194,122', strength: 0.6, tint: 0.3 }];
+  }
+}
+
 /* ---------------------------------------------------------------- casts */
 
 /** The hydra's five heads, one fire each, in their own colours. */
@@ -1199,6 +1486,14 @@ export function castSkill(id: SkillId, world: World): SkillEffect[] {
   switch (id) {
     case 'klatschsprung':
       return [new SlamHop(world)];
+    case 'felswurf':
+      audio.play('jump', 0.5);
+      return [new Boulder(p.cx + p.facing * 12, p.cy - 10, p.facing * 300, -380)];
+    case 'mondsichel':
+      audio.play('swing', 1.2);
+      return [new MoonCrescent(p.cx + p.facing * 12, p.cy - 4, p.facing)];
+    case 'pendelschlag':
+      return [new Pendulum(world)];
     case 'goldregen':
       audio.play('coin', 0.8);
       return fan(world, 4, 0.36, 0.2, 430, (x, y, vx, vy) => new Shot(x, y, vx, vy, 500, 'coin', '#ffd866', 1, 1.2));
