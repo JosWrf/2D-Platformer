@@ -68,6 +68,9 @@ export type SpawnKind =
   | 'boar'
   | 'twins'
   | 'clock'
+  | 'jester'
+  | 'gloom'
+  | 'gargoyle'
   | 'boss'
   | 'gem'
   | 'heart'
@@ -123,6 +126,9 @@ export const CHAR_TO_SPAWN: Record<string, SpawnKind> = {
   R: 'boar',
   J: 'twins',
   F: 'clock',
+  j: 'jester',
+  n: 'gloom',
+  y: 'gargoyle',
   B: 'boss',
   $: 'gem',
   H: 'heart',

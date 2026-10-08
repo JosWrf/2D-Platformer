@@ -1,6 +1,9 @@
 import { Boar } from './boar';
 import { Clockwork } from './clockwork';
 import { Colossus } from './colossus';
+import { Gargoyle } from './gargoyle';
+import { Gloom } from './gloom';
+import { Jester } from './jester';
 import { Mimic } from './mimic';
 import { Shadow } from './shadow';
 import { Spider, Spiderling } from './spider';
@@ -32,6 +35,12 @@ export function createEnemy(kind: EnemyKind, x: number, y: number): Enemy {
       return new Twins(x, y);
     case 'clock':
       return new Clockwork(x, y);
+    case 'jester':
+      return new Jester(x, y);
+    case 'gloom':
+      return new Gloom(x, y);
+    case 'gargoyle':
+      return new Gargoyle(x, y);
     default:
       return createBaseEnemy(kind, x, y);
   }

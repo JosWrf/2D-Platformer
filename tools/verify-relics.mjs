@@ -1,7 +1,7 @@
 /**
  * Every boss leaves something, and every something does what it says.
  *
- * Fifteen bosses, fifteen relics. This tool pins both halves on a fresh page each:
+ * Eighteen bosses, eighteen relics. This tool pins both halves on a fresh page each:
  *
  *   1. Each boss, felled in its own arena, says its piece and hands over its
  *      relic - and the relic is still there after a death and gone after a
@@ -120,11 +120,14 @@ const SKILL_OF = {
   herzkern: 'klatschsprung',
   keilerhaut: 'felswurf',
   goldzahn: 'goldregen',
+  gauklerschritt: 'trugbild',
   bebenfaust: 'sonnenblick',
+  lichtkern: 'irrlichter',
   seidenmantel: 'netzschuss',
   glutklinge: 'feuerwelle',
   zwillingsstern: 'mondsichel',
   flutklinge: 'springflut',
+  steinblick: 'steinsturz',
   taktgeber: 'pendelschlag',
   blutdurst: 'blutsicheln',
   schattenschritt: 'schattenwelle',
@@ -138,11 +141,14 @@ const ARENA_BOSSES = [
   ['gallert', 'herzkern'],
   ['boar', 'keilerhaut'],
   ['mimic', 'goldzahn'],
+  ['jester', 'gauklerschritt'],
   ['colossus', 'bebenfaust'],
+  ['gloom', 'lichtkern'],
   ['spider', 'seidenmantel'],
   ['wyrm', 'glutklinge'],
   ['twins', 'zwillingsstern'],
   ['thalassa', 'flutklinge'],
+  ['gargoyle', 'steinblick'],
   ['clock', 'taktgeber'],
   ['vesper', 'blutdurst'],
   ['shadow', 'zweiteratem'],
@@ -594,6 +600,121 @@ results.hydrablut = await page.evaluate(() => {
   return { grewAt: +grewAt.toFixed(2) };
 });
 
+/*
+ * The three the theatre, the grotto and the battlements hand over, each on
+ * the hero: a roll through a blow owes one doubled cut; a blow knocks a heart
+ * out as a light that comes back if it is fetched; and what flies at him while
+ * he looks at it comes a third slower.
+ */
+await fresh();
+results.newer = await page.evaluate(() => {
+  const g = window.game;
+  const h = window.__h;
+  const p = g.player;
+  const out = {};
+  const quiet = () => {
+    for (let f = 0; f < 60 * 5 && g.state !== 'playing'; f++) h.tick({ confirm: f % 2 === 0 });
+    g.warpTo(14);
+    for (const e of g.enemies) e.dead = true;
+    g.projectiles.length = 0;
+    p.hp = p.maxHp;
+    p.invuln = 0;
+    // Out of whatever the last check left him in: a stagger swallows a swing.
+    p.hurtTimer = 0;
+    p.motes = [];
+    p.tumble = 0;
+    for (let f = 0; f < 20; f++) h.tick();
+  };
+  const dummy = (gap) => {
+    const d = g.spawnEnemyOfKind('skeleton', p.cx + gap, p.bottom);
+    d.hardened = true;
+    d.hp = d.maxHp = 1000;
+    return d;
+  };
+
+  // Gauklerschritt: a roll, a blow that meets it, and the cuts after.
+  const tumble = (has) => {
+    quiet();
+    if (has) h.only('gauklerschritt');
+    else h.only();
+    p.facing = 1;
+    h.tick({ dash: true });
+    p.hurt(1, -1, g);
+    const owed = p.tumble;
+    const unhurt = p.hp === p.maxHp;
+    for (let f = 0; f < 30; f++) h.tick();
+    const d = dummy(30);
+    const blows = [];
+    let before = d.hp;
+    for (let f = 0; f < 90 && blows.length < 2; f++) {
+      d.x = p.cx + 30 - d.w / 2;
+      d.vx = 0;
+      d.stun = 1;
+      p.facing = 1;
+      h.tick({ attack: f % 14 < 2 });
+      if (d.hp < before) {
+        blows.push(before - d.hp);
+        before = d.hp;
+      }
+    }
+    d.dead = true;
+    return { owed: +owed.toFixed(2), unhurt, blows };
+  };
+  out.gauklerschritt = { with: tumble(true), without: tumble(false) };
+
+  // Lichtkern: the heart goes out of him as a light, a little way off.
+  const mote = (fetch) => {
+    quiet();
+    h.only('lichtkern');
+    p.hurt(1, 1, g);
+    const dropped = p.motes.length;
+    const hurt = p.hp === p.maxHp - 1;
+    let back = -1;
+    let off = null;
+    for (let f = 0; f < 60 * 4; f++) {
+      const m = p.motes[0];
+      if (m && m.landed && off === null) off = Math.round(Math.abs(m.x - p.cx));
+      const a = {};
+      if (fetch && m && m.landed && Math.abs(m.x - p.cx) > 2) a[m.x > p.cx ? 'right' : 'left'] = true;
+      h.tick(a);
+      if (back < 0 && p.hp === p.maxHp) back = +(f / 60).toFixed(2);
+    }
+    return { dropped, hurt, back, off, gone: p.motes.length === 0 };
+  };
+  out.lichtkern = { fetched: mote(true), left: mote(false) };
+  quiet();
+  h.only();
+  p.hurt(1, 1, g);
+  out.lichtkern.bare = p.motes.length;
+
+  // Steinblick: a wave sent along the floor at him, faced and with his back to it.
+  quiet();
+  h.only('flutklinge');
+  p.facing = 1;
+  for (let f = 0; f < 20; f++) h.tick({ attack: f < 2 });
+  const Shot = g.projectiles.find((q) => q.kind === 'beam')?.constructor;
+  g.projectiles.length = 0;
+  const flight = (has, facing) => {
+    quiet();
+    if (has) h.only('steinblick');
+    else h.only();
+    p.invuln = 99;
+    p.facing = facing;
+    const q = new Shot('shockwave', p.cx + 300, p.cy - 15, -200, 0);
+    g.projectiles.push(q);
+    const x0 = q.x;
+    for (let f = 0; f < 60; f++) {
+      p.facing = facing;
+      h.tick();
+    }
+    q.dead = true;
+    p.invuln = 0;
+    return Math.round(x0 - q.x);
+  };
+  out.steinblick = { faced: flight(true, 1), turned: flight(true, -1), bare: flight(false, 1) };
+  return out;
+});
+
 /* ---------------------------------------------- 3. the monsters take stock */
 
 await fresh();
@@ -718,6 +839,28 @@ const checks = [
     Math.abs(results.later.taktgeber.with - 4 / 3) < 0.05 && Math.abs(results.later.taktgeber.without - 1) < 0.05,
   ],
   ['Hydrablut: a lost heart grows back after eighteen seconds', results.hydrablut.grewAt >= 17.5 && results.hydrablut.grewAt <= 18.5],
+  [
+    `Gauklerschritt: a roll through a blow owes one doubled cut (${results.newer.gauklerschritt.with.blows.join(', ')} against ${results.newer.gauklerschritt.without.blows.join(', ')})`,
+    results.newer.gauklerschritt.with.owed > 2.5 &&
+      results.newer.gauklerschritt.with.unhurt &&
+      results.newer.gauklerschritt.with.blows.join() === '2,1' &&
+      results.newer.gauklerschritt.without.owed === 0 &&
+      results.newer.gauklerschritt.without.blows.join() === '1,1',
+  ],
+  [
+    `Lichtkern: a lost heart lands ${results.newer.lichtkern.fetched.off} px off as a light, comes back when fetched, goes out when left`,
+    results.newer.lichtkern.fetched.dropped === 1 &&
+      results.newer.lichtkern.fetched.hurt &&
+      results.newer.lichtkern.fetched.back > 0 &&
+      results.newer.lichtkern.fetched.off >= 40 &&
+      results.newer.lichtkern.left.back < 0 &&
+      results.newer.lichtkern.left.gone &&
+      results.newer.lichtkern.bare === 0,
+  ],
+  [
+    `Steinblick: a wave he faces covers ${results.newer.steinblick.faced} px in a second, with his back to it ${results.newer.steinblick.turned}, without the relic ${results.newer.steinblick.bare}`,
+    Math.abs(results.newer.steinblick.faced / results.newer.steinblick.bare - 2 / 3) < 0.05 && Math.abs(results.newer.steinblick.turned - results.newer.steinblick.bare) <= 2,
+  ],
   ['a skeleton meets an armed hero with more health', results.scaling.armedHp > results.scaling.bareHp],
   ['Ankhor wakes stronger in front of eleven relics', results.ankhorAll.maxHp > results.ankhorBare.maxHp && results.ankhorAll.poise > results.ankhorBare.poise],
   ['no errors on the page', errors.length === 0],

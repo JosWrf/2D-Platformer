@@ -71,7 +71,7 @@ const result = await page.evaluate(() => {
     g.update(1 / 60, input);
     g.render(ctx);
   };
-  const BOSSES = ['gallert', 'boar', 'mimic', 'colossus', 'spider', 'wyrm', 'twins', 'thalassa', 'clock', 'vesper', 'shadow', 'warden'];
+  const BOSSES = ['gallert', 'boar', 'mimic', 'jester', 'colossus', 'gloom', 'spider', 'wyrm', 'twins', 'thalassa', 'gargoyle', 'clock', 'vesper', 'shadow', 'warden'];
   const bossIn = (arena) =>
     g.enemies.find((e) => BOSSES.includes(e.kind) && !e.dead && e.x + e.w > arena.left - 40 && e.x < arena.right + 40);
   const keep = () => {
@@ -200,7 +200,7 @@ console.log(JSON.stringify(result, null, 2));
 await browser.close();
 server.close();
 
-const expected = ['gallert', 'boar', 'mimic', 'colossus', 'spider', 'wyrm', 'twins', 'thalassa', 'clock', 'vesper', 'shadow', 'warden'];
+const expected = ['gallert', 'boar', 'mimic', 'jester', 'colossus', 'gloom', 'spider', 'wyrm', 'twins', 'thalassa', 'gargoyle', 'clock', 'vesper', 'shadow', 'warden'];
 const ok = result.bad.length === 0 && expected.every((k) => result.bosses.includes(k));
 if (!ok) {
   console.error(`FAIL: ${result.bad.length ? `wards broken around ${result.bad.join(', ')}` : 'an expected boss arena is missing'}`);

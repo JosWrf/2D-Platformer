@@ -42,7 +42,10 @@ export type TrackName =
   | 'bossShadow'
   | 'bossBoar'
   | 'bossTwins'
-  | 'bossClock';
+  | 'bossClock'
+  | 'bossJester'
+  | 'bossGloom'
+  | 'bossGargoyle';
 
 const SCALES = {
   aeolian: [0, 2, 3, 5, 7, 8, 10],
@@ -319,6 +322,42 @@ const TRACKS: Record<TrackName, Track> = {
     bass: { pattern: 'x...x...x...x...', gain: 0.11, style: 'pulse' },
     arp: { pattern: 'x.x.x.x.x.x.x.x.', notes: [0, 4, 7, 4, 0, 4, 7, 9], octave: 1, gain: 0.024, type: 'square', decay: 0.08, wet: 0.3 },
     drums: { kick: 'x.......x.......', snare: '............x...', hat: 'x...x...x...x...', tom: '..............l.', gain: 0.85 },
+  },
+  /* The jester: a carnival tune that limps - three, three, three and a stumble - and the bells on his cap. */
+  bossJester: {
+    bpm: 138,
+    root: 55,
+    scale: SCALES.harmonic,
+    prog: [0, 4, 5, 4],
+    pad: { gain: 0.028, cutoff: 1500, type: 'triangle', wet: 0.45 },
+    bass: { pattern: 'x..f..x..f..x...', gain: 0.11, style: 'pulse' },
+    arp: { pattern: '.xx.xx.xx.xx.x.x', notes: [0, 2, 4, 2], octave: 1, gain: 0.022, type: 'square', decay: 0.07, wet: 0.3 },
+    lead: { pattern: '4.3.4.6.7h..6.4.2.3.4.2.1h0h....', octave: 1, gain: 0.026, type: 'triangle', wet: 0.35 },
+    drums: { kick: 'x.....x.....x...', snare: '...x.....x......', hat: 'x..x..x..x..x.x.', gain: 0.8 },
+    bells: { chance: 0.16, octave: 2, gain: 0.024 },
+  },
+  /* The dark: almost nothing - a heartbeat, a drone under it, and now and then a drop of light. */
+  bossGloom: {
+    bpm: 92,
+    root: 45,
+    scale: SCALES.phrygian,
+    prog: [0, 0, 1, 0],
+    pad: { gain: 0.05, cutoff: 600, type: 'sawtooth', wet: 0.8 },
+    bass: { pattern: 'x.x.............', gain: 0.12, style: 'soft' },
+    lead: { pattern: '0hhhhhhh1hhhhhhh....0hhh6hhh5hhh', octave: 1, gain: 0.024, type: 'sine', wet: 0.7 },
+    drums: { kick: 'x.x.............', tom: '..........l.....', gain: 0.85 },
+    bells: { chance: 0.08, octave: 3, gain: 0.03 },
+  },
+  /* The gargoyle: an organ on the walls - long chords, a line that climbs, and stone underfoot. */
+  bossGargoyle: {
+    bpm: 104,
+    root: 50,
+    scale: SCALES.aeolian,
+    prog: [0, 5, 3, 4],
+    pad: { gain: 0.05, cutoff: 1400, type: 'sawtooth', wet: 0.65 },
+    bass: { pattern: 'x...x...x...xoxo', gain: 0.11, style: 'drive' },
+    lead: { pattern: '4hhh3hhh2hhh0hhh4hhh5hhh7hhhhhhh', octave: 1, gain: 0.028, type: 'square', wet: 0.55 },
+    drums: { kick: 'x.......x.......', snare: '........x.......', tom: '....l.......l.l.', gain: 0.85 },
   },
   /* The shadow: fast, and the line on top runs backwards. */
   bossShadow: {

@@ -30,7 +30,10 @@ export type EnemyKind =
   | 'shadow'
   | 'boar'
   | 'twins'
-  | 'clock';
+  | 'clock'
+  | 'jester'
+  | 'gloom'
+  | 'gargoyle';
 
 /**
  * The kinds that are bosses rather than roster: announced, with a health bar,
@@ -52,6 +55,9 @@ export const BOSS_KINDS: ReadonlySet<EnemyKind> = new Set<EnemyKind>([
   'boar',
   'twins',
   'clock',
+  'jester',
+  'gloom',
+  'gargoyle',
 ]);
 
 /**

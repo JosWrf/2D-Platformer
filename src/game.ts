@@ -19,7 +19,7 @@ import { Checkpoint, Pickup } from './entities/pickup';
 import { PLAYER_MAX_HP, Player } from './entities/player';
 import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
-import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, RELICS, SILK_REGROW, type RelicId, relic } from './entities/relics';
+import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, RELICS, SILK_REGROW, STONE_GAZE_PACE, TUMBLE_TIME, type RelicId, relic } from './entities/relics';
 import { SKILLS, SNARE_PACE, SNARE_PACE_BOSS, drawSnare, skillForRelic, skillInfo } from './entities/skills';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
@@ -70,6 +70,9 @@ const ARENA_TITLES: Partial<Record<EnemyKind, string>> = {
   boar: 'GRIMMZAHN, DER KEILER',
   twins: 'SOL UND LUNA, DIE STERNZWILLINGE',
   clock: 'TICKMAR, DAS UHRWERK',
+  jester: 'MASKARILL, DER GAUKLER',
+  gloom: 'NYKTOS, DER LICHTFRESSER',
+  gargoyle: 'GRAUWACHT, DER WASSERSPEIER',
 };
 
 /** The fight each boss is fought to. */
@@ -88,6 +91,9 @@ const BOSS_TRACK: Partial<Record<EnemyKind, TrackName>> = {
   boar: 'bossBoar',
   twins: 'bossTwins',
   clock: 'bossClock',
+  jester: 'bossJester',
+  gloom: 'bossGloom',
+  gargoyle: 'bossGargoyle',
 };
 
 /**
@@ -236,6 +242,36 @@ const BOSS_RELIC: Record<string, BossRelic> = {
       'Was dir die Bosse beigebracht haben, kommt schneller wieder.',
     ],
   },
+  jester: {
+    relic: 'gauklerschritt',
+    fell: 'MASKARILL FÄLLT AUS DER ROLLE',
+    speaker: 'DAS THEATER',
+    lines: [
+      'Jeden Abend hat er hier gespielt, vor Rängen, auf denen längst niemand mehr saß.',
+      'Sein letzter Trick gehört jetzt dir: Wer dem Schlag ausweicht, hat den Lacher auf seiner Seite.',
+      'Roll durch einen Angriff hindurch — und dein nächster Hieb trifft doppelt.',
+    ],
+  },
+  gloom: {
+    relic: 'lichtkern',
+    fell: 'DAS LICHT KEHRT ZURÜCK',
+    speaker: 'DIE DUNKELGROTTE',
+    lines: [
+      'Jedes Licht in dieser Grotte hat er gefressen, Kristall um Kristall.',
+      'Jetzt ist es frei — und ein Funke davon bleibt bei dir.',
+      'Was du verlierst, leuchtet noch einen Atemzug lang. Heb es auf, und es ist wieder deins.',
+    ],
+  },
+  gargoyle: {
+    relic: 'steinblick',
+    fell: 'GRAUWACHT ZERBRICHT',
+    speaker: 'DIE ZINNEN',
+    lines: [
+      'Hundert Winter hat er auf diesen Mauern gewacht und keinen Blick ertragen.',
+      'Sein Blick ist jetzt deiner.',
+      'Was auf dich zufliegt, während du es ansiehst, wird langsamer.',
+    ],
+  },
   hydra: {
     relic: 'hydrablut',
     fell: 'DAS TOR IST OFFEN',
@@ -380,6 +416,9 @@ export class Game implements World {
         case 'boar':
         case 'twins':
         case 'clock':
+        case 'jester':
+        case 'gloom':
+        case 'gargoyle':
           this.enemySpawns.push({ kind: spawn.kind, x, y });
           break;
         case 'boss':
@@ -512,6 +551,21 @@ export class Game implements World {
     this.projectiles.push(projectile);
   }
 
+  /**
+   * The Steinblick: a hostile thing in flight that the hero is facing, on its
+   * way to him and not yet past him, flies a third slower. Only what is
+   * actually in front of him - a gaze, not an aura.
+   */
+  private underGaze(q: Projectile): boolean {
+    const p = this.player;
+    if (q.friendly || q.resting || !p.has('steinblick') || p.dead) return false;
+    const dx = q.cx - p.cx;
+    if (Math.abs(dx) > 420 || Math.abs(q.cy - p.cy) > 260) return false;
+    if (Math.sign(dx) !== p.facing && Math.abs(dx) > 10) return false;
+    // Closing along the floor, or coming down on him from not far off.
+    return dx * q.vx < 0 || (Math.abs(dx) < 120 && q.vy > 0 && q.cy < p.cy);
+  }
+
   onBossEngaged(): void {
     this.level.gateClosed = true;
     audio.play('wardClose', 0.8);
@@ -570,6 +624,11 @@ export class Game implements World {
       index: 0,
       after: () => this.leaveCrystalWorld(),
     };
+  }
+
+  announce(text: string, seconds = 3.4): void {
+    if (this.state !== 'playing') return;
+    this.zoneBanner = { text, timer: seconds };
   }
 
   /** Said once each: what a cut neck does, and what closes one. */
@@ -1138,7 +1197,8 @@ export class Game implements World {
     if (this.bossIntro > 0) this.bossIntro -= dt;
 
     for (const p of this.projectiles) {
-      p.update(dt, this);
+      // What the hero looks at, coming at him, he slows with Grauwacht's gaze.
+      p.update(dt * (this.underGaze(p) ? STONE_GAZE_PACE : 1), this);
       if (p.dead) continue;
       if (p.friendly) {
         for (const enemy of this.enemies) {
@@ -1157,6 +1217,9 @@ export class Game implements World {
           this.player.onDamageDealt(Math.max(0, before - Math.max(0, this.boss.hp)));
           p.dead = true;
         }
+      } else if (!p.resting && !this.player.dead && this.player.isDashing && this.player.invuln <= 0 && this.player.overlaps(p.rect)) {
+        // Rolled through it: it flies on, and the Gauklerschritt counts it.
+        this.player.dodged(this);
       } else if (!p.resting && !this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
         if (p.damage <= 0) {
           // Silk: it binds rather than wounds.
@@ -1408,6 +1471,7 @@ export class Game implements World {
     for (const e of this.player.skillEffects) {
       for (const l of e.lights()) add(l.x, l.y, l.radius, l.rgb, l.strength, l.tint ?? 0.3);
     }
+    for (const l of this.player.moteLights()) add(l.x, l.y, l.radius, l.rgb, l.strength, l.tint);
 
     this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);
     if (this.portal) add(this.portal.cx, this.portal.cy, 190, '186,132,255', 0.9, 0.34);
@@ -1889,6 +1953,11 @@ export class Game implements World {
         case 'hydrablut':
           fill = p.hp < p.maxHp ? 1 - p.regrowTimer / HYDRA_REGROW : null;
           break;
+        case 'gauklerschritt':
+          // Lit while a doubled blow is owed, draining as it runs out.
+          lit = p.tumble > 0;
+          fill = p.tumble > 0 ? p.tumble / TUMBLE_TIME : null;
+          break;
       }
       drawRelicBadge(ctx, r.id, 34 + (n % 6) * 25, 114 + Math.floor(n / 6) * 24, r.color, lit, fill);
       n++;
@@ -1925,7 +1994,8 @@ export class Game implements World {
       // Q and a pip for every attack learned, the picked one lit.
       ctx.fillStyle = '#f2c14e';
       ctx.fillText('Q', x + 46, y + 43);
-      const gap = owned.length > 12 ? 4.6 : 6;
+      // Inside the panel's right edge, however many there are.
+      const gap = Math.min(6, 66 / Math.max(1, owned.length - 1));
       owned.forEach((k, i) => {
         ctx.fillStyle = k.id === info.id ? k.color : 'rgba(150,165,210,0.35)';
         ctx.beginPath();
@@ -1946,8 +2016,8 @@ export class Game implements World {
       drawTextCentered(ctx, 'Noch keine Angriffe — jeder Boss bringt dir einen seiner bei.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
       return;
     }
-    // Fifteen rows at 24 ran off the bottom of the screen.
-    const rowH = owned.length > 12 ? 20 : 24;
+    // Fifteen rows at 24 ran off the bottom of the screen, eighteen at 20 too.
+    const rowH = owned.length > 15 ? 18 : owned.length > 12 ? 20 : 24;
     const h = owned.length * rowH + 24;
     const w = 860;
     const left = VIEW_W / 2 - w / 2;
@@ -1984,8 +2054,8 @@ export class Game implements World {
       drawTextCentered(ctx, 'Noch keine Relikte — jeder Boss hinterlässt eines.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
       return;
     }
-    // Fifteen rows at 24 ran off the bottom of the screen.
-    const rowH = owned.length > 12 ? 20 : 24;
+    // Fifteen rows at 24 ran off the bottom of the screen, eighteen at 20 too.
+    const rowH = owned.length > 15 ? 18 : owned.length > 12 ? 20 : 24;
     const h = owned.length * rowH + 24;
     // Wide enough for the longest line, and the line held to its column all
     // the same: it ran on under the boss's name once, measured in the

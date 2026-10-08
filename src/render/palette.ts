@@ -182,6 +182,40 @@ export const ZONES: Zone[] = [
   },
   {
     /*
+     * The theatre: the ruins under a sky gone violet with the footlights'
+     * smoke, and warmer at the bottom, where the lamps are.
+     */
+    name: 'ruins',
+    start: ZONE_START.theater,
+    skyTop: '#0c0618',
+    skyBottom: '#1e1222',
+    hillFar: '#30203e',
+    hillNear: '#22172c',
+    ambient: 'rgba(210,150,255,0.07)',
+    label: 'Das Theater',
+    sporeRgb: '236,200,255',
+    darkness: 0.78,
+    darkTint: '#0a0512',
+    interior: false,
+    calm: false,
+  },
+  {
+    name: 'ruins',
+    start: ZONE_START.ruinsBeyondStage,
+    skyTop: '#0a0716',
+    skyBottom: '#140f22',
+    hillFar: '#2a2140',
+    hillNear: '#1d1830',
+    ambient: 'rgba(150,110,200,0.06)',
+    label: 'Versunkene Ruinen',
+    sporeRgb: '246,204,150',
+    darkness: 0.76,
+    darkTint: '#080512',
+    interior: false,
+    calm: false,
+  },
+  {
+    /*
      * The temple's inner court, where Ankhor stands. Still the ruins - the same
      * stone, the same sky - with the dark leaning a little towards his amber,
      * so the room reads as somewhere before the banner says so.
@@ -203,6 +237,40 @@ export const ZONES: Zone[] = [
   {
     name: 'caverns',
     start: ZONE_START.caverns,
+    skyTop: '#03080d',
+    skyBottom: '#071620',
+    hillFar: '#0f2634',
+    hillNear: '#0a1a25',
+    ambient: 'rgba(80,220,255,0.07)',
+    label: 'Kristallhöhlen',
+    sporeRgb: '255,220,150',
+    darkness: 0.88,
+    darkTint: '#01060c',
+    interior: true,
+    calm: false,
+  },
+  {
+    /*
+     * The dark grotto: the caves with every light eaten out of them. Nearly
+     * black, and still - what little moves in here should be what matters.
+     */
+    name: 'caverns',
+    start: ZONE_START.grotto,
+    skyTop: '#020306',
+    skyBottom: '#04060a',
+    hillFar: '#0a0e16',
+    hillNear: '#070a10',
+    ambient: 'rgba(140,120,220,0.03)',
+    label: 'Die Dunkelgrotte',
+    sporeRgb: '190,180,240',
+    darkness: 0.95,
+    darkTint: '#010205',
+    interior: true,
+    calm: true,
+  },
+  {
+    name: 'caverns',
+    start: ZONE_START.cavernsDeep,
     skyTop: '#03080d',
     skyBottom: '#071620',
     hillFar: '#0f2634',
@@ -317,6 +385,40 @@ export const ZONES: Zone[] = [
   {
     name: 'castle',
     start: ZONE_START.castle,
+    skyTop: '#0d0710',
+    skyBottom: '#1a0c14',
+    hillFar: '#2c1620',
+    hillNear: '#1d0f17',
+    ambient: 'rgba(255,110,80,0.06)',
+    label: 'Burg Nachtfall',
+    sporeRgb: '255,196,126',
+    darkness: 0.78,
+    darkTint: '#0c0509',
+    interior: false,
+    calm: false,
+  },
+  {
+    /*
+     * The battlements: the castle's night gone grey and cold, the colour of
+     * the stone he is made of, with the moon over it.
+     */
+    name: 'castle',
+    start: ZONE_START.battlement,
+    skyTop: '#080a12',
+    skyBottom: '#141822',
+    hillFar: '#262c38',
+    hillNear: '#1a1e28',
+    ambient: 'rgba(180,196,220,0.06)',
+    label: 'Die Zinnen',
+    sporeRgb: '210,220,236',
+    darkness: 0.78,
+    darkTint: '#06070c',
+    interior: false,
+    calm: false,
+  },
+  {
+    name: 'castle',
+    start: ZONE_START.towers,
     skyTop: '#0d0710',
     skyBottom: '#1a0c14',
     hillFar: '#2c1620',

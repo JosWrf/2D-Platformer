@@ -31,4 +31,10 @@ export interface World {
   onHydraDefeated(): void;
   /** One of the arena bosses without a reward of its own has fallen. */
   onBossFelled(kind: EnemyKind, x: number, y: number): void;
+  /**
+   * A line across the top of the screen: what a boss wants the hero to have
+   * understood, said once, at the moment it is true - the way the hydra says
+   * that a cut neck grows back.
+   */
+  announce(text: string, seconds?: number): void;
 }

@@ -8,7 +8,7 @@ import type { Level } from '../world/level';
 import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
-import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, SILK_REGROW, TAKT_PACE, type RelicId } from './relics';
+import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, LIGHT_MOTE_LIFE, SILK_REGROW, TAKT_PACE, TUMBLE_TIME, type RelicId } from './relics';
 import { SKILLS, type SkillEffect, type SkillId, castSkill, skillInfo } from './skills';
 
 const MAX_RUN = 235;
@@ -32,6 +32,16 @@ const ATTACK_RECOVER = 0.12;
 const ATTACK_TOTAL = ATTACK_WINDUP + ATTACK_ACTIVE + ATTACK_RECOVER;
 
 export const PLAYER_MAX_HP = 6;
+
+/** A heart knocked out of the hero by a blow, with the Lichtkern: see Player.dropMote. */
+export interface LightMote {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  landed: boolean;
+}
 
 /**
  * One entry per combo step. Angles are in the hero's facing space: 0 points
@@ -180,6 +190,19 @@ export class Player extends Body {
    * up while he stands in it.
    */
   sticky = 0;
+  /**
+   * Gauklerschritt: seconds the next blow that lands stays doubled, after a
+   * roll that took him through something that would have hit. 0: none owed.
+   */
+  tumble = 0;
+  /** Rolls started, so a roll through three blows is one roll, not three. */
+  private rollCount = 0;
+  private tumbleRoll = -1;
+  /**
+   * Lichtkern: hearts knocked out of him, glowing where they fell until they
+   * go out. Picked up in time, each is a heart back.
+   */
+  motes: LightMote[] = [];
   /** Runs after something has saved him, for the effect drawn round him. */
   saveFlash = 0;
   private saveColor = '#ffffff';
@@ -281,6 +304,8 @@ export class Player extends Body {
     this.shieldUp = this.has('seidenmantel');
     this.shieldTimer = 0;
     this.secondWind = this.has('zweiteratem');
+    this.tumble = 0;
+    this.motes = [];
     this.regrowTimer = HYDRA_REGROW;
     this.saveFlash = 0;
     // The attacks stay learned; whatever was in flight is gone, and every one
@@ -401,6 +426,23 @@ export class Player extends Body {
    */
   private updateRelics(dt: number, world: World): void {
     this.saveFlash = Math.max(0, this.saveFlash - dt * 1.6);
+    if (this.tumble > 0) {
+      this.tumble = Math.max(0, this.tumble - dt);
+      if (world.time % 0.09 < dt) {
+        world.particles.spawn({
+          x: this.cx + this.facing * rand(6, 14),
+          y: this.cy + rand(-8, 4),
+          vx: rand(-20, 20),
+          vy: -rand(20, 50),
+          gravity: -30,
+          color: 'rgba(217,168,255,0.8)',
+          size: rand(1.5, 2.6),
+          life: 0.35,
+          shape: 'spark',
+        });
+      }
+    }
+    if (this.motes.length) this.updateMotes(dt, world);
     if (this.has('seidenmantel') && !this.shieldUp) {
       this.shieldTimer -= dt;
       if (this.shieldTimer <= 0) {
@@ -464,6 +506,7 @@ export class Player extends Body {
     /* ---------------------------------------------------------- dash */
     if (!stunned && input.pressed('dash') && this.dashCooldown <= 0 && this.dashesLeft > 0) {
       this.dashTimer = DASH_TIME;
+      this.rollCount++;
       this.dashesLeft--;
       // The knight's shadow step: a second roll straight out of the first,
       // and then the same rest as ever.
@@ -1043,14 +1086,20 @@ export class Player extends Body {
 
   private applySwordHits(world: World): void {
     const box = this.swordRect();
-    const damage = this.swingDamage;
+    // A roll through a blow, owed: this swing hits twice as hard - spent on
+    // the first thing it actually wounds, not on a plate that rings.
+    const doubled = this.tumble > 0;
+    const damage = this.swingDamage * (doubled ? 2 : 1);
+    let wounded = false;
     for (const enemy of world.enemies) {
       if (enemy.dead || this.hitThisSwing.has(enemy)) continue;
       if (!enemy.overlaps(box)) continue;
       this.hitThisSwing.add(enemy);
       const before = enemy.hp;
       enemy.hurt(damage, this.facing, world);
-      this.onDamageDealt(Math.max(0, before - Math.max(0, enemy.hp)));
+      const dealt = Math.max(0, before - Math.max(0, enemy.hp));
+      if (dealt > 0) wounded = true;
+      this.onDamageDealt(dealt);
       this.onHitLanded(world, enemy.cx, enemy.cy, damage);
     }
     const boss = world.boss;
@@ -1058,8 +1107,15 @@ export class Player extends Body {
       this.hitThisSwing.add(boss);
       const before = boss.hp;
       boss.hurt(damage, this.facing, world);
-      this.onDamageDealt(Math.max(0, before - Math.max(0, boss.hp)));
+      const dealt = Math.max(0, before - Math.max(0, boss.hp));
+      if (dealt > 0) wounded = true;
+      this.onDamageDealt(dealt);
       this.onHitLanded(world, boss.cx, boss.cy - 10, damage);
+    }
+    if (doubled && wounded) {
+      this.tumble = 0;
+      audio.play('slam', 1.6);
+      world.particles.burst(box.x + box.w / 2, box.y + box.h / 2, 16, '#d9a8ff', { speed: 210, gravity: 160, shape: 'spark' });
     }
     // Deflect projectiles with the blade - the ones that can be.
     for (const p of world.projectiles) {
@@ -1099,7 +1155,11 @@ export class Player extends Body {
       this.onParrySuccess(world, fromDir);
       return;
     }
-    if (!ignoreIFrames && this.isInvulnerable) return;
+    if (!ignoreIFrames && this.isInvulnerable) {
+      // A roll that carries him through a blow - not the grace after one.
+      if (this.dashTimer > 0 && this.invuln <= 0) this.dodged(world);
+      return;
+    }
     if (ignoreIFrames && this.invuln > 0) return;
     // Every blow, caught or not, starts the silk growing back from nothing.
     this.shieldTimer = SILK_REGROW;
@@ -1148,6 +1208,91 @@ export class Player extends Body {
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
+      return;
+    }
+    if (this.has('lichtkern')) this.dropMote(fromDir);
+  }
+
+  /**
+   * Something would have hit him, and the roll took him through it. With the
+   * Gauklerschritt that is worth a doubled blow: once a roll, and kept for a
+   * few seconds, so the answer to a dodge can be a step back in.
+   */
+  dodged(world: World): void {
+    if (!this.has('gauklerschritt') || this.tumbleRoll === this.rollCount) return;
+    this.tumbleRoll = this.rollCount;
+    const fresh = this.tumble <= 0;
+    this.tumble = TUMBLE_TIME;
+    if (!fresh) return;
+    audio.play('parry', 1.55);
+    world.particles.text(this.cx, this.y - 14, 'AUSGEWICHEN!', '#ecd4ff');
+    world.particles.burst(this.cx, this.cy, 14, '#d9a8ff', { speed: 150, gravity: -40, shape: 'spark' });
+  }
+
+  /**
+   * The Lichtkern: the heart a blow takes goes out of him as a light, and
+   * falls towards whatever struck it - a little way off, so getting it back is
+   * a choice and not a matter of standing still. At most three at once.
+   */
+  private dropMote(fromDir: number): void {
+    if (this.motes.length >= 3) this.motes.shift();
+    const toward = -(Math.sign(fromDir) || -this.facing);
+    this.motes.push({ x: this.cx, y: this.cy - 6, vx: toward * rand(120, 165), vy: -rand(240, 290), life: LIGHT_MOTE_LIFE, landed: false });
+  }
+
+  /** Where the motes fall, what picks them up, and when they go out. */
+  private updateMotes(dt: number, world: World): void {
+    const level = world.level;
+    for (const m of this.motes) {
+      m.life -= dt;
+      if (!m.landed) {
+        m.vy = Math.min(620, m.vy + 900 * dt);
+        const nx = m.x + m.vx * dt;
+        if (level.solidAt(Math.floor(nx / TILE), Math.floor(m.y / TILE))) m.vx = 0;
+        else m.x = nx;
+        m.y += m.vy * dt;
+        const tx = Math.floor(m.x / TILE);
+        const ty = Math.floor((m.y + 7) / TILE);
+        if (m.vy > 0 && (level.solidAt(tx, ty) || level.platformAt(tx, ty))) {
+          m.y = ty * TILE - 7;
+          m.landed = true;
+          m.vx = 0;
+          m.vy = 0;
+        }
+      }
+      const reach = { x: m.x - 9, y: m.y - 9, w: 18, h: 18 };
+      if (m.life > 0 && !this.dead && this.hp < this.maxHp && this.overlaps(reach) && m.life < LIGHT_MOTE_LIFE - 0.35) {
+        m.life = -1;
+        this.mend(world, '#fff0a8');
+      } else if (m.life <= 0 && m.life > -1) {
+        world.particles.burst(m.x, m.y, 8, 'rgba(255,240,168,0.7)', { speed: 50, gravity: -30, shape: 'circle' });
+        m.life = -1;
+      }
+    }
+    if (this.motes.some((m) => m.life <= 0)) this.motes = this.motes.filter((m) => m.life > 0);
+  }
+
+  /** The lights the motes give off, for the light pass. */
+  moteLights(): { x: number; y: number; radius: number; rgb: string; strength: number; tint: number }[] {
+    return this.motes.map((m) => ({ x: m.x, y: m.y, radius: 46 + 10 * Math.min(1, m.life), rgb: '255,236,160', strength: 0.75, tint: 0.4 }));
+  }
+
+  private drawMotes(ctx: CanvasRenderingContext2D): void {
+    for (const m of this.motes) {
+      // The last second it blinks, faster as it goes.
+      const fading = m.life < 1 ? 0.45 + 0.55 * Math.abs(Math.sin(m.life * 14)) : 1;
+      const bob = m.landed ? Math.sin(m.life * 6) * 2 : 0;
+      glow(ctx, m.x, m.y + bob, 18, `rgba(255,236,160,${(0.55 * fading).toFixed(2)})`);
+      ctx.save();
+      ctx.globalAlpha = fading;
+      ctx.translate(m.x, m.y + bob);
+      ctx.fillStyle = '#fff4c8';
+      ctx.beginPath();
+      ctx.moveTo(0, 5);
+      ctx.bezierCurveTo(-7, -1, -4, -7, 0, -3);
+      ctx.bezierCurveTo(4, -7, 7, -1, 0, 5);
+      ctx.fill();
+      ctx.restore();
     }
   }
 
@@ -1165,6 +1310,7 @@ export class Player extends Body {
 
   draw(ctx: CanvasRenderingContext2D, world: World): void {
     for (const e of this.skillEffects) e.draw(ctx);
+    if (this.motes.length) this.drawMotes(ctx);
     for (const t of this.trail) {
       ctx.globalAlpha = t.life * 0.3;
       ctx.fillStyle = '#8fc4ff';

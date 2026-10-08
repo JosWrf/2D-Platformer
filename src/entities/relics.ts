@@ -18,11 +18,14 @@ export type RelicId =
   | 'herzkern'
   | 'keilerhaut'
   | 'goldzahn'
+  | 'gauklerschritt'
   | 'bebenfaust'
+  | 'lichtkern'
   | 'seidenmantel'
   | 'glutklinge'
   | 'zwillingsstern'
   | 'flutklinge'
+  | 'steinblick'
   | 'taktgeber'
   | 'blutdurst'
   | 'schattenschritt'
@@ -85,6 +88,18 @@ export const RELICS: readonly Relic[] = [
     defense: 0.05,
   },
   {
+    id: 'gauklerschritt',
+    name: 'Gauklerschritt',
+    text: 'Rollst du durch einen Angriff hindurch, trifft dein nächster Hieb doppelt.',
+    banner: 'GAUKLERSCHRITT — AUSWEICHEN SCHÄRFT',
+    color: '#d9a8ff',
+    from: 'Maskarill',
+    // Paid for with a roll through something that would have hit, so it
+    // comes up a few times a fight, not every swing: measured, see verify:relics.
+    offense: 0.04,
+    defense: 0.02,
+  },
+  {
     id: 'bebenfaust',
     name: 'Bebenfaust',
     text: 'Der Ladeschlag lädt schneller und schickt eine Schockwelle los.',
@@ -93,6 +108,17 @@ export const RELICS: readonly Relic[] = [
     from: 'Ankhor',
     offense: 0.06,
     defense: 0,
+  },
+  {
+    id: 'lichtkern',
+    name: 'Lichtkern',
+    text: 'Ein verlorenes Herz fällt als Licht zu Boden: Heb es auf, bevor es erlischt, und es ist wieder deins.',
+    banner: 'LICHTKERN — VERLORENES LICHT KEHRT ZURÜCK',
+    color: '#fff0a8',
+    from: 'Nyktos',
+    offense: 0,
+    // Only what is picked up comes back, and only one heart a blow.
+    defense: 0.08,
   },
   {
     id: 'seidenmantel',
@@ -135,6 +161,16 @@ export const RELICS: readonly Relic[] = [
     from: 'Thalassa',
     offense: 0.22,
     defense: 0,
+  },
+  {
+    id: 'steinblick',
+    name: 'Steinblick',
+    text: 'Was auf dich zufliegt, während du es ansiehst, fliegt ein Drittel langsamer.',
+    banner: 'STEINBLICK — DEIN BLICK BREMST',
+    color: '#b8c2d0',
+    from: 'Grauwacht',
+    offense: 0,
+    defense: 0.05,
   },
   {
     id: 'taktgeber',
@@ -254,3 +290,9 @@ export const SILK_REGROW = 12;
 export const HYDRA_REGROW = 18;
 /** How much faster the boss attacks come back with the Taktgeber: a third. */
 export const TAKT_PACE = 4 / 3;
+/** How long a heart lost with the Lichtkern lies glowing before it goes out. */
+export const LIGHT_MOTE_LIFE = 3;
+/** How much slower what the hero looks at flies, with the Steinblick: a third. */
+export const STONE_GAZE_PACE = 2 / 3;
+/** How long a roll through an attack keeps the next blow doubled, with the Gauklerschritt. */
+export const TUMBLE_TIME = 3;

@@ -206,6 +206,53 @@ export function drawRelicBadge(
       ctx.fill();
       break;
     case 'flutklinge':
+    case 'gauklerschritt':
+      // The jester's cap: three points, a bell on each.
+      ctx.beginPath();
+      ctx.moveTo(-5, 4);
+      ctx.lineTo(-7, -4);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(0, -6);
+      ctx.lineTo(2, 0);
+      ctx.lineTo(7, -4);
+      ctx.lineTo(5, 4);
+      ctx.closePath();
+      ctx.fill();
+      for (const [bx, by] of [
+        [-7, -5],
+        [0, -7],
+        [7, -5],
+      ]) {
+        ctx.beginPath();
+        ctx.arc(bx, by, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    case 'lichtkern':
+      // A heart made of light, with its rays.
+      ctx.beginPath();
+      ctx.moveTo(0, 5);
+      ctx.bezierCurveTo(-7, -1, -4, -7, 0, -3);
+      ctx.bezierCurveTo(4, -7, 7, -1, 0, 5);
+      ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        const a = -Math.PI / 2 + (i - 1.5) * 0.7;
+        ctx.fillRect(Math.cos(a) * 7.5 - 0.6, Math.sin(a) * 7.5 - 0.6, 1.2, 1.2);
+      }
+      break;
+    case 'steinblick':
+      // An eye cut in stone.
+      ctx.beginPath();
+      ctx.moveTo(-7, 0);
+      ctx.quadraticCurveTo(0, -6.5, 7, 0);
+      ctx.quadraticCurveTo(0, 6.5, -7, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = 'rgba(8,10,20,0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
     case 'klingenwelle':
       ctx.beginPath();
       ctx.moveTo(6, 0);
@@ -499,6 +546,34 @@ function drawSkillSign(ctx: CanvasRenderingContext2D, id: string): void {
       });
       break;
     }
+    case 'trugbild':
+      // Two figures, one stepping out of the other.
+      ctx.globalAlpha = 0.45;
+      ctx.fillRect(-6, -2, 4, 7);
+      ctx.beginPath();
+      ctx.arc(-4, -5, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillRect(1, -2, 4, 7);
+      ctx.beginPath();
+      ctx.arc(3, -5, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'irrlichter':
+      // Three lights on a ring.
+      for (let i = 0; i < 3; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI * 2) / 3;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 4.5, Math.sin(a) * 4.5, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    case 'steinsturz':
+      // A block coming down onto a line of floor.
+      ctx.fillRect(-4, -6, 8, 7);
+      ctx.fillRect(-7, 5, 14, 1.5);
+      ctx.fillRect(-0.7, 2, 1.4, 2);
+      break;
     case 'splitterregen':
       for (const [dx, dy] of [
         [-4, -3],

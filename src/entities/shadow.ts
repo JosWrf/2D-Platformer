@@ -76,6 +76,7 @@ class Mirror implements World {
     void x;
     void y;
   }
+  announce(): void {}
 }
 
 /**

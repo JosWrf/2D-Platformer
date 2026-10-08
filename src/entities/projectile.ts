@@ -18,7 +18,9 @@ export type ProjectileKind =
   | 'quake'
   | 'shard'
   | 'coin'
-  | 'web';
+  | 'web'
+  | 'knife'
+  | 'spout';
 
 export class Projectile extends Body {
   friendly = false;
@@ -168,6 +170,22 @@ export class Projectile extends Body {
         this.life = 3;
         this.damage = 0;
         break;
+      case 'knife':
+        // One of Maskarill's knives, thrown turning end over end on an arc. A
+        // swing sends it back, flat, to the hand that threw it.
+        this.w = 16;
+        this.h = 12;
+        this.life = 3;
+        this.damage = 1;
+        break;
+      case 'spout':
+        // A gout of water from a gargoyle's mouth, on an arc.
+        this.w = 14;
+        this.h = 14;
+        this.life = 3;
+        this.damage = 1;
+        this.water = true;
+        break;
     }
   }
 
@@ -256,6 +274,24 @@ export class Projectile extends Body {
       }
     } else if (this.kind === 'web') {
       if (!this.friendly) this.vy += 700 * dt;
+    } else if (this.kind === 'knife') {
+      // Turning over as it falls; sent back, it flies flat.
+      if (!this.friendly) this.vy += 760 * dt;
+    } else if (this.kind === 'spout') {
+      this.vy += 900 * dt;
+      if (world.time % 0.03 < dt) {
+        world.particles.spawn({
+          x: this.cx + rand(-3, 3),
+          y: this.cy + rand(-3, 3),
+          vx: -this.vx * 0.08,
+          vy: rand(-20, 20),
+          gravity: 500,
+          color: 'rgba(160,210,230,0.65)',
+          size: rand(1.5, 3),
+          life: 0.3,
+          shape: 'circle',
+        });
+      }
     } else if (this.kind === 'shard') {
       if (world.time % 0.03 < dt) {
         world.particles.spawn({
@@ -417,6 +453,10 @@ export class Projectile extends Body {
         return '#ffd36a';
       case 'web':
         return '#e6eef8';
+      case 'knife':
+        return '#e8ecf4';
+      case 'spout':
+        return '#a8d8ec';
       default:
         return '#ff9a5c';
     }
@@ -728,6 +768,45 @@ export class Projectile extends Body {
         ctx.fillStyle = 'rgba(236,242,250,0.85)';
         ctx.beginPath();
         ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'knife': {
+        // A dagger turning end over end: a silver blade, a gold guard.
+        glow(ctx, cx, cy, 12, this.friendly ? 'rgba(255,250,230,0.4)' : 'rgba(220,200,255,0.3)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(this.friendly ? Math.atan2(this.vy, this.vx) : this.spin * 1.6);
+        ctx.fillStyle = this.friendly ? '#fffbe8' : '#dfe4ee';
+        ctx.beginPath();
+        ctx.moveTo(9, 0);
+        ctx.lineTo(0, -2.4);
+        ctx.lineTo(0, 2.4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#e8b84a';
+        ctx.fillRect(-1.5, -3.5, 2, 7);
+        ctx.fillStyle = '#7a3a8a';
+        ctx.fillRect(-7, -1.2, 5.5, 2.4);
+        ctx.restore();
+        break;
+      }
+      case 'spout': {
+        // A gout of rainwater, stretched along the way it falls.
+        const len = Math.min(10, Math.hypot(this.vx, this.vy) / 60);
+        const ang = Math.atan2(this.vy, this.vx);
+        glow(ctx, cx, cy, 14, 'rgba(150,200,230,0.35)');
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(120,180,214,0.9)';
+        ctx.beginPath();
+        ctx.ellipse(-len * 0.3, 0, 6 + len * 0.6, 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(226,244,252,0.85)';
+        ctx.beginPath();
+        ctx.ellipse(1, -1.5, 3, 1.6, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         break;

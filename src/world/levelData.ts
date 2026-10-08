@@ -19,7 +19,8 @@
  *   D  Vesperon, the blood lord      U  Gierschlund, the greedy chest
  *   N  Arachna, the web queen        E  Umbra, the hero's shadow
  *   R  Grimmzahn, the boar           J  Sol and Luna, the star twins
- *   F  Tickmar, the clockwork
+ *   F  Tickmar, the clockwork          j  Maskarill, the jester
+ *   n  Nyktos, the light-eater        y  Grauwacht, the gargoyle
  */
 
 export const CHUNK_H = 22;
@@ -323,6 +324,37 @@ const RUINS_CLIMB = c(40, [
   '=========^^^========^^^=================',
 ]);
 
+/**
+ * The theatre the temple kept for its feasts: a stage, footlights along the
+ * front of it, and two balconies a jump up and two above them. Maskarill holds
+ * it. The lamps throw whoever stands on the boards up onto the back wall, big -
+ * and only one of him casts anything.
+ */
+const RUINS_THEATER = warded(c(46, [
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '................-----.........-----...........',
+  '..............................................',
+  '..............................................',
+  '.............-----...............-----........',
+  '..............................................',
+  '..C..H.T....T.....T.......j......T.....T..T...',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
+
 const RUINS_GAUNTLET = c(40, [
   '........................................',
   '........................................',
@@ -406,6 +438,37 @@ const CAVERN_ENTRY = c(40, [
   '#####lll=====lll=====lll================',
   '#####lll=====lll=====lll================',
 ]);
+
+/**
+ * The dark grotto, just in from the cave mouth: a roof of rock, two low steps
+ * and two high ones, and nothing that shines. Whatever lived in the crystals
+ * here, Nyktos has eaten it - the four that are left have to be struck to
+ * light again.
+ */
+const CAVERN_DARK = warded(c(46, [
+  '##############################################',
+  '##############################################',
+  '##############################################',
+  '#######..........#########......##############',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '...............-----..........-----...........',
+  '..............................................',
+  '..............................................',
+  '............-----..................-----......',
+  '..............................................',
+  '..C..H.X.............n........................',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
 
 const CAVERN_DEEP = c(40, [
   '########################################',
@@ -656,6 +719,36 @@ const CASTLE_WALLS = c(40, [
   '========================================',
   '========================================',
 ]);
+
+/**
+ * The battlements between the outer wall and the towers, open to the sky, and
+ * the one gargoyle on them that is not stone all the time. Flat ground for him
+ * to stalk along, two planks a jump up and two above those.
+ */
+const CASTLE_BATTLEMENT = warded(c(46, [
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............................................',
+  '..............-----.......-----...............',
+  '..............................................',
+  '..............................................',
+  '...........-----.............-----............',
+  '..............................................',
+  '..C..H.T.........T.............y.....T....T...',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+  '==============================================',
+]), [8, 45]);
 
 const CASTLE_TOWERS = c(40, [
   '........................................',
@@ -1097,9 +1190,11 @@ export const LEVEL_CHUNKS: Chunk[] = [
   RUINS_TEMPLE,
   RUINS_VAULT,
   RUINS_CLIMB,
+  RUINS_THEATER,
   RUINS_GAUNTLET,
   RUINS_COLOSSUS,
   CAVERN_ENTRY,
+  CAVERN_DARK,
   CAVERN_DEEP,
   CAVERN_WEB,
   CAVERN_CRYSTAL,
@@ -1109,6 +1204,7 @@ export const LEVEL_CHUNKS: Chunk[] = [
   DROWNED_NAVE,
   DROWNED_CROWN,
   CASTLE_WALLS,
+  CASTLE_BATTLEMENT,
   CASTLE_TOWERS,
   CASTLE_CLOCK,
   CASTLE_KEEP,
@@ -1149,8 +1245,12 @@ export const ZONE_START = {
   ruins: startOf(RUINS_TEMPLE),
   vault: startOf(RUINS_VAULT),
   ruinsAgain: startOf(RUINS_CLIMB),
+  theater: startOf(RUINS_THEATER),
+  ruinsBeyondStage: startOf(RUINS_GAUNTLET),
   temple: startOf(RUINS_COLOSSUS),
   caverns: startOf(CAVERN_ENTRY),
+  grotto: startOf(CAVERN_DARK),
+  cavernsDeep: startOf(CAVERN_DEEP),
   web: startOf(CAVERN_WEB),
   cavernsAgain: startOf(CAVERN_CRYSTAL),
   forge: startOf(CAVERN_WYRM),
@@ -1158,6 +1258,8 @@ export const ZONE_START = {
   altar: startOf(DROWNED_TWINS),
   drownedAgain: startOf(DROWNED_NAVE),
   castle: startOf(CASTLE_WALLS),
+  battlement: startOf(CASTLE_BATTLEMENT),
+  towers: startOf(CASTLE_TOWERS),
   clock: startOf(CASTLE_CLOCK),
   keep: startOf(CASTLE_KEEP),
   castleEnd: startOf(CASTLE_FINAL),

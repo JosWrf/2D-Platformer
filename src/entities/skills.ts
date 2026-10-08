@@ -33,11 +33,14 @@ export type SkillId =
   | 'klatschsprung'
   | 'felswurf'
   | 'goldregen'
+  | 'trugbild'
   | 'sonnenblick'
+  | 'irrlichter'
   | 'netzschuss'
   | 'feuerwelle'
   | 'mondsichel'
   | 'springflut'
+  | 'steinsturz'
   | 'pendelschlag'
   | 'blutsicheln'
   | 'schattenwelle'
@@ -92,12 +95,30 @@ export const SKILLS: readonly Skill[] = [
     cooldown: 3.5,
   },
   {
+    id: 'trugbild',
+    name: 'Trugbild',
+    text: 'Ein Trugbild von dir springt nach vorn und schlägt zu: 2 Schaden an allem auf seinem Weg.',
+    color: '#d9a8ff',
+    from: 'Maskarill',
+    relic: 'gauklerschritt',
+    cooldown: 3.5,
+  },
+  {
     id: 'sonnenblick',
     name: 'Sonnenblick',
     text: 'Eine Säule aus Sonnenlicht auf den nächsten Feind: Sie folgt ihm und brennt.',
     color: '#ffd98a',
     from: 'Ankhor',
     relic: 'bebenfaust',
+    cooldown: 5,
+  },
+  {
+    id: 'irrlichter',
+    name: 'Irrlichter',
+    text: 'Drei Irrlichter kreisen vier Sekunden um dich: Jedes trifft, was es berührt, für 1.',
+    color: '#fff0a8',
+    from: 'Nyktos',
+    relic: 'lichtkern',
     cooldown: 5,
   },
   {
@@ -134,6 +155,15 @@ export const SKILLS: readonly Skill[] = [
     color: '#7fe3cd',
     from: 'Thalassa',
     relic: 'flutklinge',
+    cooldown: 4.5,
+  },
+  {
+    id: 'steinsturz',
+    name: 'Steinsturz',
+    text: 'Ein steinerner Wasserspeier stürzt auf den nächsten Feind: 3 Schaden, wo er aufschlägt.',
+    color: '#b8c2d0',
+    from: 'Grauwacht',
+    relic: 'steinblick',
     cooldown: 4.5,
   },
   {
@@ -1459,6 +1489,246 @@ class Pendulum extends SkillEffect {
 
 /* ---------------------------------------------------------------- casts */
 
+/**
+ * Maskarill: a double of the hero, thrown out of him the way the jester throws
+ * his - it runs on ahead, cuts whatever is in its way, and is gone. The hero
+ * himself stays where he stood.
+ */
+class Phantom extends SkillEffect {
+  private static readonly RUN = 0.3;
+  private static readonly FADE = 0.3;
+  private t = 0;
+  private x: number;
+  private readonly from: number;
+  private readonly to: number;
+  private readonly floor: number;
+  private readonly dir: 1 | -1;
+  private readonly ghosts: { x: number; life: number }[] = [];
+
+  constructor(world: World) {
+    super();
+    const p = world.player;
+    this.dir = p.facing;
+    this.from = p.cx;
+    this.x = p.cx;
+    this.to = ahead(world, 210);
+    this.floor = p.bottom;
+    audio.play('dash', 1.25);
+    audio.play('magic', 1.5);
+  }
+
+  update(dt: number, world: World): void {
+    this.t += dt;
+    for (const g of this.ghosts) g.life -= dt * 3.5;
+    if (this.t < Phantom.RUN) {
+      const k = this.t / Phantom.RUN;
+      this.x = this.from + (this.to - this.from) * (1 - (1 - k) * (1 - k));
+      if (world.time % 0.03 < dt) this.ghosts.push({ x: this.x, life: 0.8 });
+      strike(world, { x: this.x - 20, y: this.floor - 40, w: 40, h: 42 }, 2, this.dir, this.struck, '#ecd4ff');
+    } else if (this.t > Phantom.RUN + Phantom.FADE) {
+      this.done = true;
+    }
+  }
+
+  /** The hero's outline, in the jester's violet: head, body, blade out. */
+  private figure(ctx: CanvasRenderingContext2D, x: number, alpha: number, slash: boolean): void {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, this.floor);
+    ctx.scale(this.dir, 1);
+    ctx.fillStyle = '#c99cff';
+    ctx.fillRect(-6, -24, 12, 16);
+    ctx.fillRect(-6, -8, 4, 8);
+    ctx.fillRect(2, -8, 4, 8);
+    ctx.beginPath();
+    ctx.arc(0, -28, 5.5, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#f2e4ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (slash) {
+      ctx.arc(4, -18, 20, -1.1, 1.0);
+    } else {
+      ctx.moveTo(4, -16);
+      ctx.lineTo(22, -26);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const g of this.ghosts) if (g.life > 0) this.figure(ctx, g.x, g.life * 0.25, false);
+    const fade = this.t < Phantom.RUN ? 0.85 : clamp(1 - (this.t - Phantom.RUN) / Phantom.FADE, 0, 1) * 0.85;
+    this.figure(ctx, this.x, fade, this.t > Phantom.RUN * 0.55);
+    ctx.restore();
+  }
+
+  override lights(): GlowLight[] {
+    return [{ x: this.x, y: this.floor - 18, radius: 70, rgb: '217,168,255', strength: 0.6, tint: 0.35 }];
+  }
+}
+
+/**
+ * Nyktos: three lights he had swallowed, let go round the hero. They circle him
+ * for four seconds, and each strikes whatever it touches once.
+ */
+class Wisps extends SkillEffect {
+  private static readonly LIFE = 4;
+  private t = 0;
+  private readonly hits = [new Set<object>(), new Set<object>(), new Set<object>()];
+  private readonly at: { x: number; y: number }[] = [];
+
+  constructor(world: World) {
+    super();
+    this.place(world.player.cx, world.player.cy);
+    audio.play('magic', 1.7);
+    audio.play('beamCharge', 1.8);
+  }
+
+  private place(cx: number, cy: number): void {
+    this.at.length = 0;
+    for (let i = 0; i < 3; i++) {
+      const a = this.t * 3.4 + (i * TAU) / 3;
+      this.at.push({ x: cx + Math.cos(a) * 46, y: cy - 4 + Math.sin(a) * 30 });
+    }
+  }
+
+  update(dt: number, world: World): void {
+    this.t += dt;
+    if (this.t >= Wisps.LIFE) {
+      this.done = true;
+      return;
+    }
+    const p = world.player;
+    this.place(p.cx, p.cy);
+    this.at.forEach((w, i) => {
+      strike(world, { x: w.x - 10, y: w.y - 10, w: 20, h: 20 }, 1, sign(w.x - p.cx) || p.facing, this.hits[i], '#fff4c8');
+    });
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    const fade = clamp((Wisps.LIFE - this.t) / 0.4, 0, 1) * clamp(this.t / 0.2, 0, 1);
+    for (const w of this.at) {
+      glow(ctx, w.x, w.y, 16, `rgba(255,240,168,${(0.6 * fade).toFixed(3)})`);
+      ctx.fillStyle = `rgba(255,250,224,${(0.95 * fade).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(w.x, w.y, 3.2, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  override lights(): GlowLight[] {
+    return this.at.map((w) => ({ x: w.x, y: w.y, radius: 64, rgb: '255,240,168', strength: 0.7, tint: 0.4 }));
+  }
+}
+
+/**
+ * Grauwacht: a gargoyle of stone, out of the dark above onto the nearest
+ * enemy - a ring marks where, then it comes down, and everything it lands on
+ * takes three.
+ */
+class StoneFall extends SkillEffect {
+  private static readonly MARK = 0.35;
+  private static readonly DROP = 280;
+  private t = 0;
+  private x: number;
+  private y: number;
+  private vy = 0;
+  private readonly floor: number;
+  private landed = -1;
+  private readonly target: Target['thing'] | null;
+  private readonly rubble: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
+
+  constructor(world: World) {
+    super();
+    const p = world.player;
+    const t = nearest(world, 360);
+    this.target = t?.thing ?? null;
+    this.x = t ? t.x : ahead(world, 140);
+    this.floor = floorUnder(world, this.x, (t ? t.bottom : p.bottom) - 12);
+    this.y = this.floor - StoneFall.DROP;
+    audio.play('rumble', 1.4);
+  }
+
+  update(dt: number, world: World): void {
+    this.t += dt;
+    for (const r of this.rubble) {
+      r.vy += 900 * dt;
+      r.x += r.vx * dt;
+      r.y = Math.min(this.floor - 2, r.y + r.vy * dt);
+      r.life -= dt * 1.6;
+    }
+    if (this.landed >= 0) {
+      this.landed += dt;
+      if (this.landed > 0.7) this.done = true;
+      return;
+    }
+    if (this.t < StoneFall.MARK) {
+      if (this.target && !this.target.dead) {
+        const step = 150 * dt;
+        this.x += clamp(this.target.cx - this.x, -step, step);
+      }
+      return;
+    }
+    this.vy = Math.min(1400, this.vy + 2200 * dt);
+    this.y += this.vy * dt;
+    if (this.y < this.floor) return;
+    this.y = this.floor;
+    this.landed = 0;
+    strike(world, { x: this.x - 30, y: this.floor - 58, w: 60, h: 58 }, 3, sign(this.x - world.player.cx), this.struck, '#d8e0ea');
+    audio.play('slam', 0.9);
+    audio.play('crumble', 1.0);
+    world.camera.addShake(5);
+    for (let i = 0; i < 12; i++) this.rubble.push({ x: this.x + rand(-14, 14), y: this.floor - rand(6, 20), vx: rand(-160, 160), vy: -rand(120, 300), life: 1 });
+  }
+
+  draw(ctx: CanvasRenderingContext2D): void {
+    if (this.t < StoneFall.MARK + 0.15 && this.landed < 0) {
+      const k = clamp(this.t / StoneFall.MARK, 0, 1);
+      ctx.strokeStyle = `rgba(200,210,224,${(0.35 + 0.45 * k).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.floor - 2, 34 - 12 * k, 6 - 2 * k, 0, 0, TAU);
+      ctx.stroke();
+    }
+    if (this.landed < 0.25) {
+      // The statue: crouched, wings folded, head down - it is coming.
+      const y = this.landed >= 0 ? this.floor : this.y;
+      ctx.save();
+      ctx.translate(this.x, y);
+      ctx.globalAlpha = this.landed >= 0 ? 1 - this.landed / 0.25 : 1;
+      ctx.fillStyle = '#7e8896';
+      ctx.beginPath();
+      ctx.moveTo(-16, 0);
+      ctx.lineTo(-20, -26);
+      ctx.lineTo(-10, -40);
+      ctx.lineTo(0, -34);
+      ctx.lineTo(10, -40);
+      ctx.lineTo(20, -26);
+      ctx.lineTo(16, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#9aa4b2';
+      ctx.beginPath();
+      ctx.ellipse(0, -30, 9, 8, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#3a4048';
+      ctx.fillRect(-5, -31, 3, 2);
+      ctx.fillRect(2, -31, 3, 2);
+      ctx.restore();
+    }
+    ctx.fillStyle = '#8a94a2';
+    for (const r of this.rubble) {
+      if (r.life <= 0) continue;
+      ctx.globalAlpha = clamp(r.life, 0, 1);
+      ctx.fillRect(r.x - 2, r.y - 2, 4, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
 /** The hydra's five heads, one fire each, in their own colours. */
 const CROWN_COLORS = ['#9fe07a', '#ff9a4a', '#d9c39a', '#9cc8ff', '#ffd866'];
 
@@ -1497,8 +1767,14 @@ export function castSkill(id: SkillId, world: World): SkillEffect[] {
     case 'goldregen':
       audio.play('coin', 0.8);
       return fan(world, 4, 0.36, 0.2, 430, (x, y, vx, vy) => new Shot(x, y, vx, vy, 500, 'coin', '#ffd866', 1, 1.2));
+    case 'trugbild':
+      return [new Phantom(world)];
     case 'sonnenblick':
       return [new SunColumn(world)];
+    case 'irrlichter':
+      return [new Wisps(world)];
+    case 'steinsturz':
+      return [new StoneFall(world)];
     case 'netzschuss':
       audio.play('shoot', 1.3);
       return fan(world, 3, 0.36, 0.12, 400, (x, y, vx, vy) => new Shot(x, y, vx, vy, 260, 'web', '#e8f0f8', 1, 1.1));
