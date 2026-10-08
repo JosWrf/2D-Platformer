@@ -29,6 +29,10 @@
     "verify:boar": "node tools/verify-boar.mjs",
     "verify:twins": "node tools/verify-twins.mjs",
     "verify:clock": "node tools/verify-clock.mjs",
+    "verify:jester": "node tools/verify-jester.mjs",
+    "verify:gloom": "node tools/verify-gloom.mjs",
+    "verify:gargoyle": "node tools/verify-gargoyle.mjs",
+    "verify:balance": "node tools/verify-balance.mjs",
     "suite": "node tools/suite.mjs",
     "playtest": "node tools/playtest.mjs",
     "screenshots": "node tools/screenshots.mjs"
