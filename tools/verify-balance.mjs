@@ -81,7 +81,8 @@ for (const boss of ROAD) {
       row.maxHp = res.maxHp;
       row.heroHearts = res.heroHearts;
       const what = res.felled ? `${res.seconds} s` : `not felled in ${cap} s (${Math.round(res.left * 100)} % left)`;
-      console.log(`  ${boss.name.padEnd(16)} ${style.padEnd(6)} ${what.padEnd(28)} ${String(res.hearts).padStart(3)} hearts   ${JSON.stringify(res.why)}`);
+      const silk = res.saves ? ` (+${res.saves} caught by the silk)` : '';
+      console.log(`  ${boss.name.padEnd(16)} ${style.padEnd(6)} ${what.padEnd(28)} ${String(res.hearts).padStart(3)} hearts${silk}   ${JSON.stringify(res.why)}`);
     }
   }
   rows.push(row);

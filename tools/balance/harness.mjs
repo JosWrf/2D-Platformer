@@ -123,9 +123,13 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
       g.dialogue = null;
       p.hp = p.maxHp;
       const TILE = 32;
-      const h = { kind, frame: 0, LAG: 18 };
+      const h = { kind, frame: 0, LAG: 18, live: true };
 
-      /** One frame of the game, drawn now and then: the draw is not what is measured. */
+      /**
+       * One frame of the game, drawn now and then: the draw is not what is
+       * measured. `live` says whether the world moved in it - during a hit-stop
+       * the clock runs and nothing else does.
+       */
       h.tick = (actions = {}) => {
         for (const [a, v] of Object.entries({
           left: false,
@@ -141,7 +145,9 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
         })) {
           input.forceDown(a, !!v);
         }
+        const frozen = g.hitStopTimer > 0;
         g.update(1 / 60, input);
+        h.live = !frozen;
         if (h.frame % 6 === 0) g.render(ctx);
         h.frame++;
       };
@@ -222,11 +228,17 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
        */
       h.hits = 0;
       h.why = {};
-      h.watchHp = (b) => {
+      /** Blows the silk caught: not hearts, but blows all the same. */
+      h.saves = 0;
+      let silk = p.shieldUp;
+      h.watchHp = (b, before) => {
+        if (silk && !p.shieldUp) h.saves++;
+        silk = p.shieldUp;
         if (p.hp < p.maxHp) {
           const lost = p.maxHp - p.hp;
           h.hits += lost;
-          const st = b?.state ?? 'none';
+          // What the boss was doing when the blow came, not what the blow made of it.
+          const st = before ?? b?.state ?? 'none';
           h.why[st] = (h.why[st] ?? 0) + lost;
           p.hp = p.maxHp;
         }
@@ -239,12 +251,16 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
 
       /**
        * What the hero has seen: push this frame's snapshot, get back the one
-       * from LAG frames ago (or the oldest there is, at the start).
+       * from LAG frames ago (or the oldest there is, at the start). Only frames
+       * in which the world moved count: a hit-stop holds the boss and the eye
+       * alike, and counting its frozen frames made the reader quicker than
+       * 0.3 s exactly when blows were landing.
        */
       h.lag = (lag = h.LAG) => {
         const seen = [];
         return (snap) => {
-          seen.push(snap);
+          if (h.live || seen.length === 0) seen.push(snap);
+          else seen[seen.length - 1] = snap;
           if (seen.length > lag + 1) seen.shift();
           return seen[0];
         };
@@ -359,6 +375,7 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
         const act = style === 'masher' ? h.masher() : window.__makeReader(g, h);
         h.hits = 0;
         h.why = {};
+        h.saves = 0;
         const t0 = g.time;
         let felledAt = -1;
         let b = h.find();
@@ -369,14 +386,16 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
             felledAt = g.time - t0;
             break;
           }
+          const before = b?.state;
           h.tick(act(b) ?? {});
-          h.watchHp(b);
+          h.watchHp(b, before);
         }
         b = h.find();
         return {
           felled: felledAt >= 0,
           seconds: felledAt >= 0 ? +felledAt.toFixed(1) : null,
           hearts: h.hits,
+          saves: h.saves,
           why: { ...h.why },
           maxHp,
           left: b && !h.felled(b) ? +(b.hp / Math.max(1, b.maxHp)).toFixed(2) : 0,

@@ -17,6 +17,10 @@
  *   - her young get swatted when they come close, eggs near him on the floor
  *     get popped before they hatch, silk coming down on him on the floor gets
  *     a step aside, and a patch he is stuck in gets cut.
+ *
+ * A wind-up timer he has seen is carried forward to "now" by counting only the
+ * frames in which the game moved on: a hit-stop freezes the boss as well as
+ * the picture, and the lag counts those frozen frames too.
  */
 export default function reader(g, h) {
   const p = g.player;
@@ -188,6 +192,8 @@ export default function reader(g, h) {
   let prev = null;
   /** The drop being answered. */
   let drop = null;
+  /** Her lash at him on the ledge, from the moment her legs were seen going up. */
+  let lash = null;
   /** A jump planned over her swing, by the frame it is pressed in. */
   let hop = null;
   /** Where he is walking to, out of the arc of her swing. */
@@ -302,7 +308,6 @@ export default function reader(g, h) {
     }
     if (!done && arc) {
       const here = swingHits(arc, p.cx, p.bottom);
-      if (trace) trace.push({ f: h.frame, ev: 'swing', s, here: here.slice(0, 2), cx: Math.round(p.cx), esc: escape, hop: hop ? hop.at - live : null });
       if (hop) {
         if (live >= hop.at) {
           if (p.onGround && !jump.busy) jump.go(HOLD);
@@ -384,6 +389,39 @@ export default function reader(g, h) {
       done = true;
     }
 
+    /*
+     * Her lash, up on the ledge: her legs go up, and they come across it. With
+     * time left after the lag, a guard on the rhythm of the tell - it tears her
+     * off the thread; without, back along the ledge out of her legs' reach, or
+     * down off it.
+     */
+    if (s === 'lashWind' && (!prev || prev.state !== 'lashWind')) {
+      const windLeft = ticksTo(v.timer);
+      const jitter = Math.round((Math.random() * 2 - 1) * 0.07 * 60);
+      lash = {
+        hitAt: v.live + windLeft,
+        pressAt: v.live + windLeft - 5 + jitter,
+        parry: !!high && (windLeft - ticks) / 60 >= 0.15 && p.hurtTimer <= 0,
+        pressed: false,
+      };
+    }
+    if (lash && live > lash.hitAt + 16) lash = null;
+    if (!done && lash && high) {
+      if (lash.parry) {
+        h.face(a, herX);
+        if (!lash.pressed && live >= lash.pressAt) {
+          a.parry = true;
+          lash.pressed = true;
+        }
+      } else {
+        const away = p.cx < herX ? -1 : 1;
+        const safe = herX + away * 130;
+        if (safe > high.x0 + 6 && safe < high.x1 - 6) walk(safe, 6);
+        else getDown();
+      }
+      done = true;
+    }
+
     /* ------------------------------------------- up: on the ledge with her */
     if (!done && high) {
       const want = Math.max(high.x0 + 10, Math.min(high.x1 - 10, herX + (p.cx < herX ? -26 : 26)));
@@ -439,7 +477,7 @@ export default function reader(g, h) {
     }
 
     /* ---------------------------------------- silk coming down on him */
-    if (onFloor && !(drop && drop.parry) && !hop) {
+    if (onFloor && !drop && !hop && escape === null) {
       for (const q of v.webs) {
         const x = q.x + q.vx * ago;
         const y = q.y + q.vy * ago + 350 * ago * ago;

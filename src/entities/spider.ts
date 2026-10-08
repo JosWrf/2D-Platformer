@@ -19,6 +19,17 @@ const WEB_LIFE = 4.5;
 const WEB_W = 60;
 /** Spiderlings and eggs together, at most. */
 const MAX_BROOD = 4;
+/**
+ * The lash at a hero level with her on a ledge: front legs up for LASH_WIND,
+ * then a sweep across the ledge. Up there she used to have no answer at all -
+ * silk does not wound, her young cannot climb, her swing misses the ledges -
+ * while she hung within a blade's length of him: measured with a reader that
+ * knew the ledges, 23 s and one heart, against sixteen for one who did not.
+ */
+const LASH_WIND = 0.6;
+const LASH_TIME = 0.22;
+/** How far in front of her the sweep reaches, from her middle. */
+const LASH_REACH = 96;
 /** Height of her middle above the floor, standing. */
 const GROUND = 30;
 /** Where the thread leaves her back, above her middle, while she hangs. */
@@ -36,6 +47,8 @@ type SpiderState =
   | 'climb'
   | 'swingWind'
   | 'swing'
+  | 'lashWind'
+  | 'lash'
   | 'fall'
   | 'stunned'
   | 'righting'
@@ -114,6 +127,9 @@ export class Spider extends Enemy {
   private swingLength = 0;
   private crossed = false;
   private walk = 0;
+  /** The side the lash goes to, and how far up the legs are for it. */
+  private lashDir: 1 | -1 = 1;
+  private lashRaise = 0;
 
   override castLight = false;
 
@@ -155,7 +171,8 @@ export class Spider extends Enemy {
       this.state === 'broodWind' ||
       this.state === 'dropWind' ||
       this.state === 'descend' ||
-      this.state === 'swingWind'
+      this.state === 'swingWind' ||
+      this.state === 'lashWind'
     );
   }
 
@@ -253,10 +270,17 @@ export class Spider extends Enemy {
     }
   }
 
-  /** A parry catches her coming down, and puts her on her back. */
+  /** A parry catches her coming down, and puts her on her back - or tears her off the thread mid-lash. */
   override onParried(world: World): void {
-    if (this.dead || this.state !== 'drop') return;
-    this.land(world, true);
+    if (this.dead) return;
+    if (this.state === 'drop') this.land(world, true);
+    else if (this.state === 'lash') this.lashParried(world);
+  }
+
+  private lashParried(world: World): void {
+    world.particles.text(this.bx, this.by - 50, 'PARIERT — SIE STÜRZT!', '#e6eef8');
+    audio.play('clank', 1.2);
+    this.loseGrip(world);
   }
 
   /** Off the thread, and down. */
@@ -303,6 +327,7 @@ export class Spider extends Enemy {
     this.threadFlash = Math.max(0, this.threadFlash - dt * 4);
     this.glowCore = Math.max(0, this.glowCore - dt * 1.5);
     this.pose = approach(this.pose, this.poseTarget, dt * 7);
+    if (this.state !== 'lashWind' && this.state !== 'lash') this.lashRaise = approach(this.lashRaise, 0, dt * 4);
 
     if (this.floorY === 0) this.measure(world);
 
@@ -418,6 +443,44 @@ export class Spider extends Enemy {
           this.timer = rand(0.5, 0.8) * this.haste;
         }
         break;
+
+      case 'lashWind':
+        // Two front legs up and back on the hero's side, the crystal and the
+        // eyes lit: what comes next goes across the ledge.
+        this.timer -= dt;
+        this.glowCore = Math.max(this.glowCore, 0.5);
+        this.lashRaise = approach(this.lashRaise, 1, dt / (LASH_WIND * 0.7));
+        this.bx = damp(this.bx, this.anchorX, 6, dt);
+        if (this.timer <= 0) {
+          this.state = 'lash';
+          this.timer = LASH_TIME;
+          this.hitThisMove = false;
+          audio.play('swing', 0.85);
+        }
+        break;
+
+      case 'lash': {
+        this.timer -= dt;
+        this.lashRaise = approach(this.lashRaise, -1, dt / LASH_TIME * 2);
+        const p = world.player;
+        const reach = { x: this.lashDir > 0 ? this.bx : this.bx - LASH_REACH, y: this.by - 40, w: LASH_REACH, h: 84 };
+        if (!this.hitThisMove && !p.dead && rectsOverlap(reach, p.rect) && (p.parryTimer > 0 || !p.isInvulnerable)) {
+          this.hitThisMove = true;
+          const guarding = p.parryTimer > 0;
+          p.hurt(1, this.lashDir, world);
+          // The guard reaches what is close to the hero's middle; a lash caught
+          // on it at the end of its reach is read off the guard itself.
+          if (guarding && p.parryTimer === 0 && p.parryFlash > 0.95 && this.state === 'lash') {
+            this.lashParried(world);
+            break;
+          }
+        }
+        if (this.timer <= 0) {
+          this.state = 'hang';
+          this.timer = 0.9 * this.haste;
+        }
+        break;
+      }
 
       case 'swingWind': {
         // Up and out to the side, the thread held taut over the middle.
@@ -569,7 +632,9 @@ export class Spider extends Enemy {
   private chooseMove(world: World): void {
     const player = world.player;
     const onFloor = player.bottom > this.floorY - 10;
-    const options = onFloor ? ['drop', 'web', 'drop', 'web'] : ['web', 'web'];
+    // Up on a ledge, level with her and within her legs' reach: the lash.
+    const level = Math.abs(player.cy - this.by) < 56 && Math.abs(player.cx - this.bx) < LASH_REACH + 30;
+    const options = onFloor ? ['drop', 'web', 'drop', 'web'] : level ? ['lash', 'web', 'lash'] : ['web', 'web'];
     if (this.brood(world) < MAX_BROOD - 1) options.push('brood');
     if (this.phaseTwo) options.push('swing');
     const pick = options.filter((o) => o !== this.lastMove);
@@ -592,6 +657,13 @@ export class Spider extends Enemy {
         this.state = 'broodWind';
         this.timer = 0.6;
         audio.play('tell', 0.7);
+        break;
+      case 'lash':
+        this.state = 'lashWind';
+        this.timer = LASH_WIND;
+        this.lashDir = player.cx > this.bx ? 1 : -1;
+        audio.play('tell', 1.05);
+        audio.play('screech', 1.5);
         break;
       case 'swing':
         this.state = 'swingWind';
@@ -903,11 +975,21 @@ export class Spider extends Enemy {
           const sky = -18 + i * 2 + (kick ? sway : sway * 0.3);
           const sfx = sd * (28 + i * 9 + (kick ? sway : 0));
           const sfy = kick ? floor - 6 + sway : floor + 1;
-          const kx = lerp(hkx, skx);
-          const ky = lerp(hky, sky);
-          const fx = lerp(hfx, sfx);
-          const fy = lerp(hfy, sfy);
-          ctx.strokeStyle = pass === 0 ? '#0e0a16' : '#2a2338';
+          let kx = lerp(hkx, skx);
+          let ky = lerp(hky, sky);
+          let fx = lerp(hfx, sfx);
+          let fy = lerp(hfy, sfy);
+          // The lash: the front pair on his side up and back, then across.
+          if (i < 2 && sd === this.lashDir && this.lashRaise !== 0) {
+            const up = Math.max(0, this.lashRaise);
+            const out = Math.max(0, -this.lashRaise);
+            kx += sd * (6 * up + 10 * out);
+            ky -= 16 * up - 4 * out;
+            fx += sd * (2 * up + 34 * out);
+            fy -= 34 * up - 10 * out;
+          }
+          const lashing = i < 2 && sd === this.lashDir && this.lashRaise > 0.05;
+          ctx.strokeStyle = pass === 0 ? '#0e0a16' : lashing ? '#5a2238' : '#2a2338';
           ctx.lineWidth = pass === 0 ? 4.6 : 3.2;
           ctx.beginPath();
           ctx.moveTo(sd * 8, rootY);

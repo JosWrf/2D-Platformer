@@ -380,11 +380,15 @@ export class Wyrm extends Enemy {
       }
     }
     if (p.isInvulnerable || this.state !== 'breach') return;
+    // Rising, he bites and burns; coming down, he is the hero's. The bite used
+    // to be asked before the way down was, and the head landing beside the
+    // hole - as near as 46 px - came down on a hero who had stepped 50 to 70
+    // px out of the glow, exactly the dodge the glow asks for.
+    if (this.hvy > 0) return;
     if (this.headUp && rectsOverlap(this.biteRect(), p.rect)) {
       p.hurt(1, sign(p.cx - this.hx) || 1, world);
       return;
     }
-    if (this.hvy > 0) return;
     for (let i = 2; i < this.segs.length; i++) {
       const s = this.segs[i];
       if (s.y > this.floorY - 4) continue;
