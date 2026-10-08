@@ -2226,11 +2226,14 @@ export class Thalassa extends Enemy {
     this.w = 50;
     this.h = 62;
     /*
-     * Sixty, up from forty-two. A player who mashes deals about 3.6 damage a
-     * second, which used to end her in eleven seconds - before she had shown
-     * three of her moves once each.
+     * Seventy-two, up from forty-two. A player who mashes deals about 3.6
+     * damage a second, which used to end her in eleven seconds - before she
+     * had shown three of her moves once each. At sixty, with the relics of the
+     * road, a hero who read her had her down in under thirty seconds, and one
+     * who only held the attack key saw five or six moves in all: not enough of
+     * her rotation to be caught by the half of it he cannot swing through.
      */
-    this.hp = this.maxHp = 60;
+    this.hp = this.maxHp = 72;
     this.scoreValue = 1200;
     this.aggroRange = 380;
     this.contactDamage = 1;
@@ -2505,12 +2508,16 @@ export class Thalassa extends Enemy {
         // Pulls him in while orbs drift out. Running away costs ground, so the
         // fight is decided in her reach whether he likes it or not.
         this.vx = approach(this.vx, 0, 900 * dt);
-        const pull = this.phase === 3 ? 340 : this.phase === 2 ? 300 : 260;
+        // A current he stands in, not a shove: carried along, whatever his own
+        // feet are doing. It used to be added to his speed, where the floor's
+        // friction took it back the very next frame - measured, a hero who
+        // stood still through a whole undertow moved by nothing at all.
+        const pull = this.phase === 3 ? 110 : this.phase === 2 ? 95 : 80;
         if (!player.dead && dist > 40) {
           // From her second phase the water has hold of him in the air as
           // well: jumping shortens the drag, it no longer cancels it.
           const grip = player.onGround ? 1 : this.phase >= 2 ? 0.45 : 0;
-          if (grip > 0) player.vx += -sign(dx) * pull * grip * dt;
+          if (grip > 0) player.carryX += -sign(dx) * pull * grip * dt;
         }
         world.particles.spawn({
           x: player.cx + rand(-20, 20),
@@ -2538,6 +2545,12 @@ export class Thalassa extends Enemy {
               (dx / len) * 190,
               (ady / len) * 190 + up * 110,
             );
+            // Her water again, and the same rule as the surge: jumped, or
+            // turned with the guard. A blind swing used to send every one of
+            // them home - they come out inside the reach of a blade held at
+            // her hem, and a hero who only held the attack key was touched by
+            // none of fifteen.
+            orb.deflectable = false;
             world.spawnProjectile(orb);
           }
           audio.play('magic', 0.9);

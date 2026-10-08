@@ -7,7 +7,8 @@
  *     person's error in the press (up to 0.07 s either way): the slam
  *     standing inside its reach, the dash when it gets to him, the orbs as
  *     they reach him. Once he has decided how to answer a move he stands
- *     still for it;
+ *     still for it. A parry puts the knight down, so stepping in after one is
+ *     part of the plan: in, and swing;
  *   - where a wind-up is too short to parry after 0.3 s (the dash in the
  *     third phase) he jumps it, with a second jump at the top - and in the
  *     third phase he waits a little further out, so there is time to;
@@ -15,15 +16,18 @@
  *     from a leap's landing, he jumps on the rhythm of the move that sends
  *     them - they are on him before the eye could follow them; the wave from
  *     a landing close by he parries;
- *   - his leap: off the spot he will come down on;
+ *   - his leap: off the spot he will come down on (on the floor or a board);
+ *   - up on a board, his blade does not reach the floor: he waits further
+ *     off and jumps the waves that come off the end of it;
  *   - shadow orbs: batted back with the blade as they arrive;
  *   - debris from the ceiling: off the spots it is coming down on;
  *   - staggered, and in the rest after each of his moves: in to a sword's
  *     length and swing, the last swing started early enough to be over
  *     before the next wind-up - a blow into the wind-up only makes the blow
- *     come sooner;
+ *     come sooner - and no swing his way at a skeleton either, then;
  *   - skeletons: kept off with the blade's crescent and cut down, when he is
  *     not about to move;
+ *   - landed on a board after a jump: back down through it;
  *   - otherwise: just outside a sword's length, facing him, waiting.
  */
 export default function reader(g, h) {
@@ -175,9 +179,14 @@ export default function reader(g, h) {
   let doubleAt = -1;
   let holdUntil = -1;
   let lastFlash = 0;
+  /** When his last parry put the knight down, and until when he stays down. */
+  let lastDown = -999;
+  let downUntil = -1;
   /** Where he is going to come down, while he is in the air. */
   let land = null;
   let lastMode = '';
+  /** Frames left of holding down to drop through a board he has ended up on. */
+  let dropping = 0;
 
   return (boss) => {
     if (frozen === false) wf++;
@@ -228,10 +237,17 @@ export default function reader(g, h) {
       if (s !== 'leap') land = null;
     }
 
-    // His own parry landing is something he sees at once: he holds his ground
-    // for it rather than backing off into the next wait.
+    // His own parry landing is something he feels at once, and a parry puts
+    // the knight down - unless the last one did so less than 1.95 s ago. So
+    // the step in that follows a parry is part of the plan, not a reaction:
+    // through whatever waves the slam sent while the parry still covers him.
     if (p.parryFlash > 0.9 && lastFlash <= 0.9) {
       holdUntil = wf + 24;
+      if (stopDist < 120 && wf - lastDown >= Math.round(1.95 * 60)) {
+        lastDown = wf;
+        downUntil = wf + Math.round((1.35 + 0.45) * 60);
+        guardUntil = wf;
+      }
       dbg({ ev: 'parried', s, dist: Math.round(dist) });
     }
     lastFlash = p.parryFlash;
@@ -246,9 +262,26 @@ export default function reader(g, h) {
     if (planned !== action) {
       planned = action;
       const face = Math.sign(dx) || p.facing;
-      if (onLedge && (s === 'slamWindup' || s === 'cast')) {
-        // Up there his blade does not reach the floor, the waves come off
-        // the end of the board and the orbs from above: watched, not parried.
+      // The waves of a slam, followed from where he will bring the blade
+      // down: along the floor or the board, and off the end of it.
+      const slamWaves = () => {
+        const dir = Math.sign(p.cx - kcx) || 1;
+        let first = null;
+        for (const sp of v.phase === 3 ? [250, 320] : [250]) {
+          const wave = { x: kcx + dir * 40 + 13, y: v.y + v.h - 15, vx: dir * sp, w: 26, h: 30 };
+          const t = waveReaches(wave, Math.max(0, rem), Math.max(0, rem) + 1.2, 0, stopX - p.w / 2);
+          if (t !== null) first = first === null ? t : Math.min(first, t);
+        }
+        return first;
+      };
+      if (onLedge && s === 'slamWindup') {
+        // Up there his blade does not reach the floor; the waves come off the
+        // end of the board, on the rhythm of the slam.
+        const t = slamWaves();
+        if (t !== null) decide('jump', Math.max(0, t - 0.16 + jitter()), 'ledge-wave', face);
+        else dbg({ ev: 'ledge', s });
+      } else if (onLedge && s === 'cast') {
+        // The orbs come from above: watched, not parried.
         dbg({ ev: 'ledge', s });
       } else if (s === 'slamWindup' && rem >= 0.15) {
         // Inside the blade's reach (to 105 px in front of him) the blow lands
@@ -261,7 +294,10 @@ export default function reader(g, h) {
         // once: parried on the slam itself.
         if (stopDist < 116 || (p.cx > kcx && stopDist < 122)) decide('parry', rem - 0.08 + jitter(), 'slam', face);
         else if (stopDist <= 118) decide('parry', rem + Math.max(0, reach - 30) / fast - 0.03 + jitter(), 'slam-wave', face);
-        else decide('jump', rem + reach / fast - 0.16, 'slam-wave', face);
+        else {
+          const t = slamWaves();
+          if (t !== null) decide('jump', Math.max(0, t - 0.16 + jitter()), 'slam-wave', face);
+        }
       } else if (s === 'dashWindup') {
         const speed = v.phase === 3 ? 620 : 520;
         // He steps back at a walk until the wind-up runs out, then comes the
@@ -287,7 +323,9 @@ export default function reader(g, h) {
               break;
             }
           }
-          if (best !== null) decide('jump', best, 'dash', face, true);
+          // As soon as seen, or - with time in hand - on the rhythm, a person's
+          // error and all.
+          if (best !== null) decide('jump', best > 0.05 ? Math.max(0, best + jitter()) : best, 'dash', face, true);
           else dbg({ ev: 'dash-too-late', rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist) });
         }
       } else if (s === 'cast' && rem >= 0.15 && stopDist <= 112) {
@@ -319,7 +357,7 @@ export default function reader(g, h) {
           const offSpot = Math.abs(land.cx - spot);
           // Close enough for a parry of the wave to put him down: parried.
           if (level && offSpot <= 110 && tBox !== null && tBox > walk) decide('parry', tBox - 0.03 + jitter(), 'landing', lf);
-          else if (tBody !== null) decide('jump', Math.max(walk, tBody - 0.16), 'landing', lf);
+          else if (tBody !== null) decide('jump', Math.max(walk, tBody - 0.16 + jitter()), 'landing', lf);
           if (plan && plan.what === 'landing') plan.spot = spot;
         }
       }
@@ -414,6 +452,7 @@ export default function reader(g, h) {
     if (s === 'stagger') window = rem + 0.45;
     else if (s === 'idle') window = rem;
     else if (s === 'cast' || s === 'summon') window = plan ? -1 : rem;
+    if (downUntil > wf && !plan) window = Math.max(window, (downUntil - wf) / 60);
     // Swinging into a wind-up makes the blow come early: the last swing has to
     // be over before he starts the next move.
     const busyFor = p.attackTimer > 0 ? p.attackTimer : 0;
@@ -456,7 +495,7 @@ export default function reader(g, h) {
       mode = 'leap';
       // Off the spot he comes down on.
       if (Math.abs(land.cx - p.cx) < 75 && land.at > wf) a[land.cx > p.cx ? 'left' : 'right'] = true;
-    } else if (s === 'slam') {
+    } else if (s === 'slam' && !(downUntil > wf)) {
       mode = 'slam';
       // Committed: keep out of the blade while it is still out.
       if (dist < 118 && dist > 8 && holdUntil < wf) a[away] = true;
@@ -502,6 +541,19 @@ export default function reader(g, h) {
         a.left = false;
         a.right = false;
       }
+    }
+
+    // Up on a board after a dodge: back down through it (down and jump), the
+    // fight is on the floor.
+    if (dropping > 0) {
+      dropping--;
+      a.down = true;
+      a.left = false;
+      a.right = false;
+    } else if (onFloor && p.bottom < floorY - 40 && !plan && !jump.busy && !a.parry) {
+      dropping = 4;
+      a.down = true;
+      jump.go(2);
     }
 
     if (mode !== lastMode) {

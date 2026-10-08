@@ -4,19 +4,21 @@
  *
  * Its combo is announced for 0.38 s (0.3 in its second half) - no longer than
  * the eye is behind - so there is no parrying it on sight. A person who knows
- * it can still get out of its way: away at a run the moment the eyes flare
- * (the crescents cannot catch a hero who is already running), or, with a wall
- * at his back, up and over it. Then back in, and cut while it stands in its
- * follow-through. The rest:
+ * it can still get out of its way: standing a step outside its blade, he goes
+ * straight up when the flare runs out (on its rhythm, with a person's error of
+ * up to 0.07 s): both cuts and their crescents pass under him, and he comes
+ * down in its follow-through and cuts there. The rest:
  *
  *   - its charged blow: a plain cut first - that one comes unannounced and
  *     he takes it - then the ring, long enough to be read, and the heavy blow
  *     when it is close: that one he parries, on the rhythm of the ring and the
  *     walk in, with a person's error in the press (up to 0.07 s either way);
- *   - its leap: he stands and parries the cut it lands with;
+ *   - its leap: he stands, faces where it will come down - past him - and
+ *     parries the cut it lands with;
  *   - its step through the dark: the pool shows 0.93 s before it rises - he
  *     turns to the pool and parries the first cut;
- *   - its crescents and its quake coming at him: up as they come;
+ *   - up on one of the boards, its cuts pass over him: out from under it;
+ *   - its crescents and its quake coming at him from afar: up as they come;
  *   - its follow-through, its reel: in, and swing - every swing started while
  *     it is still standing in it, because a swing at it once it is free again
  *     gets turned aside and answered;
@@ -43,7 +45,6 @@ export default function reader(g, h) {
   let plan = null;
   let parryHold = 0;
   let guardUntil = -1;
-  let doubleAt = -1;
   /** Running from its combo, until this frame. */
   let fleeUntil = -1;
   let fleeDir = 0;
@@ -51,6 +52,8 @@ export default function reader(g, h) {
   let openFrom = -1;
   let openUntil = -1;
   let lastMode = '';
+  /** Frames left of holding down to drop through a board he has ended up on. */
+  let dropping = 0;
 
   return (boss) => {
     if (frozen === false) wf++;
@@ -66,13 +69,8 @@ export default function reader(g, h) {
       phase: boss.phase,
       cx: b.cx,
       vx: b.vx,
-      vy: b.vy,
       bottom: b.bottom,
       onGround: b.onGround,
-      attackTimer: b.attackTimer,
-      charged: b.charged,
-      chargeTimer: b.chargeTimer,
-      chargeReady: b.chargeReady,
       shots: h.hostile(),
     });
     const el = (wf - v.wf) / 60;
@@ -97,6 +95,9 @@ export default function reader(g, h) {
     const rem = v.state === 'duel' ? v.planTimer - el : v.timer - el;
     const p2 = v.phase === 2;
     const face = Math.sign(v.cx - p.cx) || Math.sign(dx) || p.facing;
+    // Up on one of the boards (96 px), its cuts and crescents pass over a
+    // hero on the floor - and a jump would take him up into them.
+    const uLedge = v.onGround && v.bottom < h.room.floor - 40;
     // Where the hero comes to a stop once he lets go of the keys.
     const stopX = p.cx + (Math.sign(p.vx) * p.vx * p.vx) / 4000;
     const stopDist = Math.abs(ucx - stopX);
@@ -109,7 +110,12 @@ export default function reader(g, h) {
     /* --------------------------------------------- what it does, answered */
     if (key !== seenKey) {
       seenKey = key;
-      if (v.state === 'duel' && v.plan === 'windup' && dist < 170) {
+      if (v.state === 'duel' && v.plan === 'windup' && uLedge) {
+        // Its combo up on a board: nothing to jump. Out from under it.
+        dbg({ ev: 'ledge-combo', dist: Math.round(dist) });
+        fleeDir = -Math.sign(dx) || -p.facing;
+        fleeUntil = wf + 20;
+      } else if (v.state === 'duel' && v.plan === 'windup' && dist < 170) {
         // The eyes flare. The combo comes when the flare runs out - two cuts,
         // 0.62 s - then it stands for 0.8 s (0.67 in its second half). Straight
         // up as the first cut comes: both cuts and their crescents pass under
@@ -117,7 +123,7 @@ export default function reader(g, h) {
         const start = Math.max(0, rem);
         openFrom = wf + Math.round((start + 0.62) * 60);
         openUntil = openFrom + Math.round((p2 ? 0.67 : 0.8) * 60);
-        decide('jump', Math.max(0, start - (dist < 56 ? 0.06 : 0)), 'combo', face);
+        decide('jump', Math.max(0, start - (dist < 56 ? 0.06 : 0) + jitter()), 'combo', face);
       } else if (v.state === 'duel' && v.plan === 'charge') {
         // A plain cut (on him already, if he was in reach), the ring: ready
         // 0.585 s into the move. Then in to 52 px of him, the blow loosed, and
@@ -125,15 +131,19 @@ export default function reader(g, h) {
         const since = Math.max(0, 1.6 - v.planTimer) + el;
         const gap = Math.max(0, stopDist - 52);
         const walk = gap > 18.4 ? 0.157 + (gap - 18.4) / 235 : Math.sqrt((2 * gap) / 1500);
-        const tHit = 0.585 + walk + 1 / 60 + 0.06 - since;
-        if (tHit >= 0.15) decide('parry', tHit - 0.09 + jitter(), 'charge', face, { hit: wf + Math.round(tHit * 60) });
+        // (Closer than 40 px it backs off first, and comes back a moment later.)
+        const tHit = 0.585 + walk + 1 / 60 + 0.06 + (stopDist < 40 ? 0.05 : 0) - since;
+        // (Parried only if the ring and the walk in - the wind-up - still has
+        // 0.15 s to run when he sees it.)
+        if (tHit - 0.06 - 1 / 60 >= 0.15) decide('parry', tHit - 0.09 + jitter(), 'charge', face, { hit: wf + Math.round(tHit * 60) });
       } else if (v.state === 'duel' && v.plan === 'leap') {
         // It lands 0.65 s after it left the floor, cutting as it comes down:
         // the cut that reaches him is the one it lands with. It steers at him
         // in the air and coasts once it is over him - it comes down past him,
         // and that is the way to face.
         const since = Math.max(0, 1 - v.planTimer) + el;
-        const tHit = 0.6 - since;
+        // From a board it falls 96 px further before it lands.
+        const tHit = 0.665 + (v.bottom < h.room.floor - 40 ? 0.12 : 0) - since;
         let x = v.cx;
         let vx = v.vx;
         for (let t = since - el; t < 0.62; t += 1 / 60) {
@@ -143,12 +153,12 @@ export default function reader(g, h) {
           x += vx / 60;
         }
         const lf = Math.sign(x - stopX) || face;
-        if (tHit >= 0.15) decide('parry', tHit - 0.07 + jitter(), 'leap', lf, { hit: wf + Math.round(tHit * 60), landX: x });
+        if (tHit >= 0.15) decide('parry', tHit - 0.09 + jitter(), 'leap', lf, { hit: wf + Math.round(tHit * 60), landX: x });
       } else if (v.state === 'fade') {
         // The pool it will rise from: the first cut 0.99 s after it sank.
         const sinceFade = 0.5 - v.timer + el;
         const tCut = 0.92 + 1 / 60 + 0.06 - sinceFade;
-        if (tCut >= 0.15) {
+        if (tCut - 0.077 >= 0.15) {
           decide('parry', tCut - 0.09 + jitter(), 'step', Math.sign(v.stepX - p.cx) || p.facing, { spot: v.stepX, hit: wf + Math.round(tCut * 60) });
         }
         openFrom = -1;
@@ -177,18 +187,11 @@ export default function reader(g, h) {
       } else {
         if (onFloor && !jump.busy) {
           jump.go(18);
-          if (plan.dbl) doubleAt = wf + Math.round(plan.dbl * 60);
           plan = null;
         } else if (wf > plan.at + 6) {
           plan = null;
         }
       }
-    }
-    if (doubleAt >= 0 && wf >= doubleAt && !onFloor && !jump.busy) {
-      jump.go(16);
-      doubleAt = -1;
-    } else if (doubleAt >= 0 && wf >= doubleAt + 12) {
-      doubleAt = -1;
     }
     const guarding = holding || guardUntil > wf;
 
@@ -236,13 +239,33 @@ export default function reader(g, h) {
       if (dist > 44) a[toward] = true;
       else h.face(a, ucx);
       if (dist < 88 && Math.sign(dx) === p.facing) h.swing(a);
+    } else if (uLedge) {
+      // It stands on a board: out from under it, and wait for it to come down.
+      mode = 'under';
+      if (dist < 90) a[away] = true;
+      else h.face(a, ucx);
     } else if (v.state === 'duel' || v.state === 'reel') {
       // A step outside its blade, facing it: close enough that it commits.
       const want = p2 ? 72 : 70;
       const behind = dx > 0 ? p.cx - room.left : room.right - p.cx;
-      if (dist > want + 10) a[toward] = true;
+      // Walking up already: let it come.
+      const coming = v.plan === 'stalk' && Math.sign(v.vx) === Math.sign(p.cx - v.cx) && Math.abs(v.vx) > 60;
+      if (dist > want + 10 && !coming) a[toward] = true;
       else if (dist < want - 6 && behind > 40) a[away] = true;
       else h.face(a, ucx);
+    }
+
+    // Up on a board after a dodge: back down through it (down and jump), the
+    // fight is on the floor.
+    if (dropping > 0) {
+      dropping--;
+      a.down = true;
+      a.left = false;
+      a.right = false;
+    } else if (onFloor && p.bottom < h.room.floor - 40 && !plan && !jump.busy && !a.parry) {
+      dropping = 4;
+      a.down = true;
+      jump.go(2);
     }
 
     if (mode !== lastMode) {
