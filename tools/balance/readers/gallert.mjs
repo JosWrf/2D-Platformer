@@ -12,7 +12,8 @@
  *   - the split: the two small slimes first, then back to him;
  *   - after a landing, a spit or a wobble he stands open: in to a sword's
  *     length, never into him, and swing. While he waddles about, too, and in
- *     the first part of a wind-up: nothing he does lands before it is seen.
+ *     the first part of a wind-up: nothing he does lands before it is seen;
+ *   - landed on one of the two steps by a jump: off it again, not onto him.
  */
 export default function reader(g, h) {
   const p = g.player;
@@ -176,7 +177,7 @@ export default function reader(g, h) {
     const board = offBoard(bcx, bx, bx + v.w);
     if (board !== null && s !== 'hop' && dodge === null) {
       // Up on a board, where the blade does not reach him: off it, towards him.
-      a[board > p.cx ? 'right' : 'left'] = true;
+      if (board !== p.cx) a[board > p.cx ? 'right' : 'left'] = true;
     } else if (s === 'hop') {
       // Where he comes down: the arc, as the eye follows it.
       const bottom = v.y + v.h;

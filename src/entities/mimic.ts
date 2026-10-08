@@ -7,11 +7,22 @@ import { Projectile } from './projectile';
 
 /**
  * Health before the hero is sized up. The third boss of the run, after
- * Gallert and Grimmzahn and before Ankhor's fifty-four. 32, down from 40: see
- * the windows below - with them a hero who reads it lands about twice what he
- * used to, and at 40 that made an early boss longer than the fifth.
+ * Gallert and Grimmzahn. It went from 40 down to 32 when its windows were
+ * widened, and that overshot: measured with a hero who reads it 0.3 s late,
+ * 18 to 21 s and not one heart - shorter than Grimmzahn before it - and one
+ * who only held the attack key felled it as fast and walked out with a heart
+ * to spare. Back at 40.
  */
-const MIMIC_HP = 32;
+const MIMIC_HP = 40;
+/**
+ * The gold rain's longest throws are slowed to this across the floor, so the
+ * coins come down steep. Thrown on a fixed 0.85 s flight, a coin aimed at a
+ * hero 300 px off arrived flat and fast and swept through his whole height
+ * twenty-odd pixels past where it was aimed: the gaps of the fan closed, and
+ * "half a step aside" was a hit at range - measured, no safe spot at all
+ * from 320 px out.
+ */
+const COIN_SPEED = 260;
 /**
  * Damage taken in the open before the lid jams. Eleven was measured against a
  * hero who simply stood against it and swung: at eight he jammed it open every
@@ -684,11 +695,11 @@ export class Mimic extends Enemy {
   private spit(world: World): void {
     const player = world.player;
     const count = this.phaseTwo ? 7 : 5;
-    const flight = 0.85;
     const originX = this.cx;
     const originY = this.bottom - BASE_H - 8;
+    const flight = clamp(Math.abs(player.cx - originX) / COIN_SPEED, 0.85, 1.25);
     for (let i = 0; i < count; i++) {
-      const spread = (i - (count - 1) / 2) * (this.phaseTwo ? 44 : 56);
+      const spread = (i - (count - 1) / 2) * (this.phaseTwo ? 52 : 64);
       const tx = clamp(player.cx + spread, this.arenaLeft + 10, this.arenaRight - 10);
       const vx = (tx - originX) / flight;
       const vy = (player.cy - originY) / flight - 0.5 * 950 * flight;

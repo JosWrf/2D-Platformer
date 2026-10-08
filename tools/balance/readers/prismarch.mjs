@@ -16,9 +16,12 @@
  *     parry as they arrive, with a person's error in its timing;
  *   - after each move it stands open: in to a sword's length and swing, and
  *     while it walks about, too. In its second half the charge comes so soon
- *     after the lean that from a sword's length it cannot be jumped: there
- *     the hero keeps a step further off while it walks, swinging - the blade
- *     throws its water that far - and goes in when it has spent a move.
+ *     after the lean that from a sword's length only a frame-exact jump clears
+ *     it: there the hero keeps a step further off while it walks, swinging -
+ *     the blade throws its water that far - and goes in when it has spent a
+ *     move;
+ *   - landed on one of the hall's boards by a jump: off it again, by the end
+ *     that does not drop him onto the Prismarch.
  */
 export default function reader(g, h) {
   const p = g.player;
@@ -260,7 +263,7 @@ export default function reader(g, h) {
     if (board !== null && rockTarget === null) {
       // Up on a board, where neither his blade nor its charge reaches: off
       // it - once a charge under way has gone by.
-      if (s !== 'chargeWind' && s !== 'charge') a[board > p.cx ? 'right' : 'left'] = true;
+      if (s !== 'chargeWind' && s !== 'charge' && board !== p.cx) a[board > p.cx ? 'right' : 'left'] = true;
       committed = true;
     } else if (board === null && (s === 'chargeWind' || s === 'charge')) {
       // When its front gets to the hero if he stays put: the rest of the

@@ -74,6 +74,10 @@ export default function reader(g, h) {
   let dropHold = 0;
   let descend = null;
   let dodge = null;
+  /** Where he has been, frame by frame: where he stood when she spat. */
+  const trail = [];
+  const seenBlobs = new Set();
+  let spits = []; // { from, x, n }: the puddles coming, as he has learned them
   let lastSurface = null;
   let G = null;
 
@@ -103,6 +107,25 @@ export default function reader(g, h) {
     }
     surfaces.forEach((s, i) => (s.i = i));
     const flameHead = b.headCentre(b.necks.find((n) => n.kind === 'flame'));
+    /*
+     * An ember lobbed at a hero standing above the flame head passes his
+     * height once on the way up, before it comes down on him. If that is
+     * sooner than he can see it and move (0.3 s + 0.15 s), it must miss him
+     * by itself: how far to the side of her fire he has to stand on each
+     * ledge for that (its own 18 px and his, and her sway).
+     */
+    for (const s of surfaces) {
+      const cy = s.y - 15;
+      const vy0 = (cy - 6 - flameHead.y) / 0.85 - 425;
+      let need = 0;
+      for (let t = 0; t < 0.45; t += 1 / 120) {
+        if (vy0 + 1000 * t > 0) break;
+        const y = flameHead.y + vy0 * t + 500 * t * t;
+        if (Math.abs(y - cy) < 26) need = Math.max(need, 22 / (1 - t / 0.85) + 8);
+      }
+      s.clearOfFire = need;
+    }
+    const offFire = (x, s) => !s.clearOfFire || Math.abs(x - flameHead.x) >= s.clearOfFire;
     // Where an ordinary standing swing meets a head: surface, facing, range.
     const cutSpots = (n) => {
       const c0 = b.headCentre(n);
@@ -145,8 +168,8 @@ export default function reader(g, h) {
           if (best.floor) W = b.cx + side * 382;
           // On a ledge: near the stump, with her fire coming from in front -
           // the flame head on the same side of him as the stump.
-          else if (side < 0) W = Math.min(best.x1 - 10, st.x + 2, flameHead.x - 40);
-          else W = Math.max(best.x0 + 8, st.x - 2, flameHead.x + 40);
+          else if (side < 0) W = Math.min(best.x1 - 10, st.x + 2, flameHead.x - Math.max(40, best.clearOfFire));
+          else W = Math.max(best.x0 + 8, st.x - 2, flameHead.x + Math.max(40, best.clearOfFire));
           info.fire = { s: best.i, face, W };
         }
       }
@@ -154,15 +177,18 @@ export default function reader(g, h) {
         const ref = info.fire ?? { W: info.head.x, s: 0 };
         let pick = null;
         for (const c of info.cut) {
-          const x = Math.max(c.lo + 4, Math.min(c.hi - 4, ref.W));
-          const cost = Math.abs(x - ref.W) + Math.abs(surfaces[c.s].y - surfaces[ref.s].y) * 2;
-          if (!pick || cost < pick.cost) pick = { s: c.s, f: c.f, x, cost };
+          // Nearest the stand for its stump, and clear of her fire's way up.
+          for (let x = c.lo + 4; x <= c.hi - 4; x += 2) {
+            if (!offFire(x, surfaces[c.s])) continue;
+            const cost = Math.abs(x - ref.W) + Math.abs(surfaces[c.s].y - surfaces[ref.s].y) * 2;
+            if (!pick || cost < pick.cost) pick = { s: c.s, f: c.f, x, cost };
+          }
         }
         info.cutAt = pick;
       }
       return info;
     });
-    return { floor, left: l * T, right: (r + 1) * T, surfaces, necks, cx: b.cx };
+    return { floor, left: l * T, right: (r + 1) * T, surfaces, necks, cx: b.cx, flame: flameHead, offFire };
   };
 
   /* --------------------------------------------------------- helpers */
@@ -247,10 +273,26 @@ export default function reader(g, h) {
 
     /* ---------------------------------------------- what is flying */
     const threats = v.proj.map((q) => ({ ...q, pts: path(q, 80) }));
-    // Where a glob in flight is going to lie as a pool.
-    const soonPools = [];
-    for (const t of threats) if (t.kind === 'blob' && t.pts.length) soonPools.push({ x: t.pts[t.pts.length - 1].x });
     for (const [id, pl] of plans) if (now - pl.at > 240) plans.delete(id);
+    trail.push(p.cx);
+    if (trail.length > LAG + 2) trail.shift();
+    /*
+     * Her spit. The puddles do not lie where the globs come down (see the
+     * report: they land a head's length off), but where he stood when she
+     * spat - three a stride apart, or two either side of him from the crowned
+     * head - which is what a person who has met her learns. A new glob in
+     * sight was spat LAG frames ago, from where he stood then.
+     */
+    const fresh = v.proj.filter((q) => q.kind === 'blob' && !seenBlobs.has(q.id));
+    for (const q of fresh) seenBlobs.add(q.id);
+    if (fresh.length && !spits.some((s) => now - s.seen < 20)) {
+      const stood = trail[0];
+      const aim = Math.max(-300, Math.min(300, stood - G.cx));
+      const kind = v.necks[v.acting]?.kind;
+      const spread = kind === 'crown' ? [-60, 60] : [-72, 0, 72];
+      spits.push({ seen: now, from: now - LAG + 44, until: now - LAG + 48 + 270, xs: spread.map((s) => G.cx + aim + s) });
+    }
+    spits = spits.filter((s) => now < s.until);
 
     /* ---------------------------------------------- the goal */
     const order = ['venom', 'stone', 'crown', 'storm'];
@@ -282,7 +324,7 @@ export default function reader(g, h) {
       for (const d of v.drops) if (Math.abs(d.x - x) < 10 + 9 + 8) return 'drop';
       if (s.floor) {
         for (const q of v.pools) if (q.life > 0.15 && Math.abs(q.x - x) < 26 + 9 + 6) return 'pool';
-        for (const q of soonPools) if (Math.abs(q.x - x) < 26 + 9 + 6) return 'pool';
+        for (const s of spits) if (now >= s.from - 12 && s.xs.some((px) => Math.abs(px - x) < 26 + 9 + 6)) return 'pool';
         if (breathOn) {
           const d = (x - G.cx) * v.breathDir;
           if (d > -15 && d < 340 + 15) return 'breath';
@@ -327,7 +369,12 @@ export default function reader(g, h) {
         };
         const l = clear(-1);
         const r = clear(1);
-        run = { key: windKey, until: now + toBegin + 52, dir: l >= 190 || l >= r ? -1 : 1 };
+        // Away from the side her venom head leans out to: that is where the
+        // globs come down; the puddles come where he stood.
+        const head = v.necks.find((n) => n.kind === 'venom')?.head;
+        const pref = head ? (Math.sign(G.cx - head.x) || 1) : 1;
+        const room = pref > 0 ? r : l;
+        run = { key: windKey, until: now + toBegin + 52, dir: room >= 150 || room >= (pref > 0 ? l : r) ? pref : -pref };
       }
     }
     if (run && now > run.until) run = null;
@@ -335,6 +382,14 @@ export default function reader(g, h) {
       // Out of the way already, or about to run into something: stop running.
       const k = danger(p.cx + run.dir * 20);
       if (k === 'pool' || k === 'breath' || p.cx + run.dir * 20 < G.left + 14 || p.cx + run.dir * 20 > G.right - 14) run = null;
+    }
+
+    /* ---------------------------------------------- her fire on its way up */
+    let aside = null;
+    if (wind === 'flame' && sNow && !G.offFire(p.cx, sNow)) {
+      const need = sNow.clearOfFire + 4;
+      const xs = [G.flame.x - need, G.flame.x + need].filter((x) => x > sNow.x0 - 6 && x < sNow.x1 + 6);
+      if (xs.length) aside = xs.sort((u, w) => Math.abs(u - p.cx) - Math.abs(w - p.cx))[0];
     }
 
     /* ---------------------------------------------- her breath: guard */
@@ -501,6 +556,10 @@ export default function reader(g, h) {
     if (stance) {
       goalX = stance.x;
       wantFace = stance.face;
+    }
+    if (aside !== null) {
+      goalX = aside;
+      swing = false;
     }
     if (run) {
       goalX = p.cx + run.dir * 80;

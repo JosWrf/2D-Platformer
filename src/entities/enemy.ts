@@ -1409,6 +1409,21 @@ export class Charger extends Enemy {
 
 /** Damage the warden shrugs off mid-move before it staggers. */
 const POISE = 5;
+/**
+ * How long a stagger keeps it from being staggered again - longer than one
+ * of its turns, and its poise does not drain meanwhile. With 2 s and a poise
+ * that kept draining, the very first blow after the lock broke it again, every
+ * time in the middle of the next wind-up: measured with the blade of the late
+ * road, a hero who only held the attack key took it apart in 4.6 s without
+ * one of its moves ever landing.
+ */
+const WARDEN_STAGGER_REST = 3.4;
+/**
+ * Health before the hero is sized up. Sixteen was a third of the knight's;
+ * with the relics of the road it fell in eight seconds to a hero who read it,
+ * before it had shown each of its three moves once.
+ */
+const WARDEN_HP = 32;
 
 /**
  * The Shard Warden: what the rift grew in the knight's place.
@@ -1433,7 +1448,7 @@ export class Warden extends Enemy {
     super('warden', x, y);
     this.w = 46;
     this.h = 58;
-    this.hp = this.maxHp = 16;
+    this.hp = this.maxHp = WARDEN_HP;
     this.scoreValue = 500;
     this.aggroRange = 300;
     this.contactDamage = 1;
@@ -1458,7 +1473,8 @@ export class Warden extends Enemy {
     if (this.dead) return;
     this.hp -= amount;
     this.flash = 1;
-    this.poise -= amount;
+    // Someone already reeling does not reel twice: see WARDEN_STAGGER_REST.
+    if (this.poiseLock <= 0) this.poise -= amount;
     if (this.hp <= 0) {
       this.die(world);
       return;
@@ -1468,7 +1484,7 @@ export class Warden extends Enemy {
     if (!committed) this.vx = fromDir * 130;
     if (this.poise <= 0 && this.poiseLock <= 0) {
       this.poise = this.poiseMax;
-      this.poiseLock = 2.0;
+      this.poiseLock = WARDEN_STAGGER_REST;
       this.stun = 0.5;
       this.vx = fromDir * 150;
       world.particles.burst(this.cx, this.cy, 14, '#e2c4ff', { speed: 190, shape: 'spark' });
@@ -1772,11 +1788,13 @@ export class Gallert extends Enemy {
     this.w = 74;
     this.h = 52;
     /*
-     * Twenty-two. The knight has sixty-four and Thalassa sixty; this one comes
-     * before either, against a hero who has nothing but a sword, so it is the
-     * short fight that teaches the vocabulary.
+     * Thirty-four. He comes before everyone else, against a hero with nothing
+     * but a sword, so he is the short fight that teaches the vocabulary - but
+     * at twenty-two he was too short to teach it: measured with a hero who
+     * reads him 0.3 s late, eight seconds, in which he showed his leap and his
+     * spit once each and never split at all.
      */
-    this.hp = this.maxHp = 22;
+    this.hp = this.maxHp = 34;
     this.scoreValue = 700;
     this.aggroRange = 300;
     this.contactDamage = 1;
@@ -2827,6 +2845,14 @@ export class Thalassa extends Enemy {
 
 /** Damage it shrugs off mid-move. Higher than the warden's: it is the last word. */
 const PRISM_POISE = 7;
+/**
+ * How long a stagger keeps it from being staggered again, poise not draining
+ * meanwhile - longer than one of its turns. With 2 s and a poise that went on
+ * draining, the hero's late-road blade broke it again the moment the lock ran
+ * out, every time in the middle of the next wind-up: a hero who only held the
+ * attack key took its 130 health in twenty seconds and was never touched.
+ */
+const PRISM_STAGGER_REST = 3.2;
 
 /**
  * Prismarch, the heart of the crystal - the bonus boss behind the world, and
@@ -2880,7 +2906,7 @@ export class Prismarch extends Enemy {
     if (this.dead) return;
     this.hp -= amount;
     this.flash = 1;
-    this.poise -= amount;
+    if (this.poiseLock <= 0) this.poise -= amount;
     if (this.hp <= 0) {
       this.die(world);
       return;
@@ -2888,7 +2914,7 @@ export class Prismarch extends Enemy {
     audio.play('bossHit');
     if (this.poise <= 0 && this.poiseLock <= 0) {
       this.poise = this.poiseMax;
-      this.poiseLock = 2.0;
+      this.poiseLock = PRISM_STAGGER_REST;
       this.stun = 0.55;
       this.vx = fromDir * 120;
       world.particles.burst(this.cx, this.cy, 20, '#bff2ff', { speed: 220, shape: 'spark' });

@@ -591,9 +591,11 @@ export class Colossus extends Enemy {
 
         case 'track': {
           // It follows him, and then for the last moment it does not: that
-          // stillness is the cue to move.
+          // stillness is the cue to move. A third of a second of it: at 0.2,
+          // a hero who saw it stop 0.3 s late was under the fist when it
+          // landed - the cue was shorter than the eye.
           hand.glow = 1;
-          const locked = hand.timer < 0.2;
+          const locked = hand.timer < 0.3;
           if (!locked) {
             const want = clamp(player.cx, this.arenaLeft + 40, this.arenaRight - 40);
             hand.x = approach(hand.x, want, 430 * dt);

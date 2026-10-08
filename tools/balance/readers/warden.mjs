@@ -14,7 +14,8 @@
  *     them, a parry as they arrive - timed off their flight, with a person's
  *     error in it - turns them back;
  *   - after each move he stands open, and while he walks about: in to a
- *     sword's length, never into him, and swing.
+ *     sword's length, never into him, and swing;
+ *   - landed on the board by a jump: off it again, not onto him.
  */
 export default function reader(g, h) {
   const p = g.player;
@@ -182,7 +183,7 @@ export default function reader(g, h) {
     if (board !== null && s !== 'slam') {
       // Up on a board, where his blade does not reach: off it, towards him -
       // once a lunge under way has gone by.
-      if (s !== 'lungeWind' && s !== 'lunge') a[board > p.cx ? 'right' : 'left'] = true;
+      if (s !== 'lungeWind' && s !== 'lunge' && board !== p.cx) a[board > p.cx ? 'right' : 'left'] = true;
     } else if (s === 'slamWind') {
       // He is going up and will come down nearer: out of the ring now.
       if (behind > 40) a[away] = true;
