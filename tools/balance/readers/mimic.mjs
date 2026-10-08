@@ -5,32 +5,37 @@
  *     hops come down short of a hero who stands) and steps out from under one
  *     that would come down on him;
  *   - the bite (lid cracks, eye in the gap, it settles back): he stands and
- *     parries it on the rhythm of the wind-up he saw - the jaws jam open. A
- *     bite he cannot time any more he runs from;
- *   - the tongue: a low hop over it, on the rhythm of the coil;
- *   - the gold rain: still while it spits (the coins are aimed at him), half a
- *     step into the gap between two coins while they fall, then the coins that
- *     lie between him and the mouth go back into it, one swing each;
- *   - the gulp: away from it, running;
+ *     parries it on the rhythm of the wind-up he saw - the jaws jam open
+ *     (PARRY off, or a bite he can no longer time: he runs from it);
+ *   - the tongue: a low hop over it, on the rhythm of the coil (low, so that
+ *     under a plank he does not land on it);
+ *   - the gold rain: the coins come down where he stood when it spat, so he is
+ *     on the move while it spits, in towards the mouth, and picks his spot by
+ *     the arcs he sees (half a step into a gap is only safe close in); coins
+ *     lying between him and the mouth go back into it, one swing each;
+ *   - the gulp: away from it, running - with a wall at his back, through it
+ *     to its back, where its jaws are not;
  *   - the rattle of the lid: off it;
  *   - open (after a move, or jammed): in to a sword's length of what lies in
  *     front of him - the tongue on the floor, else the mouth - and swing; out
- *     of hugging distance before the window shuts.
+ *     of hugging distance before the window shuts. A plank he gets off.
  *
  * He judges where and when the jaws or the tongue will reach him from what he
- * saw of the wind-up: its rhythm, and how the chest was moving.
+ * saw of the wind-up: its rhythm, and how the chest was moving. The rhythms
+ * are counted in the game's own time, as the hero feels it: a hit-stop
+ * freezes him and the clock alike.
  */
 export default function reader(g, h) {
   const p = g.player;
   const see = h.lag();
   const jump = h.jumper();
-  const LAG = h.LAG;
-  const L = LAG / 60;
   const FLOOR = h.room.floor;
   /** Parries the bite (the move's own answer); false: runs from every bite. */
   const PARRY = true;
   /** A human's error on a press timed off a rhythm, in seconds either way. */
   const JITTER = 0.07;
+  /** The same error on his dodges (the hop over the tongue); 0 like the boar's reader, 0.07 to test the margins. */
+  const DODGE_JITTER = 0;
   const WINDS = { biteWind: 1, tongueWind: 1, spitWind: 1, gulpWind: 1, snapWind: 1 };
   const step = (x, to, by) => (x < to ? Math.min(x + by, to) : Math.max(x - by, to));
   let prevState = null;
@@ -42,8 +47,18 @@ export default function reader(g, h) {
   let hop = null;
   /** Where he stands while the coins come down. */
   let coinSpot = null;
+  /** Sim frames until a timer now at t runs out (the update in which it does; <= 0: it has, that long ago). */
+  const runsOut = (t) => Math.ceil(t * 60 - 1e-6);
+  let sim = 0;
+  let lastRun = null;
   return (boss) => {
+    // His own clock: it stops when the game stops for a blow.
+    if (p.runCycle !== lastRun) {
+      sim++;
+      lastRun = p.runCycle;
+    }
     const v = see({
+      sim,
       state: boss.state,
       timer: boss.timer,
       x: boss.x,
@@ -64,10 +79,11 @@ export default function reader(g, h) {
       if (WINDS[v.state]) episode++;
       prevState = v.state;
     }
-    const now = h.frame;
+    /** Sim frames since what he sees happened. */
+    const ago = sim - v.sim;
     const a = {};
     const s = v.state;
-    const bx = h.lead(v.cx, v.vx);
+    const bx = v.cx + (v.vx * ago) / 60;
     const dx = bx - p.cx;
     const d = Math.abs(dx);
     const toward = dx > 0 ? 'right' : 'left';
@@ -82,8 +98,8 @@ export default function reader(g, h) {
       if (behind > 12) a[away] = true;
       else stand();
     };
-    /** Frames from now until a wind-up seen with this timer turns into its move. */
-    const untilMove = (timer) => Math.ceil((timer - L) * 60 - 1e-6) - 1;
+    /** The update (sim frame) in which a wind-up seen with this timer turns into its move. */
+    const moveAt = (timer) => sim + runsOut(timer - ago / 60);
 
     /* What lies in front of him, within a sword's length (40 px from 5 px out). */
     const tongueLen = v.tongue >= 8 ? v.tongue : 0;
@@ -103,17 +119,17 @@ export default function reader(g, h) {
       // his own run to a spot, step by step; and of the spots none of the
       // arcs crosses on the way or on arrival, the one nearest the mouth's
       // window. Re-judged every few frames while they fall.
-      if (coinSpot === null || now % 6 === 0) {
+      if (coinSpot === null || sim % 6 === 0) {
         const paths = flying.map((c) => {
           const pts = [];
           let x = c.x;
           let y = c.y;
           let vy = c.vy;
-          for (let f = 1; f <= LAG + 60; f++) {
+          for (let f = 1; f <= ago + 60; f++) {
             vy += 950 / 60;
             x += c.vx / 60;
             y += vy / 60;
-            if (f > LAG) pts.push([x, Math.min(y, FLOOR - 6)]);
+            if (f > ago) pts.push([x, Math.min(y, FLOOR - 6)]);
             if (y + 6 >= FLOOR) break;
           }
           return pts;
@@ -155,16 +171,16 @@ export default function reader(g, h) {
         if (s === 'biteWind') {
           if (!plan || plan.ep !== episode) {
             // He sees the lid crack: can he still time a parry off it?
-            plan = { ep: episode, ok: PARRY && v.timer - L >= 0.15, jit: Math.round((Math.random() * 2 - 1) * JITTER * 60), at: -1, done: false, reach: false };
+            plan = { ep: episode, ok: PARRY && v.timer - ago / 60 >= 0.15, jit: Math.round((Math.random() * 2 - 1) * JITTER * 60), at: -1, done: false, reach: false };
           }
           if (!plan.done) {
             // The chest as he saw it, run on: settling back (or still sliding
             // from its hop) through the rest of the wind-up, then the lunge at
             // 480 px/s, braking - and the first frame its jaws are on him.
-            const m = untilMove(v.timer);
+            const sw = moveAt(v.timer);
             let x = v.cx;
             let vx = v.vx;
-            for (let i = 0; i < LAG + m; i++) {
+            for (let i = 0; i < sw - v.sim - 1; i++) {
               vx = step(vx, -v.facing * 40, 400 / 60);
               x += vx / 60;
             }
@@ -185,7 +201,8 @@ export default function reader(g, h) {
               lunge += vb / 60;
             }
             plan.reach = facingMe && hit > 0;
-            if (plan.reach) plan.at = now + m + hit - 5 + plan.jit;
+            // Pressed so the guard (11 frames) is centred on that frame.
+            if (plan.reach) plan.at = sw + hit - 5 + plan.jit;
           }
         }
         if (plan && plan.ok && plan.reach) {
@@ -198,7 +215,7 @@ export default function reader(g, h) {
           stand();
         }
       } else if (s === 'gape' || s === 'jammed') {
-        const remaining = v.timer - L;
+        const remaining = v.timer - ago / 60;
         const goldHome = v.coins.some((c) => c.friendly);
         let lo;
         let hi;
@@ -231,15 +248,15 @@ export default function reader(g, h) {
           if (inReach()) h.swing(a);
         }
       } else if (s === 'tongueWind' || s === 'tongue') {
-        if (s === 'tongueWind' && (!hop || hop.ep !== episode)) hop = { ep: episode, at: -1, done: false };
+        if (s === 'tongueWind' && (!hop || hop.ep !== episode)) hop = { ep: episode, at: -1, done: false, jit: Math.round((Math.random() * 2 - 1) * DODGE_JITTER * 60) };
         if (s === 'tongueWind' && !hop.done) {
           // The tip runs out 18 px a frame from 41 px in front of its middle;
           // a low hop is clear of it from one frame after the press for thirty.
           const kc = Math.max(1, Math.ceil((d - 50) / 18.3));
           hop.reach = facingMe && d < 275;
-          hop.at = now + untilMove(v.timer) + Math.round((kc - 8) / 2);
+          hop.at = moveAt(v.timer) + Math.round((kc - 8) / 2) + hop.jit;
         }
-        if (hop && hop.reach && !hop.done && now >= hop.at && floor && !jump.busy) {
+        if (hop && hop.reach && !hop.done && sim >= hop.at - 1 && floor && !jump.busy) {
           jump.go(9);
           hop.done = true;
         }
@@ -298,7 +315,7 @@ export default function reader(g, h) {
     }
 
     /* ------------------------------------------------------------ the parry */
-    if (plan && plan.ok && plan.reach && !plan.done && plan.at >= 0 && now >= plan.at) {
+    if (plan && plan.ok && plan.reach && !plan.done && plan.at >= 0 && sim >= plan.at - 1) {
       plan.done = true;
       pressing = 2;
     }

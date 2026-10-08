@@ -15,8 +15,12 @@
  *     blade keeps going; the orbs at its end are parried off its rhythm in
  *     her reach, and batted with the blade further off;
  *   - the anchor: off the spot it comes down on, as the eye judges the arc;
- *   - the spring tide and the crown's call: off every mark he sees bubbling
- *     before it bursts, to the nearest dry spot, and back to her after;
+ *   - the spring tide (both arms up): out of her reach while it is coming -
+ *     and while its second ripple is still to come, from her second phase
+ *     on - so that the mark under his feet leaves him somewhere to step to;
+ *     then off every mark he sees bubbling before it bursts, to the nearest
+ *     dry spot he can reach in time, and back to her after. The crown's call
+ *     the same way;
  *   - parries obey the bench's rules: planned only off a wind-up seen through
  *     the lag with at least 0.15 s of it left, pressed with up to 0.07 s of
  *     error either way.
@@ -29,6 +33,8 @@ export default function reader(g, h) {
   const DT = 1 / 60;
   const LAG = h.LAG;
   const room = h.room;
+  /** The designed answer in her reach. False measures her without it: waves jumped, orbs batted. */
+  const PARRY = true;
   const see = h.lag();
   const jump = h.jumper();
   /** For each tick he has lived through: did the world stand still in it? */
@@ -133,7 +139,7 @@ export default function reader(g, h) {
     }
     // In her reach a parry breaks her; out of it, only the blow is turned.
     const inReach = dist < 56 && gap > -2;
-    if (!plan && event && !spent.has(event.key) && event.windLeft >= 0.15 && inReach) {
+    if (PARRY && !plan && event && !spent.has(event.key) && event.windLeft >= 0.15 && inReach) {
       // A person's timing: up to 0.07 s early or late on the moment he means.
       const jitter = Math.round((Math.random() * 2 - 1) * 0.07 * 60);
       const press = ticks + event.at - 5 + jitter;

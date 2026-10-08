@@ -6,20 +6,24 @@
  *     answered, so he parries them, on the rhythm of the wind-up and with a
  *     person's error in the press (up to 0.07 s either way): the slam
  *     standing inside its reach, the dash when it gets to him, the orbs as
- *     they reach him. Once he has decided on a parry he stands still for it;
+ *     they reach him. Once he has decided how to answer a move he stands
+ *     still for it;
  *   - where a wind-up is too short to parry after 0.3 s (the dash in the
  *     third phase) he jumps it, with a second jump at the top - and in the
  *     third phase he waits a little further out, so there is time to;
- *   - his leap: off the spot he will come down on, and the wave from the
- *     landing parried if he lands close, jumped if not;
- *   - a shockwave coming at him: up as it comes;
+ *   - the shockwaves of a slam he stands too far from to parry, and the ones
+ *     from a leap's landing, he jumps on the rhythm of the move that sends
+ *     them - they are on him before the eye could follow them; the wave from
+ *     a landing close by he parries;
+ *   - his leap: off the spot he will come down on;
  *   - shadow orbs: batted back with the blade as they arrive;
- *   - debris from the ceiling: off the spot it is coming down on;
+ *   - debris from the ceiling: off the spots it is coming down on;
  *   - staggered, and in the rest after each of his moves: in to a sword's
  *     length and swing, the last swing started early enough to be over
  *     before the next wind-up - a blow into the wind-up only makes the blow
  *     come sooner;
- *   - skeletons: cut down when they come close and he is not about to move;
+ *   - skeletons: kept off with the blade's crescent and cut down, when he is
+ *     not about to move;
  *   - otherwise: just outside a sword's length, facing him, waiting.
  */
 export default function reader(g, h) {
@@ -44,6 +48,7 @@ export default function reader(g, h) {
 
   /** A person's error on a timed press: up to 0.07 s either way. */
   const jitter = () => (Math.random() * 2 - 1) * 0.07;
+  const overlap = (ax, ay, aw, ah, bx, by, bw, bh) => ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 
   /**
    * Where a leap comes down: his arc, as anyone who has watched it a few
@@ -78,6 +83,79 @@ export default function reader(g, h) {
     return { t, cx: x + w / 2, bottom: y + hh };
   };
 
+  /**
+   * When a shockwave seen `back` seconds ago reaches the hero where he
+   * stands: it runs along whatever it is on and drops off the end of a board.
+   */
+  const waveReaches = (q, from, ahead, pad = 0, hx = p.x) => {
+    let x = q.x - q.w / 2;
+    let y = q.y - q.h / 2;
+    const steps = Math.round((ahead - from) * 60);
+    // The guard reaches a little out in front of him, towards the wave.
+    const gx = q.vx > 0 ? hx - pad : hx;
+    for (let i = 1; i <= steps; i++) {
+      x += q.vx / 60;
+      if (lvl.rectHitsSolid(x, y, q.w, q.h)) return null;
+      const drop = lvl.groundBelow(x + q.w / 2, y + q.h - 4, 3);
+      if (drop > 6) y += Math.min(drop, 260 / 60);
+      const t = from + i / 60;
+      if (t >= 0 && overlap(x, y, q.w, q.h, gx, p.y, p.w + pad, p.h)) return t;
+    }
+    return null;
+  };
+
+  /** His height off the floor t seconds into a jump held full, pushed again at the top. */
+  const jumpH = (t, dbl) => {
+    if (t <= 0) return 0;
+    if (t <= 0.3) return 600 * t - 875 * t * t;
+    if (!dbl || t <= 1 / 3) {
+      const u = t - 0.3;
+      return Math.max(0, 101.25 + 75 * u - 1125 * u * u);
+    }
+    const u = t - 1 / 3;
+    if (u <= 0.267) return 102.5 + 500 * u - 875 * u * u;
+    const w = u - 0.267;
+    return Math.max(0, 173.6 + 33 * w - 1125 * w * w);
+  };
+
+  /**
+   * His dash, followed the way it goes: at its speed for 0.55 s, off the end
+   * of a board and down. When it reaches the hero standing at hx - or
+   * jumping from there at `jumpAt` - in seconds from now, or null.
+   */
+  const dashPath = (x, y, w, hh, dir, speed, delay, hx, jumpAt = null) => {
+    let vy = 0;
+    // The frame the wind-up runs out is not yet a running one; after it, the
+    // blade's reach is checked where he stood, then he moves, then his body.
+    for (let i = 1; i <= 34; i++) {
+      const t0 = delay + (i + 1) / 60;
+      const hy0 = p.y - (jumpAt === null ? 0 : jumpH(t0 - jumpAt, true));
+      if (overlap(x - 10, y + 6, w + 20, hh - 6, hx - p.w / 2, hy0, p.w, p.h)) return t0;
+      x = Math.max(wallL, Math.min(wallR - w, x + (dir * speed) / 60));
+      const prev = y + hh;
+      vy = Math.min(760, vy + 30);
+      y += vy / 60;
+      if (y + hh >= floorY) {
+        y = floorY - hh;
+        vy = 0;
+      } else if (vy > 0) {
+        const ty = Math.floor((y + hh) / TILE);
+        const surface = ty * TILE;
+        if (prev <= surface + 0.5 && y + hh >= surface) {
+          for (let tx = Math.floor(x / TILE); tx <= Math.floor((x + w - 0.001) / TILE); tx++) {
+            if (lvl.platformAt(tx, ty)) {
+              y = surface - hh;
+              vy = 0;
+            }
+          }
+        }
+      }
+      const hy = p.y - (jumpAt === null ? 0 : jumpH(t0 - jumpAt, true));
+      if (overlap(x, y, w, hh, hx - p.w / 2, hy, p.w, p.h)) return t0;
+    }
+    return null;
+  };
+
   // World frames: the frames in which the fight actually moved. Hit-stop is a
   // freeze anyone can see; his timers do not run through it, so neither does
   // the hero's sense of their rhythm.
@@ -87,16 +165,16 @@ export default function reader(g, h) {
   let seenState = null;
   let action = 0;
   let planned = -1;
-  /** A parry decided on: the world frame to press it, and which way to face. */
-  let parryAt = -1;
+  /**
+   * What he has decided to do about the move he saw: a parry or a jump, the
+   * world frame to do it on, which way to face, and a second jump.
+   */
+  let plan = null;
   let parryHold = 0;
-  let parryFace = 0;
   let guardUntil = -1;
+  let doubleAt = -1;
   let holdUntil = -1;
   let lastFlash = 0;
-  /** A jump decided on: when, and its second push at the top. */
-  let jumpAt = -1;
-  let doubleAt = -1;
   /** Where he is going to come down, while he is in the air. */
   let land = null;
   let lastMode = '';
@@ -115,7 +193,6 @@ export default function reader(g, h) {
       h: boss.h,
       vx: boss.vx,
       vy: boss.vy,
-      facing: boss.facing,
       phase: boss.phase,
       shots: h.hostile(),
       skels: g.enemies
@@ -160,100 +237,120 @@ export default function reader(g, h) {
     lastFlash = p.parryFlash;
 
     /* ------------------------------------------------ his moves, answered */
-    const planParry = (t, what, face) => {
-      parryAt = wf + Math.max(0, Math.round((t + jitter()) * 60));
-      parryFace = face;
-      dbg({ ev: 'plan-parry', what, rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist), ph: v.phase });
+    const decide = (kind, t, what, face, dbl = false) => {
+      plan = { kind, at: wf + Math.max(0, Math.round(t * 60)), face, dbl, what };
+      dbg({ ev: 'plan', kind, what, rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist), ph: v.phase });
     };
+    // His feet: on the floor, or up on one of the boards.
+    const onLedge = v.y + v.h < floorY - 40;
     if (planned !== action) {
       planned = action;
       const face = Math.sign(dx) || p.facing;
-      if (s === 'slamWindup' && rem >= 0.15) {
+      if (onLedge && (s === 'slamWindup' || s === 'cast')) {
+        // Up there his blade does not reach the floor, the waves come off
+        // the end of the board and the orbs from above: watched, not parried.
+        dbg({ ev: 'ledge', s });
+      } else if (s === 'slamWindup' && rem >= 0.15) {
         // Inside the blade's reach (to 105 px in front of him) the blow lands
-        // with the slam. A little beyond, the wave comes - its x is its left
-        // edge both ways, so it sets off 66 px out going right, 40 going left.
+        // with the slam. Beyond it the wave comes - its x is its left edge
+        // both ways, so it sets off 66 px out going right, 40 going left.
         const lead = p.cx > kcx ? 66 : 40;
-        let t = rem - 0.08;
-        if (stopDist > 112) t = rem + Math.max(0, stopDist - 9 - lead - 30) / (v.phase === 3 ? 320 : 250) - 0.03;
-        if (stopDist <= 118) planParry(t, 'slam', face);
+        const fast = v.phase === 3 ? 320 : 250;
+        const reach = Math.max(0, stopDist - 9 - lead);
+        // Inside the blade (it ends 114 px out), or a wave that is on him at
+        // once: parried on the slam itself.
+        if (stopDist < 116 || (p.cx > kcx && stopDist < 122)) decide('parry', rem - 0.08 + jitter(), 'slam', face);
+        else if (stopDist <= 118) decide('parry', rem + Math.max(0, reach - 30) / fast - 0.03 + jitter(), 'slam-wave', face);
+        else decide('jump', rem + reach / fast - 0.16, 'slam-wave', face);
       } else if (s === 'dashWindup') {
         const speed = v.phase === 3 ? 620 : 520;
-        // He steps back at a walk until the wind-up runs out, then comes.
-        const start = stopDist + 60 * Math.max(0, rem);
-        const t = Math.max(0, rem) + Math.max(0, start - 50) / speed + 2 / 60;
-        if (rem >= 0.15) {
-          planParry(t - 0.09, 'dash', face);
-        } else if (t > 0.22) {
-          // Too late to parry: over him, with the second jump at the top.
-          jumpAt = wf + Math.max(0, Math.round((t - 0.27) * 60));
-          doubleAt = jumpAt + 20;
-          dbg({ ev: 'plan-jump', what: 'dash', rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist) });
-        } else {
-          dbg({ ev: 'dash-too-late', rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist) });
+        // He steps back at a walk until the wind-up runs out, then comes the
+        // way he faces - off the end of a board, if he stands on one.
+        const dir = Math.sign(p.cx - kcx) || 1;
+        const x0 = kx - dir * 60 * Math.max(0, rem);
+        const r0 = Math.max(0, rem);
+        const t = dashPath(x0, v.y, v.w, v.h, dir, speed, r0, stopX);
+        // Off the floor the run carries on further than it would standing.
+        const airX = p.cx + (Math.sign(p.vx) * p.vx * p.vx) / 1900;
+        const ta = dashPath(x0, v.y, v.w, v.h, dir, speed, r0, airX);
+        if (t === null) dbg({ ev: 'dash-short', dist: Math.round(stopDist) });
+        else if (rem >= 0.15) {
+          decide('parry', t - 0.09 + jitter(), 'dash', face);
+        }
+        else {
+          // Over him, if a jump now (or a little later) clears him where he
+          // goes; the second push at the top keeps him up there.
+          let best = null;
+          for (const j of [Math.max(0, (ta ?? t) - 0.27), 0.017, 0.05]) {
+            if (dashPath(x0, v.y, v.w, v.h, dir, speed, r0, airX, j) === null) {
+              best = j;
+              break;
+            }
+          }
+          if (best !== null) decide('jump', best, 'dash', face, true);
+          else dbg({ ev: 'dash-too-late', rem: +rem.toFixed(2), in: +t.toFixed(2), dist: Math.round(stopDist) });
         }
       } else if (s === 'cast' && rem >= 0.15 && stopDist <= 112) {
         // The first orb reaches the guard about (0.2 d - 6) frames after the
-        // cast, measured; the rest come in behind it.
-        planParry(rem + (0.196 * stopDist - 5.8) / 60 - 0.03, 'cast', face);
+        // cast, measured; the rest come in close behind it.
+        decide('parry', rem + (0.196 * stopDist - 5.8) / 60 - 0.03 + jitter(), 'cast', face);
       } else if (s === 'leap') {
-        land = landing(kx, v.y, v.w, v.h, v.vx, v.vy, v.timer);
+        // From where he was seen, on the clock he was seen on.
+        land = landing(v.x, v.y, v.w, v.h, v.vx, v.vy, v.timer);
         land.t -= el;
         land.at = wf + Math.round(land.t * 60);
         const off = Math.abs(land.cx - stopX);
         const level = Math.abs(land.bottom - floorY) < 4;
         dbg({ ev: 'leap', in: +land.t.toFixed(2), off: Math.round(off), level });
-        if (level && land.t >= 0.15 && off > 60 && off <= 110) {
-          // Close enough for the wave to reach him at once, and for a parry of
-          // it to put him down.
-          const lead = p.cx > land.cx ? 56 : 30;
-          planParry(land.t + Math.max(0, off - lead - 9 - 30) / 290 - 0.03, 'landing', Math.sign(land.cx - p.cx) || face);
+        if (land.t >= 0.15) {
+          // Where to stand for it: off the spot he comes down on, if he is
+          // coming down on him - 85 px out, on whichever side has the room.
+          let side = Math.sign(stopX - land.cx) || 1;
+          if (land.cx + side * 95 > wallR - 12 || land.cx + side * 95 < wallL + 12) side = -side;
+          const spot = off < 75 ? land.cx + side * 85 : stopX;
+          const walk = Math.abs(spot - stopX) / 235 + 0.12;
+          // The wave that comes his way from there.
+          const dir = spot > land.cx ? 1 : -1;
+          const wave = { x: land.cx + (dir > 0 ? 30 : -30) + 13, y: land.bottom - 15, vx: dir * 290, w: 26, h: 30 };
+          const hx = spot - p.w / 2;
+          const tBox = waveReaches(wave, land.t, land.t + 1, 30, hx);
+          const tBody = waveReaches(wave, land.t, land.t + 1, 0, hx);
+          const lf = Math.sign(land.cx - spot) || face;
+          const offSpot = Math.abs(land.cx - spot);
+          // Close enough for a parry of the wave to put him down: parried.
+          if (level && offSpot <= 110 && tBox !== null && tBox > walk) decide('parry', tBox - 0.03 + jitter(), 'landing', lf);
+          else if (tBody !== null) decide('jump', Math.max(walk, tBody - 0.16), 'landing', lf);
+          if (plan && plan.what === 'landing') plan.spot = spot;
         }
       }
     }
 
-    // A parry decided on: still from now on, facing him, and pressed.
-    const waiting = parryAt >= 0;
-    if (parryAt >= 0 && wf >= parryAt) {
-      a.parry = true;
-      parryHold++;
-      if (parryHold >= 2) {
-        parryAt = -1;
-        parryHold = 0;
-        guardUntil = wf + 12;
+    // The plan: still until it is carried out, facing him for a parry.
+    let holding = false;
+    if (plan) {
+      if (wf < plan.at) {
+        holding = true;
+      } else if (plan.kind === 'parry') {
+        a.parry = true;
+        holding = true;
+        parryHold++;
+        if (parryHold >= 2) {
+          parryHold = 0;
+          guardUntil = wf + 12;
+          plan = null;
+        }
+      } else {
+        if (onFloor && !jump.busy) {
+          jump.go(18);
+          if (plan.dbl) doubleAt = wf + 20;
+          plan = null;
+        } else if (wf > plan.at + 6) {
+          plan = null;
+        }
+        holding = true;
       }
     }
-    const guarding = waiting || guardUntil > wf;
-
-    /* ------------------------------------------------------------ hazards */
-    const shots = h.threats(v.shots);
-    // Shockwaves along the floor: up as they come, unless a parry meets them.
-    let waveIn = 99;
-    for (const q of shots) {
-      if (q.kind !== 'shockwave') continue;
-      if (Math.sign(q.vx) !== Math.sign(p.cx - q.x)) continue;
-      // Still up on a board, it passes over him unless it comes down first.
-      if (q.y + 15 < p.y - 20 && Math.abs(p.cx - q.x) > 50) continue;
-      const gap = Math.abs(p.cx - q.x) - 9 - 13;
-      waveIn = Math.min(waveIn, Math.max(0, gap) / Math.abs(q.vx));
-    }
-    // The wave from a landing he could not see yet, timed off the landing.
-    if (land && land.at > wf - 30 && Math.abs(land.bottom - floorY) < 4) {
-      const off = Math.abs(land.cx - p.cx);
-      const lead = p.cx > land.cx ? 56 : 30;
-      const t = (land.at - wf) / 60 + Math.max(0, off - lead - 9) / 290;
-      if (t > -0.05) waveIn = Math.min(waveIn, Math.max(0.05, t));
-    }
-    const parryIn = parryAt >= 0 ? (parryAt - wf) / 60 : guardUntil > wf ? 0 : 99;
-    if (waveIn < 0.28 && waveIn > 0.04 && onFloor && !jump.busy && Math.abs(parryIn - waveIn) > 0.2) {
-      jump.go(18);
-      dbg({ ev: 'jump-wave', in: +waveIn.toFixed(2) });
-    }
-
-    // A jump decided on for his dash, and its second push at the top.
-    if (jumpAt >= 0 && wf >= jumpAt && onFloor && !jump.busy) {
-      jump.go(18);
-      jumpAt = -1;
-    }
+    const guarding = holding || guardUntil > wf;
     if (doubleAt >= 0 && wf >= doubleAt && !onFloor && !jump.busy) {
       jump.go(16);
       doubleAt = -1;
@@ -261,14 +358,42 @@ export default function reader(g, h) {
       doubleAt = -1;
     }
 
-    // Debris from the ceiling: off the spot it is coming down on.
+    /* ------------------------------------------------------------ hazards */
+    const shots = h.threats(v.shots);
+    // Shockwaves he can see, followed along the floor and off the boards.
+    let waveIn = 99;
+    for (const q of v.shots) {
+      if (q.kind !== 'shockwave') continue;
+      if (Math.sign(q.vx) !== Math.sign(p.cx - h.lead(q.x, q.vx))) continue;
+      const t = waveReaches(q, -el, 0.4);
+      if (t !== null) waveIn = Math.min(waveIn, t);
+    }
+    const planIn = plan ? (plan.at - wf) / 60 : guardUntil > wf ? 0 : 99;
+    if (waveIn < 0.26 && waveIn > 0.03 && onFloor && !jump.busy && Math.abs(planIn - waveIn) > 0.2) {
+      jump.go(18);
+      dbg({ ev: 'jump-wave', in: +waveIn.toFixed(2) });
+    }
+
+    // Debris from the ceiling: off the spots it is coming down on.
+    const falling = [];
+    for (const r of v.shots) {
+      if (r.kind !== 'rock') continue;
+      // Led the way a falling thing is: faster the longer it falls.
+      const ry = r.y + r.vy * el + 450 * el * el;
+      const rvy = r.vy + 900 * el;
+      const rx = r.x + r.vx * el;
+      if (ry > p.bottom) continue;
+      const drop = Math.max(0, p.y - 12 - ry);
+      const tt = (-rvy + Math.sqrt(Math.max(0, rvy * rvy + 1800 * drop))) / 900;
+      if (tt < 0.9) falling.push(rx + r.vx * tt);
+    }
+    const unsafe = (x) => falling.some((fx) => Math.abs(fx - x) < 30);
     let dodge = 0;
-    for (const q of shots) {
-      if (q.kind !== 'rock' || q.y > p.bottom) continue;
-      const drop = Math.max(0, p.y - 12 - q.y);
-      const tt = (-q.vy + Math.sqrt(Math.max(0, q.vy * q.vy + 1800 * drop))) / 900;
-      const landX = q.x + q.vx * tt;
-      if (Math.abs(landX - p.cx) < 30 && tt < 0.9) dodge = landX > p.cx ? -1 : 1;
+    if (unsafe(p.cx)) {
+      for (let k = 6; k <= 120 && !dodge; k += 6) {
+        if (!unsafe(p.cx - k) && p.cx - k > wallL + 12) dodge = -1;
+        else if (!unsafe(p.cx + k) && p.cx + k < wallR - 12) dodge = 1;
+      }
     }
 
     // Orbs: batted back with the blade as they arrive.
@@ -288,31 +413,42 @@ export default function reader(g, h) {
     let window = -1;
     if (s === 'stagger') window = rem + 0.45;
     else if (s === 'idle') window = rem;
-    else if (s === 'cast' || s === 'summon') window = waiting ? -1 : rem;
+    else if (s === 'cast' || s === 'summon') window = plan ? -1 : rem;
     // Swinging into a wind-up makes the blow come early: the last swing has to
     // be over before he starts the next move.
     const busyFor = p.attackTimer > 0 ? p.attackTimer : 0;
     const mayStrike = window > busyFor + 0.28;
+    // A swing the other way can still find him: anything swung his way within
+    // a blade and a crescent of him keeps to the same rule.
+    const swingSafe = (dir) => mayStrike || Math.sign(dx) !== dir || dist > 150;
 
-    // The nearest skeleton, if one has come close.
+    // Skeletons: the nearest one, and any that is up and too close. One
+    // reeling from a blow (its cooldown) is no danger for a moment.
     let skel = null;
+    let near = null;
     for (const e of v.skels) {
       const ecx = h.lead(e.cx, e.vx);
       const d = Math.abs(ecx - p.cx);
-      if (d < 130 && (!skel || d < Math.abs(skel.cx - p.cx))) skel = { ...e, cx: ecx };
+      if (d < 140 && (!skel || d < Math.abs(skel.cx - p.cx))) skel = { ...e, cx: ecx };
+      if (d < 66 && e.state !== 'cooldown' && (!near || d < Math.abs(near.cx - p.cx))) near = { ...e, cx: ecx };
     }
     const threatening = s === 'slamWindup' || s === 'dashWindup' || s === 'dash' || s === 'leap' || s === 'slam';
-    const want = v.phase === 3 ? 100 : 58;
+    const want = onLedge ? 150 : v.phase === 3 ? 104 : 58;
 
     let mode = 'wait';
-    if (dodge && !guarding) {
+    const soon = plan && plan.at - wf < 8;
+    if (dodge && !soon && !a.parry) {
       mode = 'rock';
       a[dodge > 0 ? 'right' : 'left'] = true;
     } else if (guarding) {
       mode = 'guard';
-      // Squared up for the parry: no stepping now.
-      if (parryFace && Math.sign(p.facing) !== parryFace) a[parryFace > 0 ? 'right' : 'left'] = true;
-    } else if (orb && onFloor) {
+      // Squared up for what he decided on: no stepping now - and in the air,
+      // checking the drift. A plan with a spot to it: there first.
+      const f = plan ? plan.face : 0;
+      if (plan && plan.spot !== undefined && Math.abs(plan.spot - p.cx) > 8 && plan.at - wf > 6) h.walkTo(a, plan.spot, 8);
+      else if (!onFloor && Math.abs(p.vx) > 40) a[p.vx > 0 ? 'left' : 'right'] = true;
+      else if (f && Math.sign(p.facing) !== f && !a.parry) a[f > 0 ? 'right' : 'left'] = true;
+    } else if (orb && onFloor && swingSafe(Math.sign(orb.x - p.cx) || p.facing)) {
       mode = 'orb';
       h.face(a, orb.x);
       h.swing(a);
@@ -324,12 +460,16 @@ export default function reader(g, h) {
       mode = 'slam';
       // Committed: keep out of the blade while it is still out.
       if (dist < 118 && dist > 8 && holdUntil < wf) a[away] = true;
-    } else if (skel && !threatening && (Math.abs(skel.cx - p.cx) < 70 || !mayStrike)) {
+    } else if (skel && !threatening && (near || !mayStrike || s !== 'stagger' || Math.abs(skel.cx - p.cx) < 95)) {
+      // A skeleton in reach of its own swing gets room; one further off gets
+      // the crescent, every swing, so that it never closes in.
       mode = 'skel';
-      const sd = skel.cx - p.cx;
-      if (Math.abs(sd) < 40 && skel.state !== 'cooldown') a[sd > 0 ? 'left' : 'right'] = true;
+      const t = near || skel;
+      const sd = t.cx - p.cx;
+      const roomBehind = sd > 0 ? p.cx - wallL > 60 : wallR - p.cx > 60;
+      if (near && roomBehind) a[sd > 0 ? 'left' : 'right'] = true;
       else if (Math.sign(sd) !== p.facing) a[sd > 0 ? 'right' : 'left'] = true;
-      else h.swing(a);
+      else if (swingSafe(p.facing)) h.swing(a);
     } else if (mayStrike) {
       mode = 'strike';
       if (dist > 56) a[toward] = true;
@@ -344,6 +484,24 @@ export default function reader(g, h) {
       if (dist > want + 10) a[toward] = true;
       else if (dist < want - 12 && p.cx > wallL + 40 && p.cx < wallR - 40) a[away] = true;
       else h.face(a, kcx);
+    }
+
+    // Not into a skeleton that is up and about.
+    for (const e of v.skels) {
+      const sd = h.lead(e.cx, e.vx) - p.cx;
+      if (e.state === 'cooldown' || Math.abs(sd) > 50) continue;
+      // (A tap to turn round is not a step.)
+      if (((sd > 0 && a.right) || (sd < 0 && a.left)) && p.facing === Math.sign(sd)) {
+        a.left = false;
+        a.right = false;
+      }
+    }
+    if (falling.length && (a.left || a.right) && mode !== 'rock') {
+      const step = (a.right ? 1 : -1) * 30;
+      if (unsafe(p.cx + step) && !unsafe(p.cx)) {
+        a.left = false;
+        a.right = false;
+      }
     }
 
     if (mode !== lastMode) {
