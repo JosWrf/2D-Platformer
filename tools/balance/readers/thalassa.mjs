@@ -31,17 +31,14 @@
 export default function reader(g, h) {
   const p = g.player;
   const DT = 1 / 60;
-  const LAG = h.LAG;
   const room = h.room;
   /** The designed answer in her reach. False measures her without it: waves jumped, orbs batted. */
   const PARRY = true;
   const see = h.lag();
   const jump = h.jumper();
-  /** For each tick he has lived through: did the world stand still in it? */
-  const still = [];
-  let calls = 0;
-  /** Ticks of the world that have run so far - the still ones do not count. */
+  /** Ticks of the world that have run so far - the still ones (hit stop) do not count. */
   let ticks = 0;
+  let frozen = null;
   /** Moves seen begin: a new announcement, or a new volley of the surge. */
   let shown = 0;
   let lastState = null;
@@ -57,6 +54,8 @@ export default function reader(g, h) {
   let refugeFor = '';
 
   return (boss) => {
+    if (frozen === false) ticks++;
+    frozen = g.hitStopTimer > 0;
     const s0 = boss.state;
     if (s0 !== lastState && (s0.endsWith('Wind') || s0 === 'crown')) shown++;
     if (s0 === 'surge' && lastState === 'surge' && boss.timer > lastTimer + 0.1) shown++;
@@ -67,6 +66,7 @@ export default function reader(g, h) {
     lastTimer = boss.timer;
     const ratio = boss.hp / boss.maxHp;
     const v = see({
+      ticks,
       id: shown,
       state: s0,
       timer: boss.timer,
@@ -80,13 +80,7 @@ export default function reader(g, h) {
       shots: h.hostile(),
     });
     // How much of the world has moved since what he sees now.
-    const age = Math.min(LAG, calls);
-    let ran = 0;
-    for (let i = Math.max(0, still.length - age); i < still.length; i++) if (!still[i]) ran++;
-    const frozenNow = g.hitStopTimer > 0;
-    still.push(frozenNow);
-    if (still.length > LAG + 4) still.shift();
-    calls++;
+    const ran = ticks - v.ticks;
     /** Ticks from now until a timer he saw runs out (1 = the coming tick). */
     const until = (t) => Math.ceil(t / DT - 1e-6) - ran;
     /** Where something he saw is now, led by its speed. */
@@ -325,7 +319,6 @@ export default function reader(g, h) {
       a.parry = true;
       hold--;
     }
-    if (!frozenNow) ticks++;
     return jump.apply(a);
   };
 }
