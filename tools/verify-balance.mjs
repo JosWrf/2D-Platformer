@@ -41,13 +41,15 @@ const dist = arg('dist', null);
  *   seconds     - how long the reader may take, at most (his median)
  *   hearts      - how many hearts the reader may lose, at most (his median),
  *                 always short of the hearts the hero has
- *   masher      - how many times the reader's cost the masher must pay at
- *                 least (or lose the hero's whole bar of hearts)
+ *   masher      - how many hearts the masher has to lose at least (his
+ *                 median) - or not get the boss down at all. Comparing rates
+ *                 alone let a masher through who lost one heart where the
+ *                 reader lost none: that is a boss that does not need reading.
  */
 const BAND = {
-  early: { seconds: 70, hearts: 3 },
-  middle: { seconds: 85, hearts: 4 },
-  late: { seconds: 100, hearts: 4 },
+  early: { seconds: 60, hearts: 2, masher: 3 },
+  middle: { seconds: 75, hearts: 3, masher: 5 },
+  late: { seconds: 90, hearts: 4, masher: 7 },
 };
 
 const bench = await open(dist ? path.resolve(dist) : undefined);
@@ -127,9 +129,10 @@ for (const row of rows) {
       const mashSecs = median(row.masher.map((r) => (r.felled ? r.seconds : 120)));
       const readRate = hearts / Math.max(1, secs ?? 1);
       const mashRate = mash / Math.max(1, mashSecs ?? 1);
+      const mashFell = row.masher.filter((r) => r.felled).length;
       checks.push([
-        `${row.name}: mashing costs more than reading - ${mash} hearts in ${mashSecs} s against ${hearts} in ${secs} s`,
-        mash >= row.heroHearts || mashRate >= readRate * 2 + 0.01,
+        `${row.name}: mashing does not work - ${mash} hearts in ${mashSecs} s (at least ${band.masher}, or no fall), against ${hearts} in ${secs} s reading`,
+        (mash >= band.masher || mashFell * 2 < row.masher.length) && mashRate >= readRate * 2,
       ]);
     }
   } else {
