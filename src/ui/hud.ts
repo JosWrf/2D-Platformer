@@ -239,6 +239,213 @@ export function drawRelicBadge(
   ctx.restore();
 }
 
+/**
+ * One boss attack, as a badge: square where the relics are round, so the two
+ * rows never read as one. `scale` 1 matches a relic badge; the HUD's picked
+ * attack is drawn larger. `fill`, while it cools down, is how far it is back.
+ */
+export function drawSkillBadge(
+  ctx: CanvasRenderingContext2D,
+  id: string,
+  x: number,
+  y: number,
+  scale: number,
+  color: string,
+  ready: boolean,
+  fill: number | null,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(8,10,20,0.82)';
+  ctx.beginPath();
+  ctx.roundRect(-10, -10, 20, 20, 4);
+  ctx.fill();
+  ctx.strokeStyle = ready ? color : 'rgba(160,175,220,0.28)';
+  ctx.globalAlpha = ready ? 0.8 : 1;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  if (fill !== null) {
+    // Cooling down: the badge fills from the bottom as it comes back.
+    const f = clamp(fill, 0, 1);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.22;
+    ctx.fillRect(-9, 9 - 18 * f, 18, 18 * f);
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = ready ? 1 : 0.4;
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  drawSkillSign(ctx, id);
+  ctx.restore();
+}
+
+/** The sign inside a skill badge, in a 14 px box around the origin. */
+function drawSkillSign(ctx: CanvasRenderingContext2D, id: string): void {
+  switch (id) {
+    case 'klatschsprung':
+      // A blob in the air over the ring it is about to make.
+      ctx.beginPath();
+      ctx.ellipse(0, -2.5, 4.2, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(0, 5, 6.5, 1.8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case 'goldregen':
+      for (const [dx, dy] of [
+        [-4, 3],
+        [0, -1],
+        [4, -5],
+      ]) {
+        ctx.beginPath();
+        ctx.arc(dx, dy, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    case 'sonnenblick':
+      ctx.beginPath();
+      ctx.arc(0, -4.5, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-1.2, -2, 2.4, 7);
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.ellipse(0, 5.5, 5, 1.4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    case 'netzschuss':
+      ctx.beginPath();
+      ctx.arc(2.5, -1, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      for (const dy of [-3.5, 0, 3.5]) {
+        ctx.beginPath();
+        ctx.moveTo(-0.5, -1 + dy * 0.4);
+        ctx.lineTo(-6.5, dy);
+        ctx.stroke();
+      }
+      break;
+    case 'feuerwelle':
+      for (const [dx, h] of [
+        [-4.5, 5],
+        [0, 8],
+        [4.5, 11],
+      ]) {
+        ctx.beginPath();
+        ctx.moveTo(dx - 2, 6);
+        ctx.quadraticCurveTo(dx - 2, 6 - h * 0.6, dx, 6 - h);
+        ctx.quadraticCurveTo(dx + 2, 6 - h * 0.6, dx + 2, 6);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    case 'springflut':
+      ctx.beginPath();
+      ctx.moveTo(-2.5, 6);
+      ctx.lineTo(-2, -3);
+      ctx.quadraticCurveTo(0, -7, 2, -3);
+      ctx.lineTo(2.5, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-7, 6);
+      ctx.quadraticCurveTo(-5, 4, -3.5, 6);
+      ctx.moveTo(3.5, 6);
+      ctx.quadraticCurveTo(5, 4, 7, 6);
+      ctx.stroke();
+      break;
+    case 'blutsicheln':
+      for (const dx of [-3, 2.5]) {
+        ctx.beginPath();
+        ctx.moveTo(dx, -6);
+        ctx.quadraticCurveTo(dx + 6, 0, dx, 6);
+        ctx.quadraticCurveTo(dx + 3, 0, dx, -6);
+        ctx.fill();
+      }
+      break;
+    case 'schattenwelle':
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-7, 5.5);
+      ctx.lineTo(7, 5.5);
+      ctx.stroke();
+      for (const d of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(d * 1.5, 5);
+        ctx.quadraticCurveTo(d * 3, 0, d * 6, -4);
+        ctx.quadraticCurveTo(d * 5, 1, d * 7, 5);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    case 'schattensprung':
+      ctx.beginPath();
+      ctx.ellipse(-3, 5, 3.6, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(4, 5, 3.6, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(-3, 3);
+      ctx.quadraticCurveTo(0, -9, 4, 2);
+      ctx.stroke();
+      break;
+    case 'splitteransturm':
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.lineTo(1, -4.5);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(1, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 1.1;
+      for (const dy of [-3, 0, 3]) {
+        ctx.beginPath();
+        ctx.moveTo(-7, dy);
+        ctx.lineTo(-3.5, dy);
+        ctx.stroke();
+      }
+      break;
+    case 'kronenfeuer': {
+      const heads = ['#9fe07a', '#ff9a4a', '#d9c39a', '#9cc8ff', '#ffd866'];
+      heads.forEach((c, i) => {
+        const a = Math.PI + (i / 4) * Math.PI;
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * 5.5, 2 + Math.sin(a) * 5.5, 1.9, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      break;
+    }
+    case 'splitterregen':
+      for (const [dx, dy] of [
+        [-4, -3],
+        [0.5, 1],
+        [4.5, -2],
+      ]) {
+        ctx.beginPath();
+        ctx.moveTo(dx, dy + 4.5);
+        ctx.lineTo(dx + 1.8, dy);
+        ctx.lineTo(dx, dy - 4.5);
+        ctx.lineTo(dx - 1.8, dy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      break;
+    default:
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+  }
+}
+
 export interface BossBarInfo {
   name: string;
   hp: number;

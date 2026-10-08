@@ -689,6 +689,29 @@ await release('pause');
 await step(2);
 await shot('34-relikte');
 
+// The pause screen's second page: the attacks the bosses taught, one each.
+await step(2, { right: true });
+await release('right');
+await step(2);
+await shot('35-angriffe');
+
+// And one of them in use: Ignivor's wave of fire out of the hero's hands, and
+// the corner that says which attack is picked and when it is back.
+await step(2, { pause: true });
+await release('pause');
+await page.evaluate(() => {
+  const g = window.game;
+  const p = g.player;
+  p.skill = 'feuerwelle';
+  // Back the way he came: the floor ahead ends at the drop before the gate,
+  // and the fire runs along the floor or not at all.
+  p.facing = -1;
+});
+await step(1, { skill: true, left: true });
+await release('skill', 'left');
+await step(15);
+await shot('36-feuerwelle');
+
 console.log(JSON.stringify(results, null, 2));
 await browser.close();
 server.close();

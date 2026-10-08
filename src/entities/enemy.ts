@@ -93,6 +93,11 @@ export abstract class Enemy extends Body {
   facing: 1 | -1 = -1;
   flash = 0;
   stun = 0;
+  /**
+   * Arachna's silk, thrown by the hero: while this runs the game lives this
+   * one slower - see SNARE_PACE in skills.ts.
+   */
+  snare = 0;
   contactDamage = 1;
   scoreValue = 25;
   aggroRange = 240;

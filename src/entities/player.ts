@@ -9,6 +9,7 @@ import type { World } from '../world/context';
 import { Body } from './entity';
 import { Projectile } from './projectile';
 import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, SILK_REGROW, type RelicId } from './relics';
+import { SKILLS, type SkillEffect, type SkillId, castSkill, skillInfo } from './skills';
 
 const MAX_RUN = 235;
 const ACCEL = 1500;
@@ -150,6 +151,17 @@ export class Player extends Body {
   has(id: RelicId): boolean {
     return this.relics.has(id);
   }
+  /**
+   * The attacks the bosses have taught him, one each, and the one he has
+   * picked. See skills.ts: one at a time, on its own key, each on a cooldown
+   * of its own.
+   */
+  readonly skills = new Set<SkillId>();
+  skill: SkillId | null = null;
+  /** Seconds until each attack can be used again; missing means ready. */
+  readonly skillCooldowns = new Map<SkillId, number>();
+  /** The attacks under way: what they draw and what they hit. */
+  skillEffects: SkillEffect[] = [];
   /** Seidenmantel: up and waiting for a blow, or growing back. */
   shieldUp = false;
   /** Quiet seconds still needed before it is back. */
@@ -271,6 +283,10 @@ export class Player extends Body {
     this.secondWind = this.has('zweiteratem');
     this.regrowTimer = HYDRA_REGROW;
     this.saveFlash = 0;
+    // The attacks stay learned; whatever was in flight is gone, and every one
+    // of them is ready again.
+    this.skillEffects = [];
+    this.skillCooldowns.clear();
   }
 
   /** How long the blade takes to wind up for the heavy strike. */
@@ -296,6 +312,70 @@ export class Player extends Body {
     if (id === 'seidenmantel') this.shieldUp = true;
     if (id === 'zweiteratem') this.secondWind = true;
     if (id === 'schattenschritt') this.dashesLeft = Math.max(this.dashesLeft, 2);
+  }
+
+  /** A boss attack has just been learned: it is the one picked, ready now. */
+  learnSkill(id: SkillId): void {
+    this.skills.add(id);
+    this.skill = id;
+    this.skillCooldowns.delete(id);
+  }
+
+  /**
+   * Umbra's step through the dark ends in the heavy strike, already swinging:
+   * the swing a full wind-up would have given, without the wind-up.
+   */
+  strikeFromShadow(): void {
+    this.chargeTimer = 0;
+    this.chargeReady = false;
+    this.startSwing(true);
+    this.quakePending = this.has('bebenfaust') && this.onGround;
+  }
+
+  /** Seconds until an attack is ready again, 0 if it is. */
+  cooldownLeft(id: SkillId): number {
+    return this.skillCooldowns.get(id) ?? 0;
+  }
+
+  /**
+   * The next learned attack, in the order the road hands them out, round to
+   * the first again. Its name goes up over his head: the HUD is in a corner,
+   * and a hero picking in the middle of a fight is looking at himself.
+   */
+  cycleSkill(world: World): void {
+    if (this.skills.size === 0) return;
+    const owned = SKILLS.filter((k) => this.skills.has(k.id));
+    const at = owned.findIndex((k) => k.id === this.skill);
+    const next = owned[(at + 1) % owned.length];
+    this.skill = next.id;
+    audio.play('blip', 1.3);
+    if (owned.length > 1) world.particles.text(this.cx, this.y - 16, next.name.toUpperCase(), next.color);
+  }
+
+  /** The picked attack, if it is ready. A dull click if it is not. */
+  private useSkill(world: World): void {
+    const id = this.skill;
+    if (!id) return;
+    if (this.cooldownLeft(id) > 0) {
+      audio.play('blip', 0.6);
+      return;
+    }
+    const info = skillInfo(id);
+    this.skillCooldowns.set(id, info.cooldown);
+    this.skillEffects.push(...castSkill(id, world));
+    // Casting interrupts a wind-up, like a parry does.
+    this.chargeTimer = 0;
+    this.chargeReady = false;
+  }
+
+  /** The attacks in flight, and the cooldowns running down. */
+  private updateSkills(dt: number, world: World): void {
+    for (const [id, t] of this.skillCooldowns) {
+      if (t <= dt) this.skillCooldowns.delete(id);
+      else this.skillCooldowns.set(id, t - dt);
+    }
+    for (const e of this.skillEffects) e.update(dt, world);
+    if (this.skillEffects.some((e) => e.done)) this.skillEffects = this.skillEffects.filter((e) => !e.done);
   }
 
   /**
@@ -369,6 +449,7 @@ export class Player extends Body {
     this.parryFlash = Math.max(0, this.parryFlash - dt * 3.5);
     this.sticky = Math.max(0, this.sticky - dt);
     this.updateRelics(dt, world);
+    this.updateSkills(dt, world);
 
     for (let i = this.trail.length - 1; i >= 0; i--) {
       this.trail[i].life -= dt * 3.2;
@@ -519,6 +600,10 @@ export class Player extends Body {
       if (this.onGround) this.vx *= 0.4;
     }
     if (this.parryTimer > 0) this.parryProjectiles(world);
+
+    /* ---------------------------------------------------- boss attacks */
+    if (input.pressed('cycle')) this.cycleSkill(world);
+    if (!stunned && !this.isDashing && input.pressed('skill')) this.useSkill(world);
 
     /* ---------------------------------------------------------- attack */
     if (!stunned && input.pressed('attack')) {
@@ -1069,6 +1154,7 @@ export class Player extends Body {
   /* ------------------------------------------------------------ drawing */
 
   draw(ctx: CanvasRenderingContext2D, world: World): void {
+    for (const e of this.skillEffects) e.draw(ctx);
     for (const t of this.trail) {
       ctx.globalAlpha = t.life * 0.3;
       ctx.fillStyle = '#8fc4ff';

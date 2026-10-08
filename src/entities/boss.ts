@@ -59,6 +59,8 @@ export class Boss extends Body {
   state: BossState = 'dormant';
   engaged = false;
   vulnerable = false;
+  /** Arachna's silk, thrown by the hero - see Enemy.snare. */
+  snare = 0;
   anim = 0;
 
   private timer = 0;

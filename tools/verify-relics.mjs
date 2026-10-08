@@ -5,7 +5,8 @@
  *
  *   1. Each boss, felled in its own arena, says its piece and hands over its
  *      relic - and the relic is still there after a death and gone after a
- *      restart.
+ *      restart. One of its attacks comes with it, picked and ready (what the
+ *      attacks do is verify:skills').
  *   2. Each relic does exactly its one thing, measured on the hero rather than
  *      read off a flag: the heart is a heart, the shield takes a blow and grows
  *      back after twelve quiet seconds and not before, blood and gold pay out
@@ -114,6 +115,22 @@ const results = {};
 
 /* -------------------------------------------- 1. every boss hands one over */
 
+/** The attack each relic brings with it. See skills.ts. */
+const SKILL_OF = {
+  herzkern: 'klatschsprung',
+  goldzahn: 'goldregen',
+  bebenfaust: 'sonnenblick',
+  seidenmantel: 'netzschuss',
+  glutklinge: 'feuerwelle',
+  flutklinge: 'springflut',
+  blutdurst: 'blutsicheln',
+  schattenschritt: 'schattenwelle',
+  zweiteratem: 'schattensprung',
+  splitterparade: 'splitteransturm',
+  hydrablut: 'kronenfeuer',
+  klingenwelle: 'splitterregen',
+};
+
 const ARENA_BOSSES = [
   ['gallert', 'herzkern'],
   ['mimic', 'goldzahn'],
@@ -130,7 +147,7 @@ for (const [kind, relic] of ARENA_BOSSES) {
   await fresh();
   results.bosses.push(
     await page.evaluate(
-      ({ kind, relic }) => {
+      ({ kind, relic, skill }) => {
         const g = window.game;
         const h = window.__h;
         const p = g.player;
@@ -161,6 +178,7 @@ for (const [kind, relic] of ARENA_BOSSES) {
         const speaker = g.dialogue?.speaker ?? null;
         const lines = h.read();
         const got = p.relics.has(relic);
+        const taught = p.skills.has(skill) && p.skill === skill;
         const banner = g.zoneBanner.text;
         // The world holds still while the words are read; a moment of it
         // running again, and the wards go.
@@ -181,10 +199,10 @@ for (const [kind, relic] of ARENA_BOSSES) {
         const sawDeath = g.state === 'dead';
         for (let f = 0; f < 60 * 5 && g.state !== 'playing'; f++) h.tick({ confirm: f % 2 === 0 });
         for (let f = 0; f < 10; f++) h.tick();
-        const keptOverDeath = died && sawDeath && g.state === 'playing' && p.relics.has(relic);
-        return { kind, relic, spoke, speaker, lines, got, banner, keptOverDeath, cleared };
+        const keptOverDeath = died && sawDeath && g.state === 'playing' && p.relics.has(relic) && p.skills.has(skill);
+        return { kind, relic, spoke, speaker, lines, got, taught, banner, keptOverDeath, cleared };
       },
-      { kind, relic },
+      { kind, relic, skill: SKILL_OF[relic] },
     ),
   );
 }
@@ -218,7 +236,7 @@ results.knight = await page.evaluate(() => {
   }
   const speaker = g.dialogue?.speaker ?? null;
   h.read();
-  return { spokeAt, speaker, got: p.relics.has('schattenschritt'), sealOpen: !g.level.exitSealed };
+  return { spokeAt, speaker, got: p.relics.has('schattenschritt') && p.skill === 'schattenwelle', sealOpen: !g.level.exitSealed };
 });
 
 await fresh();
@@ -257,15 +275,23 @@ results.hydra = await page.evaluate(() => {
   }
   const speaker = g.dialogue?.speaker ?? null;
   h.read();
-  return { speaker, got: p.relics.has('hydrablut'), gateOpen: !g.level.lairClosed };
+  return { speaker, got: p.relics.has('hydrablut') && p.skill === 'kronenfeuer', gateOpen: !g.level.lairClosed };
 });
 
 // A restart takes every one of them back.
 results.restart = await page.evaluate(() => {
   const g = window.game;
   const before = g.player.relics.size;
+  const skillsBefore = g.player.skills.size;
   g.restart();
-  return { before, after: g.player.relics.size, hearts: g.player.maxHp, tier: g.player.beamTier };
+  return {
+    before,
+    after: g.player.relics.size,
+    hearts: g.player.maxHp,
+    tier: g.player.beamTier,
+    skillsBefore,
+    skillsAfter: g.player.skills.size,
+  };
 });
 
 /* ------------------------------------------------ 2. each one does its job */
@@ -571,12 +597,20 @@ const e = results.effects;
 const byKind = Object.fromEntries(results.bosses.map((b) => [b.kind, b]));
 const checks = [
   ...ARENA_BOSSES.map(([kind, relic]) => [
-    `${kind} falls, speaks and hands over ${relic}, which outlives a death`,
-    byKind[kind]?.spoke && byKind[kind].lines >= 2 && byKind[kind].got && byKind[kind].keptOverDeath && byKind[kind].cleared,
+    `${kind} falls, speaks and hands over ${relic} and ${SKILL_OF[relic]}, which outlive a death`,
+    byKind[kind]?.spoke && byKind[kind].lines >= 2 && byKind[kind].got && byKind[kind].taught && byKind[kind].keptOverDeath && byKind[kind].cleared,
   ]),
-  ['the knight speaks after the seal has had its moment, and hands over Schattenschritt', results.knight.spokeAt >= 1 && results.knight.got && results.knight.sealOpen],
-  ['the hydra opens the gate and hands over Hydrablut', results.hydra.got && results.hydra.gateOpen],
-  ['a restart takes every relic back', results.restart.before > 0 && results.restart.after === 0 && results.restart.hearts === 6 && results.restart.tier === 0],
+  ['the knight speaks after the seal has had its moment, and hands over Schattenschritt and Schattenwelle', results.knight.spokeAt >= 1 && results.knight.got && results.knight.sealOpen],
+  ['the hydra opens the gate and hands over Hydrablut and Kronenfeuer', results.hydra.got && results.hydra.gateOpen],
+  [
+    'a restart takes every relic and every attack back',
+    results.restart.before > 0 &&
+      results.restart.after === 0 &&
+      results.restart.hearts === 6 &&
+      results.restart.tier === 0 &&
+      results.restart.skillsBefore > 0 &&
+      results.restart.skillsAfter === 0,
+  ],
   ['Herzkern: seven hearts, full', e.herzkern.maxHp === 7 && e.herzkern.full],
   ['Goldzahn: the tenth gem is a heart, banked while full', e.goldzahn.healedOnTenth && e.goldzahn.banked === 10 && e.goldzahn.paidLater && e.goldzahn.emptied],
   [

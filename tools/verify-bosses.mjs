@@ -348,7 +348,8 @@ results.wyrm = await page.evaluate(() => {
   const watch = () => {
     const s = boss.state;
     seen.add(s);
-    if (s === 'hunt' && boss.timer < 0.4 && lockStart < 0) lockStart = g.time;
+    // The glow stops for the last 0.55 s of a hunt (LOCK in wyrm.ts).
+    if (s === 'hunt' && boss.timer < 0.55 && lockStart < 0) lockStart = g.time;
     if (s === 'breach' && lockStart >= 0) {
       locks.push(+(g.time - lockStart).toFixed(2));
       lockStart = -1;
@@ -778,6 +779,18 @@ results.mimic = await page.evaluate(() => {
   boss.phaseTwo = true;
   fight(15, left, false);
   fight(15, right, false);
+  // The snap is only for a hero who clings to it, and the posts above stand
+  // next to it only when it happens to hop there: a run in which it never
+  // did, from the first frame of the wind-up on, measured no snap at all and
+  // failed for it. So, last of all, cling - until one has been seen whole.
+  prev = null;
+  for (let f = 0; f < 60 * 20 && winds.snapWind.length === 0; f++) {
+    p.x = boss.cx + (p.cx < boss.cx ? -40 : 40) - p.w / 2;
+    p.vx = 0;
+    h.tick();
+    h.watchHp();
+    watch();
+  }
   out.moves = [...seen].sort();
   out.winds = Object.fromEntries(WINDS.map((w) => [w, winds[w].length ? Math.min(...winds[w]) : null]));
 
@@ -1113,6 +1126,10 @@ results.spider = await page.evaluate(() => {
   out.fromLedge = { reaches: boss.overlaps(p.swordRect()) ? boss.struck : null, offset: Math.round(boss.bx - p.cx) };
 
   // Hit up there, she loses her grip and comes down on her back - in reach.
+  // Whole again first: the fights above take 31 to 36 of her 48, and a run
+  // that took a few more left her to die of the very blows that are meant to
+  // bring her down - and every rule after this one failed with her.
+  boss.hp = boss.maxHp;
   boss.poiseLock = 0;
   let blows = 0;
   while (blows < 40 && boss.state !== 'fall') {

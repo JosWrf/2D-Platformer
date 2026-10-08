@@ -5,14 +5,19 @@ import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
-const WYRM_HP = 58;
 /**
- * Damage to the head, surfaced, before it slams down stunned. Seven, down from
- * eleven: with the head out for a second and a half at a time, eleven was more
- * than a careful hero ever landed in one window, so the long window behind it
- * came about twice a fight.
+ * 44, down from 58. With the windows below a hero who reads him lands about
+ * as much a second as he does on Ankhor; at 58 the fight ran past a minute and
+ * the fire wore down seven hearts before the head did.
  */
-const WYRM_POISE = 7;
+const WYRM_HP = 44;
+/**
+ * Damage to the head, surfaced, before it slams down stunned. Five, down from
+ * eleven and then seven: a hero who has walked in under the hanging head
+ * lands five before it pulls back, so the long window comes every time the
+ * spit is answered, not twice a fight.
+ */
+const WYRM_POISE = 5;
 const SEGMENTS = 15;
 const GAP = 21;
 /** How deep he swims under the floor. */
@@ -20,24 +25,35 @@ const DEPTH = 74;
 const PILLAR_H = 82;
 /**
  * How long the glow under the hero holds still before it bursts. The one
- * warning in the fight that never gets shorter, second half or not.
+ * warning in the fight that never gets shorter, second half or not. 0.55, up
+ * from 0.4: a hero who sees it stop needs a quarter of a second to answer, and
+ * 0.4 left him a tenth to get out from under it.
  */
-const LOCK = 0.4;
+const LOCK = 0.55;
 const PILLAR_W = 34;
 /** Where his head lies when it is down on the floor: in reach of a standing swing. */
 const LIE = 22;
 /**
- * Where it hangs after the spit. Low enough that a swing from the floor
- * catches his jaw and a hop takes the whole head - it used to hang at 96, which
- * only a jump timed to the top of its arc could reach.
+ * Where it hangs after the spit: at the hero's own height, so a swing from the
+ * floor takes the whole head. It used to hang at 96, which only a jump timed to
+ * the top of its arc could reach, and then at 54, where a standing swing only
+ * grazed the lowest few pixels of it and missed whenever it swayed up.
  */
-const LOW_HEAD = 54;
+const LOW_HEAD = 34;
 /** How high he rears for the spit itself. */
 const SPIT_HEAD = 112;
-/** Seconds his head lies stuck where it came down after a breach. */
-const STUCK = 1.5;
+/**
+ * Seconds his head lies stuck where it came down after a breach. 2.3, up from
+ * 1.5: the dodge the breach asks for runs the hero away from it, and turning
+ * round and coming back used up most of a second and a half.
+ */
+const STUCK = 2.3;
 /** Seconds his head hangs low after the spit. */
-const EXPOSED = 2.1;
+const EXPOSED = 2.8;
+/** Seconds he lies on the floor once the hanging head is beaten down. */
+const STUNNED = 3;
+/** Seconds between two "only the head" hints, when the plates take a swing. */
+const HINT_EVERY = 2.5;
 
 interface Point {
   x: number;
@@ -114,6 +130,16 @@ type WyrmState =
  * the spit put its fire on the only path to it, and after a breach he was gone
  * again before anyone could turn round. Now every one of his moves but the
  * wave ends with the head where a sword can find it.
+ *
+ * And then he was still too strong, because that hero was a bot that knew the
+ * head to the pixel and saw every change the frame it happened. Measured again
+ * with one that sees the fight 0.3 s late and only swings from the floor, as a
+ * player does: the hanging head overlapped a standing swing by five pixels,
+ * its snout stuck out of its own hit box, the breach left a tenth of a second
+ * to get out from under it and the stuck head was gone by the time he had
+ * turned round. Now the head hangs at the hero's height, the box is the skull,
+ * every window is longer, and he has less to lose: 31 to 47 s with the four
+ * relics of the road, against 51 to 72 before.
  */
 export class Wyrm extends Enemy {
   private state: WyrmState = 'dormant';
@@ -158,6 +184,8 @@ export class Wyrm extends Enemy {
   private aimed = false;
   /** Where the head comes to rest when it is knocked down. */
   private slumpX = 0;
+  /** Counts down to the next time a swing on the plates says where to hit. */
+  private hintTimer = 0;
 
   override castLight = false;
 
@@ -195,8 +223,27 @@ export class Wyrm extends Enemy {
     return this.hy < this.floorY + 6;
   }
 
+  /**
+   * The skull as it is drawn: 80 wide and 64 high around the head's point. It
+   * was 60 by 52, and the snout he points at the hero stuck 16 px out of it -
+   * the part of him a hero swings at first was the part that was not there.
+   */
   private headRect(): Rect {
-    return { x: this.hx - 30, y: this.hy - 26, w: 60, h: 52 };
+    return { x: this.hx - 40, y: this.hy - 32, w: 80, h: 64 };
+  }
+
+  /**
+   * What bites during a breach: the skull without its horns, a good deal
+   * smaller than what a sword finds. A generous target is a kindness; a
+   * generous bite is not.
+   */
+  private biteRect(): Rect {
+    return { x: this.hx - 26, y: this.hy - 22, w: 52, h: 44 };
+  }
+
+  /** The head is out and in reach: lying stuck, hanging after a spit, or down. */
+  private get open(): boolean {
+    return this.state === 'stuck' || this.state === 'exposed' || this.state === 'stunned';
   }
 
   private segRadius(i: number): number {
@@ -231,10 +278,15 @@ export class Wyrm extends Enemy {
     this.struck = null;
     if (part === null) return;
     if (part === 'body') {
-      // Armour. It rings, it sparks, and it teaches.
+      // Armour. It rings, it sparks, and it teaches - in words, too, now and
+      // then: a clank alone read as a boss that cannot be hurt at all.
       audio.play('clank', 0.9);
       const s = this.segs[Math.floor(this.segs.length / 2)] ?? { x: this.hx, y: this.hy };
       world.particles.burst(s.x, s.y, 8, '#ffd08a', { speed: 180, gravity: 300, shape: 'spark' });
+      if (this.hintTimer <= 0) {
+        this.hintTimer = HINT_EVERY;
+        world.particles.text(s.x, s.y - 34, 'NUR DER KOPF!', '#ffd08a');
+      }
       return;
     }
     this.hp -= amount;
@@ -274,7 +326,7 @@ export class Wyrm extends Enemy {
     this.poise = this.poiseMax;
     this.poiseLock = 3.5;
     this.state = 'stunned';
-    this.timer = 2.4;
+    this.timer = STUNNED;
     this.jaw = 0.2;
     this.hvx = 0;
     this.hvy = 0;
@@ -303,10 +355,13 @@ export class Wyrm extends Enemy {
 
   /**
    * Only what is above the floor can touch him, and only while he is coming
-   * through it: the head bites and the plates burn during a breach. A head
-   * lying on the floor or hanging after a spit is the window, not a trap, and
-   * one that is pulling back into the rock is leaving - walking into either to
-   * swing costs nothing. The fire he leaves behind burns whatever he is doing.
+   * through it: the head bites and the plates burn during a breach - on the
+   * way up. Coming down, the head lands beside the hero on purpose, and the
+   * plates trailing after it used to sweep over the one who stepped in to meet
+   * it; now the way down is the hero's. A head lying on the floor or hanging
+   * after a spit is the window, not a trap, and one that is pulling back into
+   * the rock is leaving - walking into either to swing costs nothing. The fire
+   * he leaves behind burns whatever he is doing.
    */
   override touchPlayer(world: World): void {
     const p = world.player;
@@ -325,10 +380,11 @@ export class Wyrm extends Enemy {
       }
     }
     if (p.isInvulnerable || this.state !== 'breach') return;
-    if (this.headUp && rectsOverlap(this.headRect(), p.rect)) {
-      p.hurt(2, sign(p.cx - this.hx) || 1, world);
+    if (this.headUp && rectsOverlap(this.biteRect(), p.rect)) {
+      p.hurt(1, sign(p.cx - this.hx) || 1, world);
       return;
     }
+    if (this.hvy > 0) return;
     for (let i = 2; i < this.segs.length; i++) {
       const s = this.segs[i];
       if (s.y > this.floorY - 4) continue;
@@ -346,6 +402,7 @@ export class Wyrm extends Enemy {
     this.updateCommon(dt);
     const player = world.player;
     this.headFlash = Math.max(0, this.headFlash - dt * 5);
+    this.hintTimer = Math.max(0, this.hintTimer - dt);
     this.jaw = Math.max(0, this.jaw - dt * 1.4);
     this.throat = Math.max(0, this.throat - dt * 1.2);
 
@@ -443,7 +500,9 @@ export class Wyrm extends Enemy {
         if (this.landing && !this.aimed && this.hvy > 0) {
           this.aimed = true;
           const toward = sign(player.cx - this.hole) || (Math.random() < 0.5 ? -1 : 1);
-          const reach = clamp(Math.abs(player.cx - this.hole) - 58, 46, 120);
+          // Up to 170 px out, up from 120: a hero who ran far from the glow
+          // used to find the head landing a long way short of him.
+          const reach = clamp(Math.abs(player.cx - this.hole) - 54, 46, 170);
           const landX = clamp(this.hole + toward * reach, this.arenaLeft + 40, this.arenaRight - 40);
           const fall = Math.sqrt((2 * Math.max(20, this.floorY - LIE - this.hy)) / 1850);
           this.hvx = (landX - this.hx) / fall;
@@ -610,7 +669,7 @@ export class Wyrm extends Enemy {
         this.burstDone = true;
         const p = world.player;
         if (!p.dead && Math.abs(p.cx - this.hx) < 44 && p.bottom > this.floorY - 120) {
-          p.hurt(2, sign(p.cx - this.hx) || 1, world);
+          p.hurt(1, sign(p.cx - this.hx) || 1, world);
         }
       }
     }
@@ -656,10 +715,11 @@ export class Wyrm extends Enemy {
         audio.play('rumble', 1.2);
         break;
       case 'spit': {
-        // Close enough to be reached before the window shuts. It used to be
-        // 230 to 300 px off, which is more than a second of running.
+        // Close enough to be reached well before the window shuts. It used to
+        // be 230 to 300 px off, which is more than a second of running, and
+        // then 150 to 200.
         const side = player.cx > (this.arenaLeft + this.arenaRight) / 2 ? -1 : 1;
-        this.riseX = clamp(player.cx + side * rand(150, 200), this.arenaLeft + 60, this.arenaRight - 60);
+        this.riseX = clamp(player.cx + side * rand(110, 150), this.arenaLeft + 60, this.arenaRight - 60);
         this.state = 'rise';
         audio.play('rumble', 1.4);
         break;
@@ -706,7 +766,7 @@ export class Wyrm extends Enemy {
   /** The head comes down out of a breach and sticks where it hit. */
   private stick(world: World): void {
     this.state = 'stuck';
-    this.timer = STUCK * (this.phaseTwo ? 0.8 : 1);
+    this.timer = STUCK * (this.phaseTwo ? 0.9 : 1);
     this.hy = this.floorY - LIE;
     this.hvx = 0;
     this.hvy = 0;
@@ -1118,6 +1178,16 @@ export class Wyrm extends Enemy {
       ctx.rotate(ang);
       if (flip) ctx.scale(1, -1);
       const jaw = this.jaw * 0.55;
+
+      // Out and in reach: the fire in him shows through the skull, pulsing, so
+      // the moment to strike reads from across the chamber.
+      if (this.open && heat > 0.3) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const pulse = 0.5 + 0.5 * Math.sin(this.anim * 7);
+        glow(ctx, 8, -6, 50 + pulse * 10, `rgba(255,214,140,${(0.2 + pulse * 0.16).toFixed(3)})`);
+        ctx.restore();
+      }
 
       // Fire in the mouth, seen when the jaw drops.
       if (jaw > 0.05 || this.throat > 0) {

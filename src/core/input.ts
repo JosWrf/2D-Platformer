@@ -7,6 +7,8 @@ export type Action =
   | 'attack'
   | 'parry'
   | 'dash'
+  | 'skill'
+  | 'cycle'
   | 'pause'
   | 'restart'
   | 'confirm'
@@ -32,6 +34,13 @@ const BINDINGS: Record<string, Action[]> = {
   ShiftLeft: ['dash'],
   ShiftRight: ['dash'],
   KeyL: ['dash'],
+  // The boss attacks: one to use the one picked, one to pick the next.
+  KeyF: ['skill'],
+  KeyU: ['skill'],
+  KeyC: ['skill'],
+  KeyQ: ['cycle'],
+  KeyO: ['cycle'],
+  KeyV: ['cycle'],
   KeyP: ['pause'],
   Escape: ['pause'],
   KeyR: ['restart'],

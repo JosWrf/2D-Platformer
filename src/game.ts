@@ -20,6 +20,7 @@ import { PLAYER_MAX_HP, Player } from './entities/player';
 import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
 import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, RELICS, SILK_REGROW, type RelicId, relic } from './entities/relics';
+import { SKILLS, SNARE_PACE, SNARE_PACE_BOSS, drawSnare, skillForRelic, skillInfo } from './entities/skills';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
 import { Decor } from './render/decor';
@@ -30,7 +31,7 @@ import { Scatter } from './render/scatter';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
-import { drawBossBar, drawHeart, drawPanel, drawRelicBadge, drawTextCentered, font } from './ui/hud';
+import { drawBossBar, drawHeart, drawPanel, drawRelicBadge, drawSkillBadge, drawTextCentered, font } from './ui/hud';
 import type { World } from './world/context';
 import { Arena, Level } from './world/level';
 import { TILE, Tile } from './world/tiles';
@@ -274,7 +275,10 @@ export class Game implements World {
   private victoryTimer = 0;
   private bossIntro = 0;
   private bossGhostHp = 0;
-  private zoneBanner = { text: '', timer: 0 };
+  /** The banner across the top; `sub` is a smaller second line under it. */
+  private zoneBanner: { text: string; timer: number; sub?: string } = { text: '', timer: 0 };
+  /** Which list the pause screen shows: the relics, or the boss attacks. */
+  private pausePage: 'relics' | 'skills' = 'relics';
   private currentZone = '';
   private titlePulse = 0;
   private readonly enemySpawns: SpawnRecord[] = [];
@@ -691,6 +695,13 @@ export class Game implements World {
     }
     audio.play('upgrade');
     this.zoneBanner = { text: relic(id).banner, timer: 4.2 };
+    // And one of its own attacks, on top: see skills.ts. Named on the same
+    // banner, with the two keys that work it.
+    const taught = skillForRelic(id);
+    if (taught && !p.skills.has(taught.id)) {
+      p.learnSkill(taught.id);
+      this.zoneBanner = { text: relic(id).banner, timer: 4.2, sub: `NEUER ANGRIFF: ${taught.name.toUpperCase()}   ·   F EINSETZEN   ·   Q WECHSELN` };
+    }
     this.flashWhite = 0.7;
   }
 
@@ -959,6 +970,12 @@ export class Game implements World {
 
     if (this.state === 'paused') {
       if (input.pressed('pause') || input.pressed('confirm')) this.state = 'playing';
+      // Two lists, one screen: left and right (or the key that picks an
+      // attack) turn between the relics and the attacks.
+      if (input.pressed('left') || input.pressed('right') || input.pressed('cycle')) {
+        this.pausePage = this.pausePage === 'relics' ? 'skills' : 'relics';
+        audio.play('blip');
+      }
       input.endFrame();
       return;
     }
@@ -1053,7 +1070,11 @@ export class Game implements World {
         else continue;
       }
       enemy.harden(this.player.relics);
-      enemy.update(dt, this);
+      // Bound in the hero's silk, it lives slower for a while - everything it
+      // does, its wind-ups too.
+      const pace = enemy.snare > 0 ? (BOSS_KINDS.has(enemy.kind) ? SNARE_PACE_BOSS : SNARE_PACE) : 1;
+      enemy.snare = Math.max(0, enemy.snare - dt);
+      enemy.update(dt * pace, this);
       // Anything that ends up under the world is gone. Without this it falls
       // for ever, still updated every frame, and the player never meets it -
       // measured, three of eighteen skeletons left the level this way.
@@ -1069,7 +1090,9 @@ export class Game implements World {
     this.updateArenas();
 
     if (this.boss) {
-      this.boss.update(dt, this);
+      const pace = this.boss.snare > 0 ? SNARE_PACE_BOSS : 1;
+      this.boss.snare = Math.max(0, this.boss.snare - dt);
+      this.boss.update(dt * pace, this);
       // The lagging "ghost" bar trails the real value for a bit of drama.
       this.bossGhostHp += (this.boss.hp - this.bossGhostHp) * Math.min(1, dt * 2.4);
     }
@@ -1225,8 +1248,13 @@ export class Game implements World {
     this.dialogue = null;
     this.player.beamTier = 0;
     this.player.maxHp = PLAYER_MAX_HP;
-    // Every relic goes with a restart, and whatever they had saved up.
+    // Every relic goes with a restart, and whatever they had saved up - and
+    // every attack the bosses taught.
     this.player.relics.clear();
+    this.player.skills.clear();
+    this.player.skill = null;
+    this.player.skillCooldowns.clear();
+    this.player.skillEffects = [];
     this.player.goldCount = 0;
     this.player.bloodMeter = 0;
     this.pendingRelic = null;
@@ -1337,6 +1365,10 @@ export class Game implements World {
       0.94,
       0.13 + swing * 0.1 + charge * 0.12 + guard * 0.08,
     );
+
+    for (const e of this.player.skillEffects) {
+      for (const l of e.lights()) add(l.x, l.y, l.radius, l.rgb, l.strength, l.tint ?? 0.3);
+    }
 
     this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);
     if (this.portal) add(this.portal.cx, this.portal.cy, 190, '186,132,255', 0.9, 0.34);
@@ -1518,6 +1550,13 @@ export class Game implements World {
     if (this.boss && !this.boss.dead && this.isVisible(this.boss.x, this.boss.y, 300)) {
       this.boss.draw(ctx);
     }
+    // The hero's silk on whatever it holds.
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && enemy.snare > 0) drawSnare(ctx, enemy.x, enemy.y, enemy.w, enemy.h, enemy.snare);
+    }
+    if (this.boss && !this.boss.dead && this.boss.snare > 0) {
+      drawSnare(ctx, this.boss.x, this.boss.y, this.boss.w, this.boss.h, this.boss.snare);
+    }
     for (const p of this.projectiles) {
       if (this.isVisible(p.x, p.y, 120)) p.draw(ctx);
     }
@@ -1614,6 +1653,7 @@ export class Game implements World {
     // hands them out. A power the player cannot see he has is a power he does
     // not use - and the ones that fill up or wear off show how far.
     this.drawRelicRow(ctx);
+    this.drawSkillPanel(ctx);
 
     // Progress bar of the whole level.
     const barW = 260;
@@ -1642,6 +1682,10 @@ export class Game implements World {
       ctx.globalAlpha = a * 0.7;
       ctx.fillStyle = 'rgba(200,215,255,0.6)';
       ctx.fillRect(VIEW_W / 2 - 90, 142, 180, 1);
+      if (this.zoneBanner.sub) {
+        ctx.globalAlpha = a;
+        drawTextCentered(ctx, this.zoneBanner.sub, VIEW_W / 2, 164, 14, '#ffd98a', 700);
+      }
       ctx.globalAlpha = 1;
     }
 
@@ -1809,6 +1853,83 @@ export class Game implements World {
   }
 
   /**
+   * The boss attack he has picked, in the bottom left corner where nothing
+   * else is: its sign, a ring that fills while it cools down, its name, and a
+   * pip for every other one he could pick instead.
+   */
+  private drawSkillPanel(ctx: CanvasRenderingContext2D): void {
+    const p = this.player;
+    if (!p.skill) return;
+    const info = skillInfo(p.skill);
+    const owned = SKILLS.filter((k) => p.skills.has(k.id));
+    const left = p.cooldownLeft(info.id);
+    // Narrow enough to stay clear of the boss bar, which starts at x 162.
+    const x = 24;
+    const y = VIEW_H - 66;
+    const w = 134;
+    drawPanel(ctx, x, y, w, 50, 0.62);
+    drawSkillBadge(ctx, info.id, x + 24, y + 25, 1.4, info.color, left <= 0, left > 0 ? 1 - left / info.cooldown : null);
+    ctx.textAlign = 'left';
+    ctx.font = font(info.name.length > 12 ? 10 : 11, 700);
+    ctx.fillStyle = left > 0 ? '#7d86a8' : info.color;
+    ctx.fillText(info.name.toUpperCase(), x + 46, y + 17, w - 52);
+    ctx.font = font(10, 600);
+    ctx.fillStyle = '#f2c14e';
+    ctx.fillText('F', x + 46, y + 31);
+    ctx.fillStyle = left > 0 ? '#8b95bd' : '#c9f0c4';
+    ctx.fillText(left > 0 ? `${left.toFixed(1).replace('.', ',')} s` : 'bereit', x + 58, y + 31);
+    if (owned.length > 1) {
+      // Q and a pip for every attack learned, the picked one lit.
+      ctx.fillStyle = '#f2c14e';
+      ctx.fillText('Q', x + 46, y + 43);
+      owned.forEach((k, i) => {
+        ctx.fillStyle = k.id === info.id ? k.color : 'rgba(150,165,210,0.35)';
+        ctx.beginPath();
+        ctx.arc(x + 60 + i * 6, y + 40, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+  }
+
+  /**
+   * The boss attacks, by name and by what they do, for the pause screen's
+   * second page. The picked one is marked.
+   */
+  private drawSkillList(ctx: CanvasRenderingContext2D, top: number): void {
+    const p = this.player;
+    const owned = SKILLS.filter((k) => p.skills.has(k.id));
+    if (owned.length === 0) {
+      drawTextCentered(ctx, 'Noch keine Angriffe — jeder Boss bringt dir einen seiner bei.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
+      return;
+    }
+    const rowH = 24;
+    const h = owned.length * rowH + 24;
+    const w = 860;
+    const left = VIEW_W / 2 - w / 2;
+    drawPanel(ctx, left, top, w, h, 0.7);
+    ctx.font = font(12, 600);
+    const fromRight = left + w - 18;
+    const fromW = Math.max(...owned.map((k) => ctx.measureText(k.from).width));
+    const textX = left + 178;
+    const textW = fromRight - fromW - 20 - textX;
+    owned.forEach((k, i) => {
+      const y = top + 22 + i * rowH;
+      drawSkillBadge(ctx, k.id, left + 26, y - 4, 1, k.color, true, null);
+      ctx.font = font(13, 700);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = k.color;
+      ctx.fillText(k.id === p.skill ? `${k.name}  ◀` : k.name, left + 44, y);
+      ctx.font = font(12, 600);
+      ctx.fillStyle = '#aeb8dc';
+      ctx.fillText(k.text, textX, y, textW);
+      ctx.fillStyle = '#5f6a92';
+      ctx.textAlign = 'right';
+      ctx.fillText(k.from, fromRight, y);
+      ctx.textAlign = 'left';
+    });
+  }
+
+  /**
    * The relics, by name and by what they do, for the pause screen - the HUD
    * can only show a badge, and a badge does not say what it is for.
    */
@@ -1917,7 +2038,17 @@ export class Game implements World {
           '#6f7ba3',
           600,
         );
-        this.drawRelicList(ctx, 168);
+        if (this.pausePage === 'relics') this.drawRelicList(ctx, 182);
+        else this.drawSkillList(ctx, 182);
+        drawTextCentered(
+          ctx,
+          this.pausePage === 'relics' ? '◀ ▶   RELIKTE   ·   angriffe' : '◀ ▶   relikte   ·   ANGRIFFE',
+          VIEW_W / 2,
+          172,
+          12,
+          '#8fe8ff',
+          700,
+        );
         break;
       case 'dead': {
         const a = clamp(1.1 - this.deathTimer, 0, 1) * 0.78;
@@ -1964,14 +2095,15 @@ export class Game implements World {
       ['LEERTASTE / W', 'Springen · Doppelsprung'],
       ['J  /  K', 'Schwert (3er-Kombo)'],
       ['SHIFT  /  L', 'Ausweichrolle (unverwundbar)'],
+      ['F  /  Q', 'Boss-Angriff  ·  wechseln'],
       ['↓ + Sprung', 'Durch Plattform fallen'],
       ['P  /  R', 'Pause  ·  Neustart'],
       ['M  /  N', 'Musik  ·  Ton an/aus'],
     ];
-    drawPanel(ctx, VIEW_W / 2 - 220, 252, 440, 190, 0.6);
+    drawPanel(ctx, VIEW_W / 2 - 220, 248, 440, 202, 0.6);
     ctx.font = font(13, 600);
     rows.forEach(([key, desc], i) => {
-      const y = 278 + i * 25;
+      const y = 272 + i * 23;
       ctx.textAlign = 'right';
       ctx.fillStyle = '#f2c14e';
       ctx.fillText(key, VIEW_W / 2 - 20, y);

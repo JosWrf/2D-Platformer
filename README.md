@@ -38,6 +38,8 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `J` / `K` / `X` halten | Ladeschlag — nach kurzem Aufladen ein schwerer Hieb mit dreifachem Schaden; Laufen, Springen und Rollen gehen dabei weiter |
 | `E` / `I` | Parade — fängt einen Schlag ab, wenn sie im richtigen Moment kommt |
 | `Shift` / `L` | Ausweichrolle, während der Rolle unverwundbar |
+| `F` / `U` / `C` | Boss-Angriff einsetzen — der, den man gerade gewählt hat (siehe [Und einen seiner Angriffe](#und-einen-seiner-angriffe)) |
+| `Q` / `O` / `V` | Boss-Angriff wechseln — reihum durch alle, die man schon hat |
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen (auf festem Boden springt er normal) |
 | `P` / `Esc` | Pause |
 | `R` | Neustart |
@@ -201,6 +203,74 @@ gerade getroffen hat. Sie ist der längere Arm des Ladeschlags, nicht ein zweite
 — als sie noch obendrauf landete, hob sie den Ladeschlag in Reichweite gemessen
 von 3,4 auf 6,6 Schaden pro Sekunde.
 
+### Und einen seiner Angriffe
+
+Die Relikte arbeiten von selbst. Dazu bringt jetzt **jeder Boss dem Helden
+einen seiner eigenen Angriffe bei** — mit demselben Fall, im selben Banner:
+Unter dem Namen des Relikts steht *NEUER ANGRIFF*, und der neue ist sofort der
+gewählte. Eingesetzt wird immer nur einer, der gewählte, mit **F** (oder `U`,
+`C`); **Q** (oder `O`, `V`) wählt reihum den nächsten, in der Reihenfolge des
+Weges. Jeder hat seine eigene Abklingzeit.
+
+| Boss | Angriff | was er tut | Abklingzeit |
+| --- | --- | --- | --- |
+| Gallert | **Klatschsprung** | ein Satz nach vorn (in der Luft: nach unten), und wo der Held landet, ein Ring: 3 Schaden | 3,5 s |
+| Gierschlund | **Goldregen** | vier Münzen im Fächer nach vorn, je 1 Schaden | 3,5 s |
+| Ankhor | **Sonnenblick** | eine Säule aus Sonnenlicht auf den nächsten Feind; sie folgt ihm 1,2 s lang und brennt alle 0,3 s für 1 | 5 s |
+| Arachna | **Netzschuss** | drei Ballen Seide, je 1 Schaden; was sie treffen, lebt 2,2 s lang mit einem knappen Drittel seines Tempos (ein Boss 1,1 s mit gut der Hälfte) | 4,5 s |
+| Ignivor | **Feuerwelle** | der Boden vor dem Helden bricht als Feuer auf, sieben Säulen weit: 2 Schaden an allem darin | 4 s |
+| Thalassa | **Springflut** | unter bis zu drei Feinden schießt das Wasser hoch: je 2 Schaden | 4,5 s |
+| Vesperon | **Blutsicheln** | drei Sicheln aus Blut im Fächer, durch alles hindurch: je 1 Schaden | 3 s |
+| Morvain | **Schattenwelle** | die Klinge in den Boden: zwei Schockwellen, nach vorn und nach hinten, je 2 Schaden | 3,5 s |
+| Umbra | **Schattensprung** | durch die Dunkelheit hinter den nächsten Feind — und gleich der Ladeschlag | 4,5 s |
+| Splitterwächter | **Splitteransturm** | ein Sturm nach vorn in Kristall, unverwundbar: 2 Schaden an allem im Weg | 3 s |
+| Fünfkronige | **Kronenfeuer** | fünf Würfe im Bogen, einer je Kopf und in dessen Farbe: je 1 Schaden, wo sie platzen | 4,5 s |
+| Prismarch | **Splitterregen** | sechs Kristalle regnen auf den Feind vor dem Helden: je 1 Schaden | 5 s |
+
+Sie treffen, wie die Klinge trifft — dieselbe Prüfung, dieselben Regeln:
+Gierschlunds Deckel bleibt zu, Ignivors Platten klingen, Ankhors Gesicht nimmt
+doppelt. Gezielt wird auf den nächsten Feind vor dem Helden, nie durch eine Wand
+und nie auf einen Boss, der noch schläft: Ein Angriff, den man durch die
+Bannwand auf einen Boss herabrufen könnte, machte die Arena überflüssig. Aus
+demselben Grund geht auch der Schattensprung nicht durch Wände.
+
+Unten links zeigt ein Feld den gewählten Angriff: sein Zeichen, das sich beim
+Abklingen von unten wieder füllt, „bereit“ oder die Sekunden, die noch fehlen,
+und für jeden gelernten einen Punkt hinter dem Q. Die Pause hat eine zweite
+Seite (`←` `→`) mit allen gelernten Angriffen und dem, was sie tun.
+
+| | |
+| --- | --- |
+| ![Die Angriffe in der Pause](screenshots/35-angriffe.png) | ![Ignivors Feuerwelle aus den Händen des Helden](screenshots/36-feuerwelle.png) |
+
+Die Monster rechnen sie — anders als die Relikte — nicht mit: Bereit ist immer
+nur einer, und er will abgewartet werden. Gemessen, zwanzig Sekunden Hauen gegen
+ein festgehaltenes Ziel, den Angriff gedrückt, sobald er bereit ist:
+
+| | Schaden pro Sekunde | | | Schaden pro Sekunde |
+| --- | --- | --- | --- | --- |
+| nur Schwert | 3,70 | | | |
+| Klatschsprung | 3,75 (+1 %) | | Blutsicheln | 4,55 (+23 %) |
+| Goldregen | 4,65 (+26 %) | | Schattenwelle | 4,15 (+12 %) |
+| Sonnenblick | 4,35 (+18 %) | | Schattensprung | 3,95 (+7 %) |
+| Netzschuss | 4,10 (+11 %) | | Splitteransturm | 3,85 (+4 %) |
+| Feuerwelle | 4,15 (+12 %) | | Kronenfeuer | 4,60 (+24 %) |
+| Springflut | 4,05 (+9 %) | | Splitterregen | 4,40 (+19 %) |
+
+Höchstens ein Viertel mehr, und die mit den kleinsten Zahlen tun etwas anderes
+als Schaden: Klatschsprung und Splitteransturm tragen den Helden weg (der zweite
+unverwundbar durch einen Angriff hindurch), der Schattensprung setzt ihn hinter
+den Gegner, die Seide hält einen fest. Dafür reichen Sonnenblick, Springflut und
+Splitterregen dorthin, wo keine Klinge hinkommt — auch zu Arachna an ihrem
+Faden.
+
+`verify:skills` prüft das mit echten Tastendrücken: dass jedes Relikt seinen
+Angriff mitbringt und Q sie reihum wählt; dass jeder Angriff trifft, was er
+verspricht, seine Abklingzeit abwartet und mehrere Gegner nimmt, wo er das sagt;
+dass nichts durch die Wand einer geschlossenen Arena geht; dass sie einen Tod
+überstehen und mit einem Neustart verschwinden — und die Tabelle oben.
+`verify:relics` prüft beim Fall jedes Bosses mit, dass sein Angriff dabei ist.
+
 ### Und die Monster rechnen mit
 
 Zwölf Relikte sollen einen Helden machen, der anders spielt — keinen, der durch
@@ -258,7 +328,7 @@ ankommt (gemessen, nicht gerechnet):
 | Gierschlund | 1 | 40 | 11 |
 | Ankhor | 2 | 54 → 55 | 8 |
 | Arachna | 3 | 48 → 52 | 9 → 10 |
-| Ignivor | 4 | 58 → 64 | 7 → 8 |
+| Ignivor | 4 | 44 → 49 | 5 |
 | Thalassa | 5 | 60 → 82 | 13 → 19 |
 | Vesperon | 6 | 56 → 89 | 9 → 17 |
 | Morvain | 7 | 68 → 111 | |
@@ -630,32 +700,34 @@ langer Schädel mit zurückgeschwungenen Hörnern und einem Kiefer, der fällt, 
 er speit. Der Boden seiner Kammer ist Fels, weil Fels das ist, wodurch er
 schwimmt — und wer hereinkommt, sieht zuerst gar nichts. Dann grollt es.
 
-58 Trefferpunkte, zwei Phasen, und eine Regel, die jeder Wurm hat: **Die Panzerung
-ist Panzerung.** Eine Klinge auf seinen Platten klingt und tut nichts. Nur der Kopf
-zählt — und jeder seiner Züge außer der Welle endet jetzt damit, dass der Kopf
-dort ist, wo ein Schwert vom Boden aus hinkommt:
+44 Trefferpunkte, zwei Phasen, und eine Regel, die jeder Wurm hat: **Die Panzerung
+ist Panzerung.** Eine Klinge auf seinen Platten klingt und tut nichts — und sagt
+es auch, ab und zu, über dem Panzer: *NUR DER KOPF!* Nur der Kopf zählt, und
+jeder seiner Züge außer der Welle endet damit, dass der Kopf dort ist, wo ein
+Schwert vom Boden aus hinkommt. Solange er dort ist, glüht er:
 
 * **Durchbruch** — der Boden unter dem Helden glüht und folgt ihm, hält dann
-  **0,4 Sekunden** still und bricht auf. In Bewegung bleiben; wenn es stehen
+  **0,55 Sekunden** still und bricht auf. In Bewegung bleiben; wenn es stehen
   bleibt, gehen. Der Wurm fährt gerade nach oben, nicht dorthin, wohin der Held
   inzwischen gelaufen ist. Was hochgeht, kommt herunter: Der Kopf schlägt neben
-  dem Loch auf den Boden und **steckt fest** — 1,5 Sekunden, in der zweiten
-  Hälfte 1,2. Er landet in Richtung des Helden, aber gut 58 px vor ihm, nie auf
-  ihm: genau das Ausweichen, das die Ankündigung verlangt hat, stellt einen in
-  Reichweite.
-* **Glutspeien** — er steigt 150 bis 200 px vom Helden entfernt aus dem Boden,
+  dem Loch auf den Boden und **steckt fest** — 2,3 Sekunden, in der zweiten
+  Hälfte 2,1. Er landet in Richtung des Helden, gut 54 px vor ihm und bis zu
+  170 px vom Loch, nie auf ihm: genau das Ausweichen, das die Ankündigung
+  verlangt hat, stellt einen in Reichweite. Beißen und brennen kann er nur auf
+  dem Weg nach oben; der Weg herunter gehört dem Helden.
+* **Glutspeien** — er steigt 110 bis 150 px vom Helden entfernt aus dem Boden,
   wirft den Kopf zurück und speit Klumpen aus Magma, die dort weiterbrennen, wo
   sie landen: einer auf den Helden, die anderen **hinter** ihn, vom Kopf weg. Nie
-  dazwischen — der Weg zum Kopf bleibt frei. Danach hängt der Kopf 2,1 Sekunden
-  tief und pendelnd, 54 px über dem Boden: Ein Hieb vom Boden trifft den Kiefer,
-  ein Hüpfer den ganzen Kopf.
+  dazwischen — der Weg zum Kopf bleibt frei. Danach hängt der Kopf 2,8 Sekunden
+  tief und pendelnd, 34 px über dem Boden, in Kopfhöhe des Helden: Ein Hieb vom
+  Boden trifft den ganzen Kopf.
 * **Feuerwelle** — er geht an die ferne Wand und schwimmt die ganze Kammer
   entlang knapp unter dem Boden, und hinter ihm schlägt der Boden als Feuer
   hoch, den ganzen Weg. Der Boden ist kein Ort, an dem man dann sein will; die
   vier Absätze sind es.
 
-Wer den hängenden Kopf genug trifft — 7 Schaden —, holt ihn herunter: Er schlägt
-betäubt auf den Boden, liegt dort 2,4 Sekunden und sackt dabei zum Helden hin,
+Wer den hängenden Kopf genug trifft — 5 Schaden —, holt ihn herunter: Er schlägt
+betäubt auf den Boden, liegt dort 3 Sekunden und sackt dabei zum Helden hin,
 nie auf ihn. Das ist das lange Fenster. Ab der Hälfte bricht er zweimal
 hintereinander durch, und das Feuer, das er oben am Scheitel aufwirft, kommt als
 Regen wieder herunter.
@@ -687,12 +759,49 @@ Dazu brauchte es elf Schaden in einem einzigen Fenster, um ihn umzuwerfen; das
 schaffte kaum jemand, und das lange Fenster kam zweimal pro Kampf. Jetzt sind es
 sieben.
 
-Derselbe lesende Bot erledigt ihn jetzt in **63 bis 73 Sekunden** und kassiert
-dabei 5 bis 8 Herzen — mit genau den Relikten, die man bis dahin hat, und damit
-gegen 64 statt 58 Leben. Die Panzerung bleibt Panzerung, die Feuerwelle bleibt,
-wie sie war, und wer stehen bleibt, zahlt weiter: 13 bis 17 Herzen in 45
-Sekunden, gegen keines für den, der liest. Wer ihn löscht, bekommt die
-**Glutklinge**.
+Derselbe lesende Bot erledigte ihn danach in **63 bis 73 Sekunden** und
+kassierte dabei 5 bis 8 Herzen.
+
+#### Immer noch zu mächtig — diesmal gemessen wie ein Mensch
+
+Der Bot von damals war kein Mensch: Er wusste auf den Pixel, wo der Kopf ist, sah
+jeden Zustandswechsel im selben Bild, in dem er geschah, und hüpfte im richtigen
+Moment, um den hängenden Kopf zu erwischen. Gespielt fühlte sich der Wurm weiter
+an wie einer, den man nicht treffen kann — und nachgemessen stimmte das. Ein
+Bot, der den Kampf **0,3 Sekunden zu spät** sieht, wie ein Mensch eben, und **nur
+vom Boden aus** zuschlägt, zeigte, woran es lag:
+
+1. Der hängende Kopf hing 54 px hoch, sein Trefferfeld endete 28 px über dem
+   Boden — ein Hieb im Stehen reicht bis 33 px hinauf. Fünf Pixel Überlappung,
+   und keine, sobald er nach oben pendelte. Wer nicht hüpfte, traf ihn kaum.
+2. Das Trefferfeld des Kopfes war 60 × 52 px, der gezeichnete Schädel streckt
+   die Schnauze aber 46 px nach vorn — ausgerechnet der Teil, auf den man
+   zuschlägt, war nicht da.
+3. Der Durchbruch stand 0,4 s still. Wer ihn mit einer Viertelsekunde
+   Reaktionszeit sah, hatte eine Zehntelsekunde, um unter ihm herauszukommen.
+4. Nach dem Durchbruch steckte der Kopf 1,5 s fest — das Ausweichen, das der
+   Durchbruch verlangt, trägt einen aber gerade von ihm weg. Umdrehen und
+   zurücklaufen kostete den größten Teil davon.
+
+Jetzt hängt der Kopf in Kopfhöhe des Helden, sein Trefferfeld ist so groß wie der
+gezeichnete Schädel (80 × 64 px), der Durchbruch steht 0,55 s still, der Kopf
+steckt 2,3 s fest und hängt nach dem Speien 2,8 s, und er steigt näher am Helden
+auf. 5 statt 7 Schaden holen ihn herunter, und er liegt 3 statt 2,4 s. Er hat 44
+statt 58 Leben, sein Durchbruch und sein Biss kosten ein Herz statt zwei, und wer
+ihm auf dem Weg herunter entgegenkommt, wird nicht mehr von den nachfolgenden
+Platten erschlagen.
+
+Derselbe menschenähnliche Bot, mit den vier Relikten, die man bis dahin hat, in
+je fünf bzw. vier Läufen:
+
+| | vorher | jetzt |
+| --- | --- | --- |
+| bis er fällt | 51–72 s | 31–47 s |
+| verlorene Herzen | 1–4 | 0–2 |
+
+Die Panzerung bleibt Panzerung, die Feuerwelle bleibt, wie sie war, und wer
+stehen bleibt, zahlt weiter (siehe die Tabelle unten). Wer ihn löscht, bekommt
+die **Glutklinge** — und seine **Feuerwelle**.
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
@@ -864,7 +973,7 @@ Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Lä
 | Gierschlund, 45 s | Biss 0,63 s, Münzen 0,6 s, Zunge 0,57 s, Schlucken 0,6 s | 16–28 Herzen | 0–2 |
 | Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
 | Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0–1 |
-| Ignivor, 45 s | Durchbruch 0,4 s Stillstand | 13–17 Herzen | 0 |
+| Ignivor, 45 s | Durchbruch 0,55 s Stillstand | 7–12 Herzen | 0–5 |
 | Vesperon, 40 s | Sturzflug 0,57 s | 29–32 Herzen | 9–12 |
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
@@ -1123,7 +1232,8 @@ src/
   entities/  Physikkörper, Spieler, Gegner, Boss, Projektile, Pickups, Plattformen;
              mimic.ts, colossus.ts, spider.ts, wyrm.ts, vesper.ts und shadow.ts
              für die Arenabosse, relics.ts für die Relikte und wie die Monster
-             sie verrechnen, und roster.ts, das alle Gegner aus ihrer Art baut
+             sie verrechnen, skills.ts für die Angriffe, die die Bosse dem
+             Helden beibringen, und roster.ts, das alle Gegner aus ihrer Art baut
   render/    Parallax-Hintergrund, Kachel-Renderer, Deko, Sprite-Helfer, Palette
   fx/        Partikel und Schadenszahlen
   ui/        HUD-Bausteine (Herzen, Bossleiste, Panels)
@@ -1180,6 +1290,7 @@ npm run verify:bonus   # letzter Edelstein, Prismarch, und die geschärfte Kling
 npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run verify:relics  # gibt jeder Boss sein Relikt her, und tut jedes, was es sagt?
+npm run verify:skills  # bringt jeder Boss seinen Angriff bei, und trifft jeder, wie er soll?
 npm run suite          # breite Reihe: Zustände, Eingabe, Pickups, Bildzeit je Zone
 npm run playtest       # Bot spielt das Level mit echter Physik und meldet Hänger
 npm run screenshots    # erzeugt die Bilder in screenshots/
