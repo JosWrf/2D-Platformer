@@ -6,15 +6,18 @@ import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
 /**
- * Health before the hero is sized up: 190, which the eight relics of the road
- * make 303. He was given 48 at first, and the reading bot felled him in 17 s,
+ * Health before the hero is sized up: 215, which the relics of the road make
+ * about 360. He was given 48 at first, and the reading bot felled him in 17 s,
  * before he had wound himself twice: his legs are always in reach, and by the
  * clock tower every swing also throws the water crescent and every finisher
  * carries the ember - about eight damage a second while in reach, and a hero
  * who reads him is in reach four fifths of the fight. At 150 the same bot
- * needed 40 s; at 190, 47 to 59.
+ * needed 40 s; at 190, 47 to 59 - and a hero who never stopped swinging at his
+ * legs had him down in 41 s, having seen six moves. Each move is a bar of
+ * warning and a bar of blows: what the clock has to show is moves, and 215
+ * gives him one more of them.
  */
-const CLOCK_HP = 190;
+const CLOCK_HP = 215;
 /**
  * The beat. 120 to the minute, the tempo of his music, and everything he does
  * lands on one of these. From half health on it quickens to 0.4 s: the bar,
@@ -41,6 +44,8 @@ const PIVOT_Y = 46;
  * about 210 px off, centre to centre, and never one on a plank.
  */
 const REACH = 200;
+/** What the pendulum costs whoever it catches. */
+const PENDULUM_DAMAGE = 2;
 const BOB_R = 15;
 /** Bob centre above the floor at the bottom of a sweep, and how far it rises at the ends. */
 const BOB_LOW = 18;
@@ -53,6 +58,16 @@ const GEAR_SPEED_FAST = 240;
 /** A gear sent back by a swing, on its way home - and what it does when it gets there. */
 const GEAR_BACK = 470;
 const GEAR_DAMAGE = 2;
+/**
+ * How long a gear spins on the spot of the floor it fell on before the blade
+ * can catch its teeth. Without it, a hero who stood at his legs and never
+ * stopped swinging sent nearly every gear home by accident - it lands a
+ * stride in front of him - and the move that warns a close hero to step back
+ * cost him nothing and paid him two. One a stride or more off reaches the
+ * blade later than this, so a hero who stepped back while it was told bats it
+ * as before.
+ */
+const GEAR_BITE = 0.22;
 const RING_SPEED = 320;
 const RING_SPEED_FAST = 360;
 /** The ring is this high along the floor: an ordinary jump clears it. */
@@ -160,8 +175,9 @@ abstract class ClockPart extends Projectile {
  * Zahnräder: a gear out of the hatch in his belly, down onto the floor and
  * rolling at the hero. It hurts only on its way to him - one that has rolled
  * past him is leaving, and walking after it costs nothing. A swing of the
- * blade on it, or the guard at the moment it arrives, sends it back the way it
- * came, faster, at him: two damage where it lands.
+ * blade on it once it has bitten into the floor (GEAR_BITE), or the guard at
+ * the moment it arrives, sends it back the way it came, faster, at him: two
+ * damage where it lands.
  *
  * It hops out of the hatch and falls for 0.3 s before it rolls, and that fall
  * is the warning a hero standing close gets on top of the bar's. Measured, it
@@ -176,6 +192,8 @@ class Cog extends ClockPart {
   private glint = 0;
   private toward = true;
   private t = 0;
+  /** Seconds on the floor. */
+  private rolled = 0;
 
   constructor(
     clock: Clockwork,
@@ -183,10 +201,11 @@ class Cog extends ClockPart {
     y: number,
     private readonly dir: number,
     private readonly speed: number,
+    straightDown = false,
   ) {
     super(clock, x - GEAR_R, y - GEAR_R, GEAR_R * 2, GEAR_R * 2);
     // A little hop out of the hatch, then it falls.
-    this.vx = dir * 50;
+    this.vx = straightDown ? 0 : dir * 50;
     this.vy = -90;
   }
 
@@ -248,7 +267,8 @@ class Cog extends ClockPart {
       });
     }
     if (this.mode === 'roll') {
-      if (p.bladeLive && rectsOverlap(p.swordRect(), this.rect)) {
+      this.rolled += dt;
+      if (this.rolled >= GEAR_BITE && p.bladeLive && rectsOverlap(p.swordRect(), this.rect)) {
         this.turn(world);
       } else if (this.toward && !p.dead && rectsOverlap(this.hitBox(), p.rect)) {
         const blow = strikeHero(world, 1, sign(this.vx));
@@ -865,7 +885,11 @@ export class Clockwork extends Enemy {
       const ny = clamp(b.y, p.y, p.y + p.h);
       if ((nx - b.x) ** 2 + (ny - b.y) ** 2 >= BOB_R * BOB_R) continue;
       const dir = this.pendSide * (Math.sin((Math.PI * this.pendT) / this.pendBeat) >= 0 ? 1 : -1);
-      const blow = strikeHero(world, 1, dir);
+      // The one blow of his that costs two: a bar of warning, the bob swung
+      // back for all to see, and brass the weight of a man. At one, a hero who
+      // stood at his legs and never stopped swinging walked out of the tower
+      // with four hearts left; his silk caught half of what reached him.
+      const blow = strikeHero(world, PENDULUM_DAMAGE, dir);
       if (blow === 'parried') this.jam(world);
       else if (blow === 'hit') this.pendHit = sweep;
       return;
@@ -1049,7 +1073,12 @@ export class Clockwork extends Enemy {
 
     switch (this.state) {
       case 'walk':
-        if (this.beat === 0 && this.inState >= 4 && !this.hazardsLive) this.beginTell(world);
+        // A hero already at his feet gets the next count-in on the next Eins;
+        // one further off is walked at for a bar first. With a bar of walking
+        // every time, a hero who stood at his legs and never stopped swinging
+        // saw a move every six or seven seconds and lost three hearts in the
+        // forty it took him - the clock was mostly walking on the spot.
+        if (this.beat === 0 && (this.inState >= 4 || this.atHisFeet(world)) && !this.hazardsLive) this.beginTell(world);
         else this.step(world);
         break;
       case 'tell':
@@ -1074,6 +1103,12 @@ export class Clockwork extends Enemy {
     } else {
       audio.play('blip', this.beat === 0 ? 1.4 : 2);
     }
+  }
+
+  /** Whether the hero stands where his legs can be reached from the floor. */
+  private atHisFeet(world: World): boolean {
+    const p = world.player;
+    return !p.dead && Math.abs(p.cx - this.cx) < NEAR + 50 && p.bottom > this.floorY - 40;
   }
 
   /** One step at the hero, if he is not already at his feet. */
@@ -1253,7 +1288,13 @@ export class Clockwork extends Enemy {
     const p = world.player;
     const dir = p.cx >= this.cx ? 1 : -1;
     this.facing = dir;
-    const gear = new Cog(this, this.cx + dir * 30, this.floorY - 52, dir, this.phaseTwo ? GEAR_SPEED_FAST : GEAR_SPEED);
+    // A stride in front of him - or, onto a hero who stands right beneath the
+    // hatch, straight down. Thrown a stride out every time, the gear landed
+    // behind a hero between his legs and rolled away from him: the one spot
+    // the move should warn him off was the one place it never reached.
+    const beneath = Math.abs(p.cx - this.cx) < 30;
+    const speed = this.phaseTwo ? GEAR_SPEED_FAST : GEAR_SPEED;
+    const gear = new Cog(this, beneath ? this.cx : this.cx + dir * 30, this.floorY - 52, dir, speed, beneath);
     world.spawnProjectile(gear);
     this.parts.push(gear);
     this.released();
@@ -1264,7 +1305,11 @@ export class Clockwork extends Enemy {
   private ring(world: World): void {
     const speed = this.phaseTwo ? RING_SPEED_FAST : RING_SPEED;
     for (const dir of [-1, 1]) {
-      const chime = new Chime(this, this.cx + dir * 30, dir, speed);
+      // Out from under him, not from beside him: the rings used to start 30 px
+      // either side of his middle, and a hero standing between his feet - right
+      // where one who never stops swinging ends up - was between them, and the
+      // bell never touched him.
+      const chime = new Chime(this, this.cx + dir * 6, dir, speed);
       world.spawnProjectile(chime);
       this.parts.push(chime);
     }

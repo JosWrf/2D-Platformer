@@ -41,10 +41,14 @@ const dist = arg('dist', null);
  *   seconds     - how long the reader may take, at most (his median)
  *   hearts      - how many hearts the reader may lose, at most (his median),
  *                 always short of the hearts the hero has
- *   masher      - how many hearts the masher has to lose at least (his
+ *   masher      - how many blows the masher has to take at least (his
  *                 median) - or not get the boss down at all. Comparing rates
  *                 alone let a masher through who lost one heart where the
  *                 reader lost none: that is a boss that does not need reading.
+ *                 What the silk catches counts as a blow taken: it is the
+ *                 hero's relic that kept the heart, not the boss that spared
+ *                 it - against a slow boss it grows back between nearly every
+ *                 two blows.
  */
 const BAND = {
   early: { seconds: 60, hearts: 2, masher: 3 },
@@ -126,13 +130,14 @@ for (const row of rows) {
       hearts !== null && hearts <= band.hearts && hearts < row.heroHearts,
     ]);
     if (row.masher.length) {
-      const mash = median(row.masher.map((r) => r.hearts));
+      const mash = median(row.masher.map((r) => r.hearts + (r.saves ?? 0)));
+      const read = median(row.reader.map((r) => r.hearts + (r.saves ?? 0)));
       const mashSecs = median(row.masher.map((r) => (r.felled ? r.seconds : 120)));
-      const readRate = hearts / Math.max(1, secs ?? 1);
+      const readRate = read / Math.max(1, secs ?? 1);
       const mashRate = mash / Math.max(1, mashSecs ?? 1);
       const mashFell = row.masher.filter((r) => r.felled).length;
       checks.push([
-        `${row.name}: mashing does not work - ${mash} hearts in ${mashSecs} s (at least ${band.masher}, or no fall), against ${hearts} in ${secs} s reading`,
+        `${row.name}: mashing does not work - ${mash} blows in ${mashSecs} s (at least ${band.masher}, or no fall), against ${read} in ${secs} s reading`,
         (mash >= band.masher || mashFell * 2 < row.masher.length) && mashRate >= readRate * 2,
       ]);
     }

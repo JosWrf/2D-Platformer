@@ -50,7 +50,8 @@ export const ROAD = [
   { kind: 'vesper', name: 'Vesperon', relic: 'blutdurst', band: 'late' },
   { kind: 'knight', name: 'Morvain', relic: 'schattenschritt', band: 'late' },
   { kind: 'shadow', name: 'Umbra', relic: 'zweiteratem', band: 'late' },
-  { kind: 'warden', name: 'Splitterwächter', relic: 'splitterparade', band: 'late' },
+  // A mini-boss: a lighter fight than the ones around it, measured as one.
+  { kind: 'warden', name: 'Splitterwächter', relic: 'splitterparade', band: 'middle' },
   { kind: 'hydra', name: 'Die Fünfkronige', relic: 'hydrablut', band: 'late' },
   { kind: 'prismarch', name: 'Prismarch', relic: 'klingenwelle', band: 'late' },
 ];

@@ -1421,9 +1421,10 @@ const WARDEN_STAGGER_REST = 3.4;
 /**
  * Health before the hero is sized up. Sixteen was a third of the knight's;
  * with the relics of the road it fell in eight seconds to a hero who read it,
- * before it had shown each of its three moves once.
+ * before it had shown each of its three moves once, and a hero who only held
+ * the attack key saw one move in nine seconds - which his silk caught.
  */
-const WARDEN_HP = 32;
+const WARDEN_HP = 46;
 
 /**
  * The Shard Warden: what the rift grew in the knight's place.
@@ -1443,6 +1444,14 @@ export class Warden extends Enemy {
   private poise = POISE;
   /** That figure, once it has seen the blade coming. */
   private poiseMax = POISE;
+  /**
+   * Set when a blow lands while it winds up; cleared when the next move
+   * begins. The knight's rule, which it grew from him: hit it in its wind-up
+   * and the blow comes early - once a move. Measured before this, a hero who
+   * only held the attack key next to it was struck once in thirteen seconds,
+   * because it stood in its own windows while he hit it.
+   */
+  private provoked = false;
 
   constructor(x: number, y: number) {
     super('warden', x, y);
@@ -1482,6 +1491,14 @@ export class Warden extends Enemy {
     audio.play('hit');
     const committed = this.state !== 'wait' && this.state !== 'stalk' && this.state !== 'recover';
     if (!committed) this.vx = fromDir * 130;
+    const winding = this.state === 'slamWind' || this.state === 'lungeWind';
+    if (winding && !this.provoked && this.timer > 0.14 && !(this.poise <= 0 && this.poiseLock <= 0)) {
+      this.provoked = true;
+      this.timer = 0.16;
+      audio.play('parry', 0.6);
+      world.particles.text(this.cx, this.y - 12, 'GEREIZT!', '#d9b0ff');
+      world.particles.burst(this.cx, this.cy - 6, 12, '#e2c4ff', { speed: 210, shape: 'spark' });
+    }
     if (this.poise <= 0 && this.poiseLock <= 0) {
       this.poise = this.poiseMax;
       this.poiseLock = WARDEN_STAGGER_REST;
@@ -1531,7 +1548,7 @@ export class Warden extends Enemy {
         this.vx = approach(this.vx, 0, 700 * dt);
         if (this.timer <= 0) {
           this.state = 'stalk';
-          this.timer = rand(0.5, 0.9);
+          this.timer = rand(0.4, 0.7);
         }
         break;
 
@@ -1541,6 +1558,7 @@ export class Warden extends Enemy {
         this.vx = approach(this.vx, want, 620 * dt);
         if (this.timer <= 0) {
           this.hitThisMove = false;
+          this.provoked = false;
           this.core = 1;
           if (dist < 84) {
             this.state = 'slamWind';

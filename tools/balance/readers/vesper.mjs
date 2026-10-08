@@ -7,7 +7,8 @@
  *     rhythm of the wind-up - planned only off a wind-up seen with at least
  *     0.15 s of it left, and pressed up to 0.07 s early or late. A parried
  *     dive puts the lord on the roof. Where no parry can be planned, he runs
- *     off the line as it locks;
+ *     off the line as it locks, away from the side it comes from and just far
+ *     enough to be clear of where it lands and slides, and goes in from there;
  *   - on the roof (after a dive, or knocked down): in to a sword's length of
  *     him, never into him - he takes off out of a crowd - and swing;
  *   - what flies at him (the blood sickles, a bat coming down, the drops of
@@ -57,9 +58,11 @@ export default function reader(g, h) {
   /**
    * Where to wait while he is in the air: the open middle of the roof, under
    * open sky - the stretch between the planks nearest the middle. His bats
-   * hang 70 px either side of the hero, and a bat whose place is over a plank
-   * settles on the plank and stays there (see the report): waiting under the
-   * planks would keep his swarm out of the fight, which is a flaw of the bats
+   * hang 70 px either side of the hero, and a bat that comes down onto a
+   * plank on its way there lands on it and stays (Bat.update: the one-way
+   * plank catches it, and the bounce on touching pins it). Waiting under the
+   * planks - the room's own middle is the end of the high right plank - would
+   * keep most of his swarm out of the fight, which is a flaw of the bats
    * rather than a reading of him.
    */
   const home = (() => {
@@ -268,11 +271,19 @@ export default function reader(g, h) {
       // Still, facing the side it comes from.
       face(plan.side);
     } else if (dodge) {
-      // Off the line as it locks: away from the side he comes from, and on.
-      if (s === 'dive' || (diveIn !== null && diveIn * DT < 0.34)) {
+      // Off the line as it locks - away from the side he comes from, far
+      // enough to be clear of where he lands and slides, and no further: the
+      // landing is the window, and it is right there.
+      if (dodge.goal === undefined && (s === 'dive' || (diveIn !== null && diveIn * DT < 0.34))) {
         let away = -dodge.side;
-        if ((away > 0 ? room.right - 30 - p.cx : p.cx - room.left - 30) < 20) away = -away;
-        a[away > 0 ? 'right' : 'left'] = true;
+        if ((away > 0 ? room.right - 30 - p.cx : p.cx - room.left - 30) < 90) away = -away;
+        dodge.goal = Math.max(room.left + 20, Math.min(room.right - 20, p.cx + away * 88));
+      }
+      if (dodge.goal !== undefined) {
+        const d = dodge.goal - p.cx;
+        const coming = p.vx * Math.sign(d) > 0 ? (p.vx * p.vx) / 4000 : 0;
+        if (Math.abs(d) > coming + 2) a[d > 0 ? 'right' : 'left'] = true;
+        else face(dodge.side);
       }
     } else if (step) {
       a[step.way > 0 ? 'right' : 'left'] = true;
