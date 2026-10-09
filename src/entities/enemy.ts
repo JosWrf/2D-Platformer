@@ -3642,6 +3642,12 @@ export class Hydra extends Enemy {
         this.state = 'recover';
         this.timer = 0.8;
         this.hitThisMove = true;
+        // The breath and the gust are the head's own, not something already
+        // thrown: knocked off balance, it stops. The breath used to lie on the
+        // floor through the rest of her turn and the next ones, 340 px of it,
+        // for two hearts to whoever stepped into it once the next move began.
+        this.breath = 0;
+        this.gust = 0;
       }
       this.vy += 1400 * dt;
       this.moveAndCollide(world.level, dt);
@@ -3771,7 +3777,10 @@ export class Hydra extends Enemy {
         const aim = clamp(dx, -Hydra.THROW_REACH, Hydra.THROW_REACH);
         const aimY = Math.min(player.cy, this.floorY - 8);
         for (const spread of [-72, 0, 72]) {
-          const vx = (aim + spread) / flight;
+          // Solved from the head it leaves, onto the spot its pool is queued
+          // for. Solved from her middle, every glob came down a hundred pixels
+          // from its pool, and the pools formed where nothing had fallen.
+          const vx = (this.cx + aim + spread - from.x) / flight;
           const vy = (aimY - from.y) / flight - 0.5 * 1150 * flight;
           const glob = new Projectile('blob', from.x - 8, from.y, vx, vy);
           glob.damage = 1;
@@ -3824,7 +3833,7 @@ export class Hydra extends Enemy {
           const aim = clamp(dx, -Hydra.THROW_REACH, Hydra.THROW_REACH);
           const aimY = Math.min(player.cy, this.floorY - 8);
           for (const spread of [-60, 60]) {
-            const vx = (aim + spread) / flight;
+            const vx = (this.cx + aim + spread - from.x) / flight;
             const vy = (aimY - from.y) / flight - 0.5 * 1150 * flight;
             const glob = new Projectile('blob', from.x - 8, from.y, vx, vy);
             world.spawnProjectile(glob);

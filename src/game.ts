@@ -1217,10 +1217,10 @@ export class Game implements World {
           this.player.onDamageDealt(Math.max(0, before - Math.max(0, this.boss.hp)));
           p.dead = true;
         }
-      } else if (!p.resting && !this.player.dead && this.player.isDashing && this.player.invuln <= 0 && this.player.overlaps(p.rect)) {
+      } else if (!p.harmless && !this.player.dead && this.player.isDashing && this.player.invuln <= 0 && this.player.overlaps(p.rect)) {
         // Rolled through it: it flies on, and the Gauklerschritt counts it.
         this.player.dodged(this);
-      } else if (!p.resting && !this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
+      } else if (!p.harmless && !this.player.dead && !this.player.isInvulnerable && this.player.overlaps(p.rect)) {
         if (p.damage <= 0) {
           // Silk: it binds rather than wounds.
           this.player.sticky = Math.max(this.player.sticky, 1.4);

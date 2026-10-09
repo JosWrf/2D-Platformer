@@ -62,6 +62,16 @@ export class Projectile extends Body {
    * none of forty-five.
    */
   resting = false;
+  /**
+   * Whether it can touch the hero now. A coin at rest cannot; nor can one of
+   * the Fünfkronige's embers on its way up: lobbed at a hero on the steps
+   * beside her fire head, the rising coal crossed his height a quarter of a
+   * second after it left her mouth - before an eye could have seen it go. It
+   * burns on the way down, onto where it was aimed.
+   */
+  get harmless(): boolean {
+    return this.resting || (this.kind === 'ember' && !this.friendly && this.vy < 0);
+  }
   damage = 1;
   life = 4;
   spin = 0;
