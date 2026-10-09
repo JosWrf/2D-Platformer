@@ -44,13 +44,36 @@ function resize(): void {
   const cssScale = (fit >= 1 ? Math.floor(fit) : fit) / dpr;
   canvas.style.width = `${ART_W * cssScale}px`;
   canvas.style.height = `${ART_H * cssScale}px`;
-  frame.style.width = `${ART_W * cssScale + 4}px`;
+  frame.style.width = `${ART_W * cssScale}px`;
+  // Centred by the layout, the picture can start half a device pixel in at a
+  // fractional scaling (125%, 150%), and then every other row of art pixels
+  // is a device pixel taller than its neighbours. Nudged onto whole device
+  // pixels, every art pixel is the same size again.
+  canvas.style.transform = '';
+  const box = canvas.getBoundingClientRect();
+  const dx = Math.round(box.left * dpr) / dpr - box.left;
+  const dy = Math.round(box.top * dpr) / dpr - box.top;
+  if (dx !== 0 || dy !== 0) canvas.style.transform = `translate(${dx}px, ${dy}px)`;
   // The game draws in its 960×540 logical view.
   ctx.setTransform(ART_W / VIEW_W, 0, 0, ART_H / VIEW_H, 0, 0);
   ctx.imageSmoothingEnabled = false;
 }
 resize();
 window.addEventListener('resize', resize);
+
+// Moved to a screen of another density (or zoomed), the scale changes without
+// the window changing size: watch the density itself.
+let density: MediaQueryList | null = null;
+function watchDensity(): void {
+  density?.removeEventListener('change', onDensity);
+  density = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  density.addEventListener('change', onDensity);
+}
+function onDensity(): void {
+  resize();
+  watchDensity();
+}
+watchDensity();
 
 for (const evt of ['pointerdown', 'keydown'] as const) {
   window.addEventListener(evt, () => audio.unlock(), { once: true });
