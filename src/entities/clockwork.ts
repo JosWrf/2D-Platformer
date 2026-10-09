@@ -1,7 +1,55 @@
 import { audio } from '../core/audio';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow } from '../render/sprites';
+import { ART, snap, type PixelSprite } from '../render/pixel';
+import { shadow } from '../render/sprites';
 import type { World } from '../world/context';
+import { ellipseCells4, line4, runLine } from './boss-pixels';
+import {
+  ANKLE,
+  BELL,
+  BELL_TURNS,
+  BOB,
+  BOB_GHOST,
+  BOB_HOT,
+  CYLINDER,
+  CYLINDER_TOP,
+  FACE,
+  FACE_BROKEN,
+  FACE_C,
+  FACE_DARK,
+  FACE_UP,
+  FOOT,
+  HAMMER_HEAD,
+  HANDS,
+  HATCH,
+  KEY_FRAMES,
+  LAMP,
+  PLATE,
+  ROLL,
+  ROLL_HOT,
+  ROLL_STEPS,
+  ROLL_TEETH,
+  ROLL_TRAIL,
+  SIGN,
+  SIGN_LIT,
+  SIGN_R,
+  SPRING,
+  TORSO,
+  TORSO_TOP,
+  TORSO_W,
+  WINDOW,
+  WINDOW_COGS,
+  WORKS_COGS,
+  WORKS_WELL,
+  chimeArc,
+  cogFrames3,
+  cogStep,
+  facingCols,
+  paint,
+  markGrid,
+  ringArc,
+  sprite,
+} from './clockwork-art';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
@@ -98,13 +146,6 @@ const TELL_PITCH: Record<Move, number> = { pendel: 0.8, gears: 1.15, bell: 0.95,
 const HOUR_REST = (-5 * Math.PI) / 6;
 const MINUTE_REST = -Math.PI / 6;
 
-const BRASS_HI = '#f6d98a';
-const BRASS = '#d9a548';
-const BRASS_MID = '#ad7a30';
-const BRASS_DARK = '#6c4518';
-const BRASS_EDGE = '#3a2410';
-const STEEL = '#b3bcc6';
-const STEEL_DARK = '#5d6670';
 
 type Blow = 'parried' | 'hit' | 'missed';
 
@@ -306,21 +347,14 @@ class Cog extends ClockPart {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    const x = this.cx;
-    const y = this.cy;
     const back = this.mode === 'back';
-    ctx.save();
-    if (back || this.glint > 0) {
-      ctx.globalCompositeOperation = 'lighter';
-      // The way home, as a smear of light behind it.
-      for (let i = 1; i <= 3; i++) {
-        glow(ctx, x - sign(this.vx) * i * 11, y, 15 - i * 2, 'rgba(255,236,170,0.32)');
-      }
-      glow(ctx, x, y, 26, `rgba(255,236,170,${(0.45 + this.glint * 0.4).toFixed(3)})`);
-      ctx.globalCompositeOperation = 'source-over';
+    if (back) {
+      // The way home: a trail of itself behind it, cooling.
+      for (let i = 3; i >= 1; i--) centred(ctx, sprite(`rollTrail${i}`, ROLL_TRAIL[i - 1]), this.cx - sign(this.vx) * i * 11, this.cy);
     }
-    drawGear(ctx, x, y, GEAR_R, 9, this.rot, back ? '#ffe7a2' : BRASS, back ? '#fff8dc' : BRASS_HI, BRASS_EDGE);
-    ctx.restore();
+    const hot = back || this.glint > 0.5;
+    const k = cogStep(this.rot, ROLL_TEETH, ROLL_STEPS);
+    centred(ctx, sprite(`roll${hot ? 'Hot' : ''}${k}`, (hot ? ROLL_HOT : ROLL)[k]), this.cx, this.cy);
   }
 }
 
@@ -365,26 +399,20 @@ class Chime extends ClockPart {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    const dir = sign(this.vx);
-    const x = this.cx;
-    const floor = this.clock.floor;
-    const fade = this.struck ? 0.45 : 1;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    // The ring itself, and two echoes running behind it.
-    for (let i = 0; i < 3; i++) {
-      const bx = x - dir * i * 14;
-      const k = (1 - i * 0.3) * fade;
-      ctx.strokeStyle = `rgba(255,${200 + i * 15},${120 + i * 30},${(0.85 * k).toFixed(3)})`;
-      ctx.lineWidth = 4 - i;
-      ctx.beginPath();
-      ctx.ellipse(bx - dir * 6, floor, 12, Math.max(4, this.h - i * 4), 0, dir > 0 ? -Math.PI / 2 : Math.PI / 2, dir > 0 ? Math.PI / 2 : (3 * Math.PI) / 2);
-      ctx.stroke();
+    const dir: 1 | -1 = this.vx < 0 ? -1 : 1;
+    const floor = snap(this.clock.floor);
+    // The ring itself and two echoes running behind it, the front of each a
+    // hard arc standing on the floor; spent, a step cooler.
+    const tones = this.struck ? ['f', 'o', 'O'] : ['F', 'Y', 'f'];
+    for (let i = 2; i >= 0; i--) {
+      const bx = snap(this.cx - dir * (i * 14 + 6) - ART / 2);
+      const ry = Math.max(2, Math.round((this.h - i * 4) / ART));
+      const arc = sprite(`chime${ry}${dir}${tones[i]}`, chimeArc(ry, dir, tones[i]));
+      arc.draw(ctx, bx - (dir > 0 ? 0 : 6) * ART, floor - ART - ry * ART);
     }
-    glow(ctx, x, floor - 10, 30, `rgba(255,214,140,${(0.4 * fade).toFixed(3)})`);
-    ctx.fillStyle = `rgba(255,250,225,${(0.9 * fade).toFixed(3)})`;
-    ctx.fillRect(x - 2, floor - this.h + 2, 3, this.h - 3);
-    ctx.restore();
+    const rows = Math.max(1, Math.round(this.h / ART) - 1);
+    ctx.fillStyle = paint(this.struck ? 'f' : 'w');
+    ctx.fillRect(snap(this.cx - ART / 2), floor - rows * ART, ART, rows * ART);
   }
 }
 
@@ -507,51 +535,38 @@ class Spear extends ClockPart {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    const floor = this.clock.floor;
-    const beat = this.clock.beatGlow;
-    ctx.save();
-    // The mark: a little dial on the floor, burning brighter as the bar runs out.
+    const floor = snap(this.clock.floor);
+    const beat = this.clock.beatGlow > 0.5;
+    const mx = snap(this.markX - ART / 2);
+    // The mark: a little dial on the floor, brighter once the hand is over it,
+    // brightest on every tick.
     if (this.stage !== 'home') {
-      const urgency = this.stage === 'mark' ? 0.45 : this.stage === 'rise' || this.stage === 'hover' ? 0.8 : 0.3;
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, this.markX, floor - 3, 34, `rgba(255,190,110,${(0.3 * urgency + beat * 0.15).toFixed(3)})`);
-      ctx.strokeStyle = `rgba(255,214,150,${(0.55 + urgency * 0.4).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(this.markX, floor - 2, HAND_HALF + 10, 6, 0, 0, TAU);
-      ctx.stroke();
-      for (let i = 0; i < 12; i++) {
-        const a = (i / 12) * TAU;
-        ctx.beginPath();
-        ctx.moveTo(this.markX + Math.cos(a) * (HAND_HALF + 6), floor - 2 + Math.sin(a) * 3.6);
-        ctx.lineTo(this.markX + Math.cos(a) * (HAND_HALF + 10), floor - 2 + Math.sin(a) * 6);
-        ctx.stroke();
+      const over = this.stage === 'rise' || this.stage === 'hover';
+      const tone = this.stage === 'mark' ? (beat ? 'b' : 'o') : over ? (beat ? 'F' : 'f') : 'b';
+      sprite(`mark${tone}`, markGrid(tone)).draw(ctx, mx - 11 * ART, floor - 4 * ART);
+      if (over) {
+        // The line it will come down along: the two edges of its column, running down.
+        const top = snap(this.hoverY);
+        const run = Math.floor(this.t * 12) % 6;
+        ctx.fillStyle = paint(beat ? 'F' : 'f');
+        for (const ex of [mx - (HAND_HALF / ART) * ART, mx + (HAND_HALF / ART) * ART]) {
+          for (let y = top + run * ART; y < floor - 3 * ART; y += 6 * ART) ctx.fillRect(ex, y, ART, 3 * ART);
+        }
       }
-      if (this.stage === 'hover' || this.stage === 'rise') {
-        // The line it will come down along.
-        const g = ctx.createLinearGradient(0, this.hoverY, 0, floor);
-        g.addColorStop(0, 'rgba(255,214,150,0)');
-        g.addColorStop(1, `rgba(255,214,150,${(0.16 + beat * 0.12).toFixed(3)})`);
-        ctx.fillStyle = g;
-        ctx.fillRect(this.markX - HAND_HALF, this.hoverY, HAND_HALF * 2, floor - this.hoverY);
-      }
-      ctx.globalCompositeOperation = 'source-over';
     }
     if (this.stage !== 'mark') {
       if (this.stage === 'stab' || this.flashT > 0.5) {
-        // The streak it leaves coming down.
-        ctx.globalCompositeOperation = 'lighter';
-        const g = ctx.createLinearGradient(0, this.hoverY, 0, floor);
-        g.addColorStop(0, 'rgba(255,240,200,0)');
-        g.addColorStop(1, `rgba(255,240,200,${(0.7 * this.flashT).toFixed(3)})`);
-        ctx.fillStyle = g;
-        ctx.fillRect(this.markX - 5, this.hoverY, 10, floor - this.hoverY);
-        ctx.globalCompositeOperation = 'source-over';
+        // The streak it leaves coming down: a white core in yellow.
+        const top = snap(this.hoverY);
+        ctx.fillStyle = paint('F');
+        ctx.fillRect(mx - ART, top, 3 * ART, floor - top);
+        ctx.fillStyle = paint('w');
+        ctx.fillRect(mx, top, ART, floor - top);
       }
       const down = this.stage === 'home' ? Math.atan2(this.clock.floor - FACE_Y - this.ty, this.clock.cx - this.tx) : Math.PI / 2;
-      drawHand(ctx, this.tx - Math.cos(down) * this.length, this.ty - Math.sin(down) * this.length, down, this.length, this.hand, 1);
+      const k = ((Math.round(down / (TAU / 16)) % 16) + 16) % 16;
+      centred(ctx, sprite(`hand-${this.hand}-${k}`, HANDS[this.hand][k]), this.tx - Math.cos(down) * this.length, this.ty - Math.sin(down) * this.length);
     }
-    ctx.restore();
   }
 }
 
@@ -1501,654 +1516,289 @@ export class Clockwork extends Enemy {
 
   /* -------------------------------------------------------------- drawing */
 
+  /*
+   * Drawn from parts on the art grid (clockwork-art.ts), every one a sprite
+   * made once; only straight lines are laid down per frame - the hands on his
+   * dial at twelve angles, the pendulum's rod, the hammer. Everything stands
+   * on the column of his middle (ox below is its left edge). What he lights is
+   * in lights(), never painted here.
+   */
+
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
     if (this.debris.length > 0) {
       this.drawDebris(ctx);
       return;
     }
-    const cx = this.cx + (this.shudder > 0 ? Math.sin(this.clock * 70) * 2 * this.shudder : 0);
-    const floor = this.floorY;
+    // A blow: two or three frames of him all white.
+    const flash = this.flash > 0.78;
+    // Jammed or breaking, he shakes - a whole pixel at a time.
+    const jolt = this.shudder > 0.1 ? (Math.sin(this.clock * 70) > 0 ? ART : -ART) : 0;
+    const ox = snap(this.cx - ART / 2) + jolt;
+    const floor = snap(this.floorY);
+    const facing = this.facing;
     shadow(ctx, this.cx, floor, W * 1.1, 0.35);
-    ctx.save();
-    ctx.translate(cx, floor);
-    // Legs, key and belly turn with him; the pendulum, the bells and the face
-    // do not - a clock that ran backwards would be a different clock.
-    ctx.save();
-    ctx.scale(this.facing, 1);
-    this.drawLegs(ctx);
-    this.drawKey(ctx);
-    ctx.restore();
-    this.drawPendulum(ctx, cx);
-    ctx.save();
-    ctx.scale(this.facing, 1);
-    this.drawTorso(ctx);
-    ctx.restore();
-    this.drawBells(ctx);
-    this.drawFace(ctx);
-    if (this.flash > 0) this.drawFlash(ctx);
-    ctx.restore();
+    this.drawLegs(ctx, ox, floor, facing, flash);
+    this.drawKey(ctx, ox, floor, facing, flash);
+    this.drawPendulum(ctx, ox, floor, flash);
+    this.drawTorso(ctx, ox, floor, facing, flash);
+    this.drawBells(ctx, ox, floor, flash);
+    this.drawFace(ctx, ox, floor, flash);
   }
 
-  /**
-   * The hit flash, as light laid over his shape rather than as a canvas
-   * filter: a filter is paid again for every one of the hundred-odd shapes he
-   * is drawn from, and measured, it tripled what drawing him cost.
-   */
-  private drawFlash(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(255,236,200,${(0.5 * Math.min(1, this.flash)).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(0, -FACE_Y, FACE_R + 4, 0, TAU);
-    ctx.rect(-33, -70, 66, 28);
-    ctx.rect(-28, -46, 16, 46);
-    ctx.rect(12, -46, 16, 46);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private brassFill(ctx: CanvasRenderingContext2D, x0: number, x1: number): void {
-    const g = ctx.createLinearGradient(x0, 0, x1, 0);
-    g.addColorStop(0, BRASS_DARK);
-    g.addColorStop(0.3, BRASS);
-    g.addColorStop(0.55, BRASS_HI);
-    g.addColorStop(1, BRASS_MID);
-    ctx.fillStyle = g;
-  }
-
-  /** Piston legs: brass cylinders, steel rods, broad feet. */
-  private drawLegs(ctx: CanvasRenderingContext2D): void {
-    for (const s of [-1, 1]) {
+  /** Piston legs: brass cylinders, steel rods sliding out of them, broad feet. The stepping one lifts. */
+  private drawLegs(ctx: CanvasRenderingContext2D, ox: number, floor: number, facing: 1 | -1, flash: boolean): void {
+    for (const s of [-1, 1] as const) {
       const stepping = this.stepT < 1 && s === this.stepFoot;
-      const lift = stepping ? Math.sin(Math.PI * this.stepT) * 7 : 0;
-      const lx = s * 20;
-      // Rod.
-      ctx.fillStyle = STEEL_DARK;
-      ctx.fillRect(lx - 3, -30 - lift, 6, 23);
-      ctx.fillStyle = STEEL;
-      ctx.fillRect(lx - 2, -30 - lift, 2, 23);
-      // Foot and ankle.
-      ctx.fillStyle = BRASS_DARK;
-      ctx.beginPath();
-      ctx.moveTo(lx - 13, -lift);
-      ctx.lineTo(lx - 11, -8 - lift);
-      ctx.lineTo(lx + 11, -8 - lift);
-      ctx.lineTo(lx + 14, -lift);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = BRASS_MID;
-      ctx.fillRect(lx - 11, -8 - lift, 22, 2);
-      ctx.fillStyle = STEEL;
-      ctx.beginPath();
-      ctx.arc(lx, -9 - lift, 3.5, 0, TAU);
-      ctx.fill();
-      // Cylinder.
-      this.brassFill(ctx, lx - 8, lx + 8);
-      ctx.fillRect(lx - 8, -46, 16, 20 - lift * 0.3);
-      ctx.fillStyle = BRASS_EDGE;
-      ctx.fillRect(lx - 8, -28 - lift * 0.3, 16, 3);
-      ctx.fillStyle = BRASS_HI;
-      ctx.fillRect(lx - 8, -42, 16, 2);
-      ctx.fillStyle = BRASS_EDGE;
-      ctx.beginPath();
-      ctx.arc(lx, -35, 2, 0, TAU);
-      ctx.fill();
-    }
-  }
-
-  /** The key in his back: turning a notch a tick, and fast while he winds. */
-  private drawKey(ctx: CanvasRenderingContext2D): void {
-    const turn = this.state === 'wind' || this.state === 'intro' ? this.keyAngle : (this.beatCount * Math.PI) / 8;
-    const kx = -38;
-    const ky = -58;
-    ctx.fillStyle = BRASS_MID;
-    ctx.fillRect(kx, ky - 2.5, 8, 5);
-    const spread = Math.cos(turn);
-    for (const s of [-1, 1]) {
-      ctx.fillStyle = s * spread > 0 ? BRASS_HI : BRASS_MID;
-      ctx.beginPath();
-      ctx.ellipse(kx - 4, ky + s * 8 * Math.abs(spread), 5, 7 * Math.abs(spread) + 1, 0, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = BRASS_EDGE;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    }
-    ctx.fillStyle = BRASS_EDGE;
-    ctx.beginPath();
-    ctx.arc(kx - 4, ky, 2.5, 0, TAU);
-    ctx.fill();
-  }
-
-  /** The hips, the belly with its window on the works, and the hatch the gears come out of. */
-  private drawTorso(ctx: CanvasRenderingContext2D): void {
-    // Hips.
-    this.brassFill(ctx, -32, 32);
-    ctx.fillRect(-32, -50, 64, 8);
-    ctx.fillStyle = BRASS_EDGE;
-    ctx.fillRect(-32, -43, 64, 2);
-    ctx.fillStyle = BRASS_HI;
-    for (const rx of [-26, -13, 13, 26]) ctx.fillRect(rx - 1, -48, 2, 2);
-    // Belly.
-    this.brassFill(ctx, -31, 31);
-    ctx.beginPath();
-    ctx.moveTo(-30, -50);
-    ctx.lineTo(-33, -66);
-    ctx.quadraticCurveTo(0, -72, 33, -66);
-    ctx.lineTo(30, -50);
-    ctx.closePath();
-    ctx.fill();
-    // The window, and the works turning behind it.
-    ctx.fillStyle = '#1c120a';
-    ctx.fillRect(-22, -63, 40, 11);
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(-22, -63, 40, 11);
-    ctx.clip();
-    const spin = this.gearSpin + this.beatCount * 0.35;
-    drawGear(ctx, -12, -57, 8, 8, spin, BRASS_MID, BRASS, BRASS_EDGE);
-    drawGear(ctx, 2, -55, 7, 7, -spin * 1.15 + 0.2, BRASS, BRASS_HI, BRASS_EDGE);
-    drawGear(ctx, 13, -60, 5, 6, spin * 1.6, BRASS_MID, BRASS, BRASS_EDGE);
-    ctx.restore();
-    ctx.strokeStyle = BRASS_EDGE;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(-22, -63, 40, 11);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    ctx.fillRect(-21, -62, 38, 2);
-    // The hatch the gears drop out of: a slot that glows open.
-    ctx.fillStyle = '#26170b';
-    ctx.fillRect(20, -62, 9, 11);
-    if (this.hatch > 0.02) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 25, -57, 16, `rgba(255,190,100,${(0.6 * this.hatch).toFixed(3)})`);
-      ctx.restore();
-      ctx.fillStyle = `rgba(255,214,140,${(0.8 * this.hatch).toFixed(3)})`;
-      ctx.fillRect(21, -61, 7, 9 * this.hatch);
-    }
-    // Vents on the shoulders, either side of the face.
-    for (const s of [-1, 1]) {
-      ctx.fillStyle = BRASS_DARK;
-      ctx.fillRect(s * 29 - 3, -76, 6, 10);
-      ctx.fillStyle = BRASS;
-      ctx.fillRect(s * 29 - 4, -78, 8, 3);
-    }
-  }
-
-  /** The two bells on his head, the hammer between them, and the lamp that blinks on every tick. */
-  private drawBells(ctx: CanvasRenderingContext2D): void {
-    const top = -FACE_Y - FACE_R + 2;
-    const ring = this.hammerRing;
-    for (const s of [-1, 1]) {
-      const bx = s * 16 + (ring > 0 ? Math.sin(this.clock * 80 + s) * ring * 1.5 : 0);
-      const by = top - 3;
-      ctx.fillStyle = BRASS_DARK;
-      ctx.fillRect(s * 9 - 1, top - 2, 2, 4);
-      const g = ctx.createLinearGradient(bx - 9, 0, bx + 9, 0);
-      g.addColorStop(0, BRASS_MID);
-      g.addColorStop(0.45, BRASS_HI);
-      g.addColorStop(1, BRASS_DARK);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(bx, by, 9, Math.PI, TAU);
-      ctx.lineTo(bx + 10, by + 2);
-      ctx.lineTo(bx - 10, by + 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = BRASS_EDGE;
-      ctx.beginPath();
-      ctx.arc(bx, by - 9, 1.6, 0, TAU);
-      ctx.fill();
-      if (ring > 0) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(255,236,180,${(0.7 * ring).toFixed(3)})`;
-        ctx.lineWidth = 1.5;
-        for (let i = 1; i <= 2; i++) {
-          ctx.beginPath();
-          ctx.arc(bx, by - 2, 9 + i * 6 * (1.2 - ring), Math.PI * 1.05, Math.PI * 1.95);
-          ctx.stroke();
-        }
-        ctx.restore();
+      const lift = stepping ? Math.round(Math.sin(Math.PI * this.stepT) * 3.5) : 0;
+      const lx = facing * s * 10;
+      for (const [dx, c] of [
+        [-1, 'S'],
+        [0, 's'],
+        [1, 't'],
+      ] as const) {
+        ctx.fillStyle = flash ? WHITE : paint(c);
+        ctx.fillRect(ox + (lx + dx) * ART, floor - 14 * ART, ART, (8 - lift) * ART);
       }
+      at(ctx, sprite('ankle', ANKLE, flash), ox, floor, lx - 1, 6 + lift);
+      at(ctx, sprite('foot', FOOT, flash), ox, floor, lx - 6, 4 + lift);
+      at(ctx, sprite('cylinder', CYLINDER, flash), ox, floor, lx - 4, CYLINDER_TOP);
     }
-    // The hammer: drawn back as the bell's bar runs, and through on the blow.
-    const a = this.hammer * 0.9;
-    ctx.save();
-    ctx.translate(0, top + 1);
-    ctx.rotate(a);
-    ctx.fillStyle = STEEL_DARK;
-    ctx.fillRect(-1.2, -14, 2.4, 14);
-    ctx.fillStyle = STEEL;
-    ctx.beginPath();
-    ctx.arc(0, -15, 3.6, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-    // The lamp.
-    const lampY = top - 20;
-    ctx.fillStyle = BRASS_DARK;
-    ctx.fillRect(-2, lampY + 3, 4, 4);
-    const on = this.state === 'dormant' ? 0 : this.lamp;
-    const rgb = this.phaseTwo ? '255,120,80' : '255,220,140';
-    ctx.fillStyle = on > 0.05 ? `rgba(${rgb},${(0.45 + on * 0.55).toFixed(3)})` : '#4a3420';
-    ctx.beginPath();
-    ctx.arc(0, lampY, 3.6, 0, TAU);
-    ctx.fill();
-    if (on > 0.05) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 0, lampY, 14 + on * 10, `rgba(${rgb},${(0.6 * on).toFixed(3)})`);
-      ctx.restore();
-    }
+  }
+
+  /** The key in his back: a notch a tick, and spinning while he winds. */
+  private drawKey(ctx: CanvasRenderingContext2D, ox: number, floor: number, facing: 1 | -1, flash: boolean): void {
+    const turn = this.state === 'wind' || this.state === 'intro' ? this.keyAngle : (this.beatCount * Math.PI) / 8;
+    const k = ((Math.round(turn / (Math.PI / 4)) % 8) + 8) % 8;
+    const key = sprite(`key${k}`, KEY_FRAMES[k], flash);
+    if (facing > 0) at(ctx, key, ox, floor, -24, 36);
+    else at(ctx, key, ox, floor, 16, 36, -1);
   }
 
   /**
-   * The face: a brass bezel, an ivory dial lit from inside, the four signs,
-   * the hour and minute hands and the red second hand that jumps a quarter
-   * turn a tick - on twelve for every downbeat. Drawn unmirrored, whichever
-   * way he faces: a clock that ran backwards would be a different clock.
+   * The pendulum: a steel rod out of his hips with a brass tube over its first
+   * stretch, a rivet at the pivot, and the bob - burning while it is cocked
+   * on the beat and while it swings, its afterimages strung out behind it.
    */
-  private drawFace(ctx: CanvasRenderingContext2D): void {
-    const fy = -FACE_Y;
-    const lit = this.state === 'dormant' ? 0.15 : this.lit;
-    ctx.save();
-    // Bezel.
-    const bezel = ctx.createLinearGradient(-FACE_R, fy - FACE_R, FACE_R, fy + FACE_R);
-    bezel.addColorStop(0, BRASS_HI);
-    bezel.addColorStop(0.5, BRASS);
-    bezel.addColorStop(1, BRASS_DARK);
-    ctx.fillStyle = bezel;
-    ctx.beginPath();
-    ctx.arc(0, fy, FACE_R + 4, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = BRASS_EDGE;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // The dial - or, with the glass up while he winds, the works behind it.
-    const open = this.glass;
-    const dial = ctx.createRadialGradient(0, fy, 2, 0, fy, FACE_R);
-    dial.addColorStop(0, `rgb(${Math.round(150 + 80 * lit)},${Math.round(132 + 78 * lit)},${Math.round(98 + 60 * lit)})`);
-    dial.addColorStop(1, `rgb(${Math.round(112 + 66 * lit)},${Math.round(92 + 56 * lit)},${Math.round(62 + 36 * lit)})`);
-    ctx.fillStyle = dial;
-    ctx.beginPath();
-    ctx.arc(0, fy, FACE_R, 0, TAU);
-    ctx.fill();
-    if (open > 0.02) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(0, fy, FACE_R - 1, 0, TAU);
-      ctx.clip();
-      ctx.globalAlpha = open;
-      ctx.fillStyle = '#20140a';
-      ctx.fillRect(-FACE_R, fy - FACE_R, FACE_R * 2, FACE_R * 2);
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 0, fy, FACE_R + 6, 'rgba(255,200,110,0.55)');
-      ctx.globalCompositeOperation = 'source-over';
-      const spin = this.keyAngle * 0.6;
-      drawGear(ctx, -9, fy - 7, 11, 10, spin, BRASS, BRASS_HI, BRASS_EDGE);
-      drawGear(ctx, 10, fy + 2, 9, 9, -spin * 1.2, BRASS_MID, BRASS_HI, BRASS_EDGE);
-      drawGear(ctx, -4, fy + 13, 7, 8, spin * 1.5, BRASS, BRASS_HI, BRASS_EDGE);
-      // The spring he is winding.
-      ctx.strokeStyle = STEEL;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      for (let i = 0; i <= 40; i++) {
-        const a = (i / 40) * Math.PI * 6 + spin;
-        const r = 1 + i * 0.22;
-        const px = 12 + Math.cos(a) * r;
-        const py = fy - 12 + Math.sin(a) * r;
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Hour ticks.
-    ctx.strokeStyle = `rgba(70,46,22,${(1 - open * 0.7).toFixed(3)})`;
-    for (let i = 0; i < 12; i++) {
-      if (i % 3 === 0) continue;
-      const a = (i / 12) * TAU;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * (FACE_R - 2), fy + Math.sin(a) * (FACE_R - 2));
-      ctx.lineTo(Math.cos(a) * (FACE_R - 5), fy + Math.sin(a) * (FACE_R - 5));
-      ctx.stroke();
-    }
-
-    // The four signs, and the one he is about to use burning.
-    for (const m of MOVES) {
-      const a = SIGN_ANGLE[m];
-      const on = this.move === m && this.state === 'tell' ? this.signGlow : 0;
-      const sx = Math.cos(a) * 18;
-      const sy = fy + Math.sin(a) * 18;
-      if (on > 0.02) {
-        // Lit: a dark window round it with the sign burning in it, and a ring
-        // of light that beats with the count.
-        ctx.fillStyle = `rgba(40,16,4,${(0.9 * on).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 7.5 * (1 + on * 0.3), 0, TAU);
-        ctx.fill();
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const pulse = 0.7 + this.lamp * 0.3;
-        glow(ctx, sx, sy, 13 + on * 8, `rgba(255,170,60,${(0.55 * on * pulse).toFixed(3)})`);
-        ctx.restore();
-        ctx.strokeStyle = `rgba(255,200,90,${(0.9 * on * pulse).toFixed(3)})`;
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 7.5 * (1 + on * 0.3) + 1, 0, TAU);
-        ctx.stroke();
-      }
-      drawSign(ctx, m, sx, sy, 1 + on * 0.3, on > 0.3 ? '#ffd65a' : `rgba(70,42,18,${(1 - open * 0.7).toFixed(3)})`, on);
-    }
-
-    // Hands: hour, minute - unless they are out over the floor - and the second hand.
-    const handsOut = this.spears.some((s) => s.out);
-    if (!handsOut) {
-      drawHand(ctx, 0, fy, HOUR_REST, 10, 'hour', 1);
-      // The minute hand points at a sign rather than covering it.
-      drawHand(ctx, 0, fy, this.minuteAngle, 12.5, 'minute', 1);
-    }
-    const second = (this.beat / 4) * TAU - Math.PI / 2;
-    if (!handsOut || this.spears.length < 3) {
-      ctx.strokeStyle = '#c0302a';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(-Math.cos(second) * 5, fy - Math.sin(second) * 5);
-      ctx.lineTo(Math.cos(second) * 15, fy + Math.sin(second) * 15);
-      ctx.stroke();
-    }
-    // The hub, which lights with the lamp.
-    ctx.fillStyle = BRASS_EDGE;
-    ctx.beginPath();
-    ctx.arc(0, fy, 3.4, 0, TAU);
-    ctx.fill();
-    if (this.lamp > 0.05 && this.state !== 'dormant') {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 0, fy, 9, `rgba(255,214,140,${(0.7 * this.lamp).toFixed(3)})`);
-      ctx.restore();
-    }
-
-    // The glass: a sheen over the dial, or flipped up on its hinge while he winds.
-    if (open < 0.98) {
-      ctx.fillStyle = `rgba(255,255,255,${(0.14 * (1 - open)).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(-7, fy - 10, 13, 7, -0.5, 0, TAU);
-      ctx.fill();
-    }
-    if (open > 0.02) {
-      ctx.save();
-      ctx.translate(0, fy - FACE_R - 3);
-      ctx.scale(1, Math.max(0.12, 1 - open * 0.88));
-      ctx.fillStyle = 'rgba(200,230,255,0.22)';
-      ctx.strokeStyle = 'rgba(240,250,255,0.6)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.ellipse(0, -FACE_R * open * 0.9, FACE_R, FACE_R, 0, 0, TAU);
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-
-  /** The pendulum: a telescoping rod from his hips, and the brass bob on it. */
-  private drawPendulum(ctx: CanvasRenderingContext2D, drawnCx: number): void {
-    const px = 0;
-    const py = -PIVOT_Y;
-    const bx = this.bobX - drawnCx;
-    const by = this.bobY - this.floorY;
-    const len = Math.hypot(bx - px, by - py);
-    const ang = Math.atan2(by - py, bx - px);
+  private drawPendulum(ctx: CanvasRenderingContext2D, ox: number, floor: number, flash: boolean): void {
+    const px = ox + ART / 2;
+    const py = floor - PIVOT_UP * ART + ART / 2;
     const sweeping = this.pendMode === 'sweep';
     if (sweeping) {
-      // The blur of it going past.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = 1; i <= 3; i++) {
-        const b = this.bobAt(Math.max(0, this.pendT - i * 0.025));
-        glow(ctx, b.x - drawnCx, b.y - this.floorY, BOB_R + 4, `rgba(255,214,140,${(0.28 - i * 0.07).toFixed(3)})`);
+      // Its afterimages, close behind it: a smear, not more bobs.
+      for (let i = 2; i >= 1; i--) {
+        const b = this.bobAt(Math.max(0, this.pendT - i * 0.011));
+        centred(ctx, sprite(`bobGhost${i}`, BOB_GHOST[i - 1], flash), b.x, b.y);
       }
-      ctx.restore();
     }
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(ang);
-    // Outer tube, then the steel rod that slides out of it.
-    const tube = Math.min(len, 34);
-    ctx.fillStyle = BRASS_MID;
-    ctx.fillRect(0, -3, tube, 6);
-    ctx.fillStyle = BRASS_HI;
-    ctx.fillRect(0, -3, tube, 1.5);
-    if (len > tube) {
-      ctx.fillStyle = STEEL_DARK;
-      ctx.fillRect(tube - 2, -1.8, len - tube + 2, 3.6);
-      ctx.fillStyle = STEEL;
-      ctx.fillRect(tube - 2, -1.8, len - tube + 2, 1.2);
+    const dx = this.bobX - px;
+    const dy = this.bobY - py;
+    const len = Math.hypot(dx, dy);
+    // The steel rod with its lit edge, towards the light.
+    const flat = Math.abs(dx) > Math.abs(dy);
+    runLine(ctx, px, py, this.bobX, this.bobY, flash ? WHITE : paint('t'), 2);
+    runLine(ctx, px - (flat ? 0 : ART), py - (flat ? ART : 0), this.bobX - (flat ? 0 : ART), this.bobY - (flat ? ART : 0), flash ? WHITE : paint('S'));
+    if (len > 1) {
+      // The brass tube it slides out of, and the collar at its mouth.
+      const tube = Math.min(len, 34) / len;
+      const ex = px + dx * tube;
+      const ey = py + dy * tube;
+      runLine(ctx, px, py, ex, ey, flash ? WHITE : paint('b'), 3);
+      runLine(ctx, px - (flat ? 0 : ART), py - (flat ? ART : 0), ex - (flat ? 0 : ART), ey - (flat ? ART : 0), flash ? WHITE : paint('y'));
+      if (len > 36) {
+        ctx.fillStyle = flash ? WHITE : paint('O');
+        ctx.fillRect(snap(ex - ART / 2) - ART, snap(ey - ART / 2) - ART, 3 * ART, 3 * ART);
+        ctx.fillStyle = flash ? WHITE : paint('y');
+        ctx.fillRect(snap(ex - ART / 2) - ART, snap(ey - ART / 2) - ART, 2 * ART, ART);
+      }
     }
-    ctx.restore();
-    ctx.fillStyle = BRASS_EDGE;
-    ctx.beginPath();
-    ctx.arc(px, py, 4, 0, TAU);
-    ctx.fill();
-    // The bob.
-    const g = ctx.createRadialGradient(bx - 5, by - 5, 2, bx, by, BOB_R);
-    g.addColorStop(0, BRASS_HI);
-    g.addColorStop(0.6, BRASS);
-    g.addColorStop(1, BRASS_DARK);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(bx, by, BOB_R, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = BRASS_EDGE;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(60,36,14,0.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(bx, by, BOB_R - 5, 0, TAU);
-    ctx.stroke();
-    if (this.pendMode === 'cock' || sweeping) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, bx, by, BOB_R + 10, `rgba(255,220,150,${sweeping ? '0.5' : (0.2 + this.lamp * 0.25).toFixed(3)})`);
-      ctx.restore();
+    ctx.fillStyle = flash ? WHITE : paint('O');
+    ctx.fillRect(ox - ART, floor - (PIVOT_UP + 1) * ART, 3 * ART, 3 * ART);
+    const hot = sweeping || (this.pendMode === 'cock' && this.lamp > 0.4);
+    centred(ctx, sprite(hot ? 'bobHot' : 'bob', hot ? BOB_HOT : BOB, flash), this.bobX, this.bobY);
+  }
+
+  /** Hips, belly and vents, with his works turning behind the window and the hatch glowing open. */
+  private drawTorso(ctx: CanvasRenderingContext2D, ox: number, floor: number, facing: 1 | -1, flash: boolean): void {
+    const [wx0, wx1] = facingCols(WINDOW, facing);
+    ctx.fillStyle = flash ? WHITE : paint('x');
+    ctx.fillRect(ox + wx0 * ART, floor - WINDOW.top * ART, (wx1 - wx0 + 1) * ART, (WINDOW.top - WINDOW.bottom + 1) * ART);
+    if (!flash) {
+      // A notch on every tick, and fast while a gear is told or he winds.
+      const spin = this.gearSpin + this.beatCount * 0.35;
+      for (const g of WINDOW_COGS) {
+        const frames = cogFrames3(g.r, g.teeth, 'Ooby');
+        const k = cogStep(facing * (spin * g.speed + g.phase), g.teeth);
+        const c = (frames[0].length - 1) / 2;
+        at(ctx, sprite(`windowCog${g.r}-${k}`, frames[k]), ox, floor, facing * g.x - c, g.up + c);
+      }
+    }
+    at(ctx, sprite(`torso${facing}`, TORSO[facing > 0 ? '1' : '-1'], flash), ox, floor, -(TORSO_W - 1) / 2, TORSO_TOP);
+    if (this.hatch > 0.02 && !flash) {
+      const [hx0, hx1] = facingCols(HATCH, facing);
+      const n = Math.max(1, Math.round(this.hatch * (HATCH.top - HATCH.bottom + 1)));
+      for (let i = 0; i < n; i++) {
+        ctx.fillStyle = paint(i === 0 ? 'w' : i === n - 1 ? 'f' : 'F');
+        ctx.fillRect(ox + hx0 * ART, floor - (HATCH.top - i) * ART, (hx1 - hx0 + 1) * ART, ART);
+      }
     }
   }
 
-  private drawDebris(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    for (const d of this.debris) {
-      ctx.save();
-      ctx.translate(d.x, d.y);
-      ctx.rotate(d.rot);
-      switch (d.kind) {
-        case 'gear':
-          drawGear(ctx, 0, 0, d.r, 8, 0, BRASS, BRASS_HI, BRASS_EDGE);
-          break;
-        case 'face':
-          ctx.fillStyle = BRASS;
-          ctx.beginPath();
-          ctx.arc(0, 0, d.r + 3, 0, TAU);
-          ctx.fill();
-          ctx.fillStyle = '#cbb894';
-          ctx.beginPath();
-          ctx.arc(0, 0, d.r, 0, TAU);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(60,40,20,0.8)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(-d.r * 0.6, -d.r * 0.2);
-          ctx.lineTo(0, 0.1 * d.r);
-          ctx.lineTo(d.r * 0.5, -d.r * 0.5);
-          ctx.moveTo(0, 0);
-          ctx.lineTo(0.2 * d.r, d.r * 0.7);
-          ctx.stroke();
-          break;
-        case 'bell':
-          ctx.fillStyle = BRASS_HI;
-          ctx.beginPath();
-          ctx.arc(0, 0, d.r, Math.PI, TAU);
-          ctx.fill();
-          break;
-        default:
-          ctx.fillStyle = BRASS_MID;
-          ctx.fillRect(-d.r, -d.r * 0.4, d.r * 2, d.r * 0.8);
-          ctx.fillStyle = BRASS_HI;
-          ctx.fillRect(-d.r, -d.r * 0.4, d.r * 2, 1.5);
-          break;
+  /** The two bells, the hammer between them, and the lamp that blinks on every tick. */
+  private drawBells(ctx: CanvasRenderingContext2D, ox: number, floor: number, flash: boolean): void {
+    const ring = this.hammerRing;
+    for (const s of [-1, 1] as const) {
+      ctx.fillStyle = flash ? WHITE : paint('O');
+      ctx.fillRect(ox + s * 5 * ART, floor - 57 * ART, ART, 2 * ART);
+      const shake = ring > 0.15 ? (Math.sin(this.clock * 80 + s) > 0 ? ART : -ART) : 0;
+      at(ctx, sprite('bell', BELL, flash), ox + shake, floor, s * 8 - 5, 63);
+      if (ring > 0) {
+        // The ring of it, in hard arcs over the bell.
+        for (let i = 1; i <= 2; i++) {
+          const r = Math.round((9 + i * 6 * (1.2 - ring)) / ART);
+          at(ctx, sprite(`arc${r}${ring > 0.5 ? 'F' : 'f'}`, ringArc(r, ring > 0.5 ? 'F' : 'f'), flash), ox, floor, s * 8 - r, 59 + r);
+        }
       }
-      ctx.restore();
     }
-    ctx.restore();
+    // The hammer: drawn back through the bell's bar, and through on the blow.
+    const a = Math.round((this.hammer * 0.9) / 0.15) * 0.15;
+    const hx = ox + ART / 2;
+    const hy = floor - 56 * ART + ART / 2;
+    const tx = hx + Math.sin(a) * 7 * ART;
+    const ty = hy - Math.cos(a) * 7 * ART;
+    ctx.fillStyle = flash ? WHITE : paint('s');
+    for (const [x, y] of line4(0, 0, Math.round(Math.sin(a) * 7), -Math.round(Math.cos(a) * 7))) {
+      ctx.fillRect(ox + x * ART, floor - 56 * ART + y * ART, ART, ART);
+    }
+    centred(ctx, sprite('hammer', HAMMER_HEAD, flash), tx, ty);
+    const on = this.state === 'dormant' ? 0 : this.lamp;
+    const lamp = on > 0.6 ? (this.phaseTwo ? 'on2' : 'on') : on > 0.25 ? (this.phaseTwo ? 'dim2' : 'dim') : 'off';
+    ctx.fillStyle = flash ? WHITE : paint('O');
+    ctx.fillRect(ox - ART, floor - 64 * ART, 2 * ART, 2 * ART);
+    at(ctx, sprite(`lamp-${lamp}`, LAMP[lamp], flash), ox, floor, -2, 68);
+  }
+
+  /**
+   * The face: the bezel and the cream dial with its twelve tick pixels; the
+   * four signs, the one he is about to use burning in a dark window with a
+   * ring that brightens on every tick; his hands - hour, minute at twelve
+   * angles, and the red second hand a quarter turn a tick. Never mirrored: a
+   * clock that ran backwards would be a different clock. With the glass up,
+   * the works.
+   */
+  private drawFace(ctx: CanvasRenderingContext2D, ox: number, floor: number, flash: boolean): void {
+    const open = this.glass;
+    const lit = this.state === 'dormant' ? 0.15 : this.lit;
+    const dark = lit < 0.5;
+    at(ctx, sprite(dark ? 'faceDark' : 'face', dark ? FACE_DARK : FACE, flash), ox, floor, -FACE_C, FACE_UP + FACE_C);
+    if (open > 0.5) {
+      at(ctx, sprite('well', WORKS_WELL, flash), ox, floor, -12, FACE_UP + 12);
+      if (!flash) {
+        const spin = this.keyAngle * 0.6;
+        for (const g of WORKS_COGS) {
+          const frames = cogFrames3(g.r, g.teeth, 'Ooby');
+          const k = cogStep(spin * g.speed, g.teeth);
+          const c = (frames[0].length - 1) / 2;
+          at(ctx, sprite(`worksCog${g.r}-${k}`, frames[k]), ox, floor, g.x - c, FACE_UP - g.y + c);
+        }
+        const sk = ((Math.floor(spin / (Math.PI / 4)) % 8) + 8) % 8;
+        at(ctx, sprite(`spring${sk}`, SPRING[sk]), ox, floor, 1, FACE_UP + 11);
+      }
+    } else {
+      for (const m of MOVES) {
+        const a = SIGN_ANGLE[m];
+        const sx = Math.round(Math.cos(a) * SIGN_R);
+        const sy = Math.round(Math.sin(a) * SIGN_R);
+        if (this.move === m && this.state === 'tell' && this.signGlow > 0.3) {
+          const beat = this.lamp > 0.5 ? 1 : 0;
+          at(ctx, sprite(`sign-${m}-${beat}`, SIGN_LIT[m][beat], flash), ox, floor, sx - 5, FACE_UP - sy + 5);
+        } else {
+          at(ctx, sprite(`sign-${m}`, SIGN[m], flash), ox, floor, sx - 2, FACE_UP - sy + 2);
+        }
+      }
+      const ink = flash ? WHITE : paint('x');
+      const handsOut = this.spears.some((s) => s.out);
+      if (!handsOut) {
+        dialHand(ctx, ox, floor, HOUR_REST, 4, ink);
+        dialHand(ctx, ox, floor, Math.round(this.minuteAngle / (Math.PI / 6)) * (Math.PI / 6), 6, ink);
+      }
+      if (!handsOut || this.spears.length < 3) {
+        // The second hand: a quarter turn a tick, with a short tail.
+        const second = (this.beat / 4) * TAU - Math.PI / 2;
+        dialHand(ctx, ox, floor, second + Math.PI, 2, flash ? WHITE : paint('r'));
+        dialHand(ctx, ox, floor, second, 8, flash ? WHITE : paint('r'));
+      }
+      // The hub, which lights with the lamp.
+      ctx.fillStyle = ink;
+      ctx.fillRect(ox - ART, floor - (FACE_UP + 1) * ART, 3 * ART, 3 * ART);
+      if (!flash && this.lamp > 0.5 && this.state !== 'dormant') {
+        ctx.fillStyle = paint('F');
+        ctx.fillRect(ox - ART, floor - FACE_UP * ART, 3 * ART, ART);
+        ctx.fillRect(ox, floor - (FACE_UP + 1) * ART, ART, 3 * ART);
+      }
+    }
+    // The glass, flipped up on its hinge while he winds.
+    if (open > 0.1) {
+      const s = Math.max(0.12, 1 - open * 0.88);
+      const ry = Math.max(1, Math.round(12.5 * s));
+      const up = FACE_UP + 14 + Math.round(11.25 * open * s) + ry;
+      ctx.fillStyle = flash ? WHITE : paint('S');
+      for (const [dx, dy] of ellipseCells4(12, ry)) ctx.fillRect(ox + dx * ART, floor - up * ART + dy * ART, ART, ART);
+    }
+  }
+
+  /** Coming apart: his face, his bells, gears and plates, each a sprite at its turn. */
+  private drawDebris(ctx: CanvasRenderingContext2D): void {
+    for (const d of this.debris) {
+      switch (d.kind) {
+        case 'gear': {
+          const r = d.r < 8 ? 3 : d.r < 10 ? 4 : 5;
+          const frames = cogFrames3(r, 8, 'Ooby');
+          const k = cogStep(d.rot, 8);
+          centred(ctx, sprite(`debrisCog${r}-${k}`, frames[k]), d.x, d.y);
+          break;
+        }
+        case 'face':
+          centred(ctx, sprite('faceBroken', FACE_BROKEN), d.x, d.y);
+          break;
+        case 'bell': {
+          const k = ((Math.round(d.rot / (Math.PI / 2)) % 4) + 4) % 4;
+          centred(ctx, sprite(`bellTurn${k}`, BELL_TURNS[k]), d.x, d.y);
+          break;
+        }
+        default: {
+          const k = ((Math.round(d.rot / (Math.PI / 4)) % 8) + 8) % 8;
+          centred(ctx, sprite(`plate${k}`, PLATE[k]), d.x, d.y);
+          break;
+        }
+      }
+    }
   }
 }
 
 /* ============================================================== drawing kit */
 
-/** A gear: a ring of teeth, a rim, spokes and a hub. */
-function drawGear(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  r: number,
-  teeth: number,
-  rot: number,
-  body: string,
-  light: string,
-  edge: string,
-): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(rot);
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  const inner = r * 0.78;
-  for (let i = 0; i < teeth; i++) {
-    const a0 = (i / teeth) * TAU;
-    const a1 = a0 + (0.5 / teeth) * TAU;
-    const w = (0.12 / teeth) * TAU;
-    ctx.lineTo(Math.cos(a0 - w) * inner, Math.sin(a0 - w) * inner);
-    ctx.lineTo(Math.cos(a0 + w) * r, Math.sin(a0 + w) * r);
-    ctx.lineTo(Math.cos(a1 - w) * r, Math.sin(a1 - w) * r);
-    ctx.lineTo(Math.cos(a1 + w) * inner, Math.sin(a1 + w) * inner);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = edge;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.fillStyle = light;
-  ctx.beginPath();
-  ctx.arc(0, 0, inner * 0.62, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = edge;
-  ctx.lineWidth = Math.max(1, r * 0.12);
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * TAU;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(Math.cos(a) * inner * 0.8, Math.sin(a) * inner * 0.8);
-    ctx.stroke();
-  }
-  ctx.fillStyle = edge;
-  ctx.beginPath();
-  ctx.arc(0, 0, Math.max(1.2, r * 0.18), 0, TAU);
-  ctx.fill();
-  ctx.restore();
+const WHITE = '#ffffff';
+/** The pendulum's pivot, in art pixels over the floor. */
+const PIVOT_UP = PIVOT_Y / ART;
+
+/** A sprite with its top-left cell `col` columns from his middle and `up` rows over the floor. */
+function at(ctx: CanvasRenderingContext2D, s: PixelSprite, ox: number, floor: number, col: number, up: number, facing: 1 | -1 = 1): void {
+  s.draw(ctx, ox + col * ART, floor - up * ART, facing);
+}
+
+/** A sprite with its middle cell on a point of the world. */
+function centred(ctx: CanvasRenderingContext2D, s: PixelSprite, x: number, y: number): void {
+  s.draw(ctx, snap(x - ART / 2) - Math.floor(s.w / 2) * ART, snap(y - ART / 2) - Math.floor(s.h / 2) * ART);
 }
 
 /**
- * A clock hand, from its pivot outwards at an angle: the minute hand long with
- * a spade tip, the hour hand short and broad, the second hand a red needle.
+ * A hand of his dial: a line of pixels out of the hub's middle at one of
+ * twelve angles, four-connected so it reads as a stroke, not a string of dots.
  */
-function drawHand(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  angle: number,
-  length: number,
-  kind: 'minute' | 'hour' | 'second',
-  alpha: number,
-): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-  ctx.globalAlpha = alpha;
-  const color = kind === 'second' ? '#b02a24' : '#2a1a0c';
-  const width = kind === 'hour' ? length * 0.16 : kind === 'minute' ? length * 0.1 : length * 0.06;
+function dialHand(ctx: CanvasRenderingContext2D, ox: number, floor: number, angle: number, len: number, color: string): void {
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(-length * 0.12, -width * 0.5);
-  ctx.lineTo(length * 0.72, -width * 0.5);
-  ctx.lineTo(length * 0.8, -width * 1.6);
-  ctx.lineTo(length, 0);
-  ctx.lineTo(length * 0.8, width * 1.6);
-  ctx.lineTo(length * 0.72, width * 0.5);
-  ctx.lineTo(-length * 0.12, width * 0.5);
-  ctx.closePath();
-  ctx.fill();
-  if (length > 30) {
-    // Out over the floor, it carries a brass edge so it reads against the dark.
-    ctx.strokeStyle = kind === 'second' ? '#ff9a80' : BRASS_HI;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.fillStyle = BRASS;
-    ctx.beginPath();
-    ctx.arc(length * 0.3, 0, width * 0.9, 0, TAU);
-    ctx.fill();
+  for (const [x, y] of line4(0, 0, Math.round(Math.cos(angle) * len), Math.round(Math.sin(angle) * len))) {
+    ctx.fillRect(ox + x * ART, floor - FACE_UP * ART + y * ART, ART, ART);
   }
-  ctx.restore();
-}
-
-/** The signs round his dial. */
-function drawSign(ctx: CanvasRenderingContext2D, move: Move, x: number, y: number, scale: number, color: string, on: number): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.3;
-  switch (move) {
-    case 'bell':
-      ctx.beginPath();
-      ctx.moveTo(-4, 2.5);
-      ctx.quadraticCurveTo(-4, -4, 0, -4);
-      ctx.quadraticCurveTo(4, -4, 4, 2.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillRect(-5, 2, 10, 1.4);
-      ctx.beginPath();
-      ctx.arc(0, 4.3, 1.2, 0, TAU);
-      ctx.fill();
-      break;
-    case 'gears':
-      drawGear(ctx, 0, 0, 4.6, 6, on * 2, color, 'rgba(0,0,0,0)', color);
-      break;
-    case 'pendel':
-      ctx.beginPath();
-      ctx.moveTo(0, -4.5);
-      ctx.lineTo(1.6, 1.5);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(2, 2.6, 2.4, 0, TAU);
-      ctx.fill();
-      break;
-    case 'hands':
-      ctx.beginPath();
-      ctx.moveTo(-1.2, -4.5);
-      ctx.lineTo(1.2, -4.5);
-      ctx.lineTo(1.2, 1);
-      ctx.lineTo(3, 1);
-      ctx.lineTo(0, 5);
-      ctx.lineTo(-3, 1);
-      ctx.lineTo(-1.2, 1);
-      ctx.closePath();
-      ctx.fill();
-      break;
-  }
-  ctx.restore();
 }
