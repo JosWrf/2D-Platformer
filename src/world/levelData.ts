@@ -443,7 +443,13 @@ const CAVERN_ENTRY = c(40, [
  * The dark grotto, just in from the cave mouth: a roof of rock, two low steps
  * and two high ones, and nothing that shines. Whatever lived in the crystals
  * here, Nyktos has eaten it - the four that are left have to be struck to
- * light again.
+ * light again: two on the floor, a quarter of the way in from either wall, and
+ * two on the high steps (see Gloom.setUp, which finds them from this).
+ *
+ * The right half mirrors the left round its floor crystal: the high step over
+ * it, the low one on the outside. The low step used to stand right over that
+ * crystal, and Nyktos, who comes in over a crystal to eat it, came in through
+ * the plank.
  */
 const CAVERN_DARK = warded(c(46, [
   '##############################################',
@@ -458,10 +464,10 @@ const CAVERN_DARK = warded(c(46, [
   '..............................................',
   '..............................................',
   '..............................................',
-  '...............-----..........-----...........',
+  '...............-----...............-----......',
   '..............................................',
   '..............................................',
-  '............-----..................-----......',
+  '............-----.....................-----...',
   '..............................................',
   '..C..H.X.............n........................',
   '==============================================',
