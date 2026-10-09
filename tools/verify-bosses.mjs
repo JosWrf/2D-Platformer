@@ -1535,7 +1535,7 @@ const checks = [
   ['Vesperon marks every dive for half a second', v.dives > 0 && v.diveWindMin >= 0.5],
   ['Vesperon lands in reach after a dive, for a second', v.groundedMax >= 1 && v.groundedOnFloor],
   ['Vesperon: reading him costs less than half of standing still', v.hitsStanding >= 4 && v.hitsDodging * 2 <= v.hitsStanding],
-  ['Vesperon never has more than four bats', v.maxBats <= 4],
+  [`Vesperon never has more than three bats (at most ${v.maxBats} seen)`, v.maxBats <= 3],
   ['Vesperon: a parried dive puts him on the roof', (v.parryDive.state === 'stunned' || v.parryDive.state === 'fall') && v.parryDive.onFloor],
   ['Vesperon falls, heals the hero, opens the wards, and leaves the Blutdurst', ends(v.end, 'VESPERON')],
   ['Umbra wakes and the rift closes', u.engaged && u.sealed],

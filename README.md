@@ -1454,7 +1454,14 @@ Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Lä
 | Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
 | Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0–1 |
 | Ignivor, 45 s | Durchbruch 0,55 s Stillstand | 7–12 Herzen | 0–5 |
-| Vesperon, 40 s | Sturzflug 0,57 s | 29–32 Herzen | 9–12 |
+| Vesperon, 40 s | Sturzflug 0,57 s, Fledermaus 0,42 s | 29–33 Herzen | 9–16 |
+
+Dieser Bot reagiert im selben Bild, in dem etwas geschieht, und er kennt keine
+Fledermaus, die vorher hochzieht — bei Vesperon zahlt er darum seit den neuen
+Fledermäusen eher mehr. Wie es einem Menschen geht, der alles 0,3 s später
+sieht, misst `verify:balance` (siehe [Herausfordernd, aber keine
+Wand](#herausfordernd-aber-keine-wand)); dort kostet Vesperon den Leser jetzt
+rund drei Herzen statt sechs bis sieben.
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
 einer bewussten Ausnahme: Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden
