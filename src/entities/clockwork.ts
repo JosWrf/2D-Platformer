@@ -6,18 +6,19 @@ import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
 /**
- * Health before the hero is sized up: 215, which the relics of the road make
- * about 360. He was given 48 at first, and the reading bot felled him in 17 s,
+ * Health before the hero is sized up: 230, which the relics of the road make
+ * about 385. He was given 48 at first, and the reading bot felled him in 17 s,
  * before he had wound himself twice: his legs are always in reach, and by the
  * clock tower every swing also throws the water crescent and every finisher
  * carries the ember - about eight damage a second while in reach, and a hero
  * who reads him is in reach four fifths of the fight. At 150 the same bot
  * needed 40 s; at 190, 47 to 59 - and a hero who never stopped swinging at his
  * legs had him down in 41 s, having seen six moves. Each move is a bar of
- * warning and a bar of blows: what the clock has to show is moves, and 215
- * gives him one more of them.
+ * warning and a bar of blows: what the clock has to show is moves, and 230
+ * gives him one or two more of them - at 215 that hero still walked out of
+ * the tower with a heart to spare as often as not.
  */
-const CLOCK_HP = 215;
+const CLOCK_HP = 230;
 /**
  * The beat. 120 to the minute, the tempo of his music, and everything he does
  * lands on one of these. From half health on it quickens to 0.4 s: the bar,

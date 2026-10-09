@@ -115,22 +115,12 @@ export default function reader(g, h) {
     const flameHead = b.headCentre(b.necks.find((n) => n.kind === 'flame'));
     /*
      * An ember lobbed at a hero standing above the flame head passes his
-     * height once on the way up, before it comes down on him. If that is
-     * sooner than he can see it and move (0.3 s + 0.15 s), it must miss him
-     * by itself: how far to the side of her fire he has to stand on each
-     * ledge for that (its own 18 px and his, and her sway).
+     * height once on the way up, before it comes down on him. It used to
+     * burn there, sooner than he could see it go, and he had to stand clear
+     * to the side of her fire on each ledge. It burns only falling now
+     * (Projectile.harmless): no ledge asks for that any more.
      */
-    for (const s of surfaces) {
-      const cy = s.y - 15;
-      const vy0 = (cy - 6 - flameHead.y) / 0.85 - 425;
-      let need = 0;
-      for (let t = 0; t < 0.45; t += 1 / 120) {
-        if (vy0 + 1000 * t > 0) break;
-        const y = flameHead.y + vy0 * t + 500 * t * t;
-        if (Math.abs(y - cy) < 26) need = Math.max(need, 22 / (1 - t / 0.85) + 8);
-      }
-      s.clearOfFire = need;
-    }
+    for (const s of surfaces) s.clearOfFire = 0;
     const offFire = (x, s) => !s.clearOfFire || Math.abs(x - flameHead.x) >= s.clearOfFire;
     // Where an ordinary standing swing meets a head: surface, facing, range.
     const cutSpots = (n) => {
@@ -205,6 +195,19 @@ export default function reader(g, h) {
   };
   const overlap = (a, c) => a.x < c.x + c.w && a.x + a.w > c.x && a.y < c.y + c.h && a.y + a.h > c.y;
   /** Its flight from what was seen LAG frames ago, judged as an arc: out[m] is where it is m frames from now. */
+  /*
+   * The Steinblick, which the road has given him by the time he is here:
+   * what he looks at, coming at him, flies a third slower (game.ts,
+   * underGaze) - he knows how it feels, and his eye leads it so.
+   */
+  const stoneGaze = p.relics?.has?.('steinblick') ?? false;
+  const gazed = (x, y, vx, vy) => {
+    if (!stoneGaze) return false;
+    const dx = x - p.cx;
+    if (Math.abs(dx) > 420 || Math.abs(y - p.cy) > 260) return false;
+    if (Math.sign(dx) !== p.facing && Math.abs(dx) > 10) return false;
+    return dx * vx < 0 || (Math.abs(dx) < 120 && vy > 0 && y < p.cy);
+  };
   const path = (q, frames) => {
     const g0 = GRAV[q.kind] ?? 0;
     let x = q.x;
@@ -212,10 +215,12 @@ export default function reader(g, h) {
     let vy = q.vy;
     const out = [];
     for (let n = 1; n <= LAG + frames; n++) {
-      vy += g0 * DT;
-      x += q.vx * DT;
-      y += vy * DT;
-      if (n >= LAG) out.push({ x, y });
+      const dt = gazed(x, y, q.vx, vy) ? DT * (2 / 3) : DT;
+      vy += g0 * dt;
+      x += q.vx * dt;
+      y += vy * dt;
+      // (Her fire burns only on the way down.)
+      if (n >= LAG) out.push({ x, y, harmless: q.kind === 'ember' && vy < 0 });
       if (y + q.h / 2 > G.floor) break;
     }
     return out;
@@ -225,6 +230,7 @@ export default function reader(g, h) {
   const firstHit = (pts, w, hh, box) => {
     for (let m = 0; m < pts.length; m++) {
       const c = pts[m];
+      if (c.harmless) continue;
       if (overlap({ x: c.x - w / 2, y: c.y - hh / 2, w, h: hh }, box)) return m;
     }
     return -1;
@@ -283,11 +289,11 @@ export default function reader(g, h) {
     trail.push(p.cx);
     if (trail.length > LAG + 2) trail.shift();
     /*
-     * Her spit. The puddles do not lie where the globs come down (see the
-     * report: they land a head's length off), but where he stood when she
-     * spat - three a stride apart, or two either side of him from the crowned
-     * head - which is what a person who has met her learns. A new glob in
-     * sight was spat LAG frames ago, from where he stood then.
+     * Her spit. The puddles lie where the globs come down, and that is where
+     * he stood when she spat - three a stride apart, or two either side of
+     * him from the crowned head - which is what a person who has met her
+     * learns. A new glob in sight was spat LAG frames ago, from where he
+     * stood then.
      */
     const fresh = v.proj.filter((q) => q.kind === 'blob' && !seenBlobs.has(q.id));
     for (const q of fresh) seenBlobs.add(q.id);

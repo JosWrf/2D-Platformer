@@ -522,7 +522,7 @@ Herzkern wieder ab.
 | | | Antwort |
 | --- | --- | --- |
 | **Schleim** | hüpft stur geradeaus | drüber oder drauf |
-| **Fledermaus** | fliegt in Wellen an | Timing |
+| **Fledermaus** | fliegt in Wellen an, zieht vor dem Sturz hoch | Timing |
 | **Skelett** | patrouliert, schlägt telegrafiert | parieren oder ausweichen |
 | **Dunkler Magier** | schwebt, wirft Kugeln | Kugeln zurückparieren |
 | **Zunder** | läuft heran und zündet sich | **auf Abstand erledigen** |
@@ -552,6 +552,12 @@ Stacheln darunter) war einer neun Sekunden nach Laufbeginn weg, bevor der
 Spieler ihn je gesehen hätte. Jetzt wird der **Landeplatz** geprüft, und wenn es
 in beide Richtungen schlecht aussieht, hüpft er auf der Stelle.
 
+Die **Fledermaus** zieht vor jedem Sturz eine knappe halbe Sekunde (0,42 s) hoch,
+weg vom Helden, mit glühenden Augen und einem Schrei — vorher stieß sie ohne jedes
+Zeichen aus dem Schweben herab, 90 px in 0,37 s. Und sie setzt sich nicht mehr auf
+Planken: Lag der Held darunter, landete sie auf dem Brett und blieb hüpfend dort
+sitzen.
+
 Der **Klingenläufer** ist der einzige, den das Level selbst erledigt: er gräbt
 sich ein, stürmt los, und wer sich vor einer Wand wegdreht, sieht ihn dagegen
 laufen. Danach steht er anderthalb Sekunden benommen da und nimmt doppelten
@@ -559,7 +565,7 @@ Schaden.
 
 ### Der erste Boss: Gallert, der Aufgequollene
 
-22 Trefferpunkte, zwei Phasen, drei Züge — und der Lehrer des Spiels. Jeder
+34 Trefferpunkte, zwei Phasen, drei Züge — und der Lehrer des Spiels. Jeder
 seiner Züge ist die einfache Form von etwas, das ein späterer Kampf härter
 macht:
 
@@ -584,7 +590,9 @@ Poise 14, gemessen und nicht geraten: bei 8 warf ihn ein Dauerangreifer aus
 jedem Zug, den er anfing, und kassierte im ganzen Kampf **keinen einzigen
 Treffer**. Jetzt kostet derselbe Bot 5 von 6 Herzen und braucht 9 Sekunden; mit
 aufgefüllter Bossleiste gemessen — sonst ist der Kampf vorbei, bevor er dreimal
-zum Zug kam — landet Gallert 7 bis 18 Treffer in 25 Sekunden. Eine Parade
+zum Zug kam — landet Gallert 7 bis 18 Treffer in 25 Sekunden. Mit 22
+Trefferpunkten lag er nach acht Sekunden, bevor er sich ein einziges Mal geteilt
+hatte; mit 34 braucht der Leser rund zwölf, und die Teilung kommt. Eine Parade
 schüttelt ihn immer los. Vorbeilaufen geht **nicht mehr**: das Moor ist gebannt,
 und `verify:gallert` prüft jetzt das Gegenteil dessen, was es früher prüfte.
 
@@ -630,7 +638,7 @@ Er hinterlässt die **Keilerhaut** und den **Felswurf**.
 ### Der dritte Boss: Gierschlund, die gierige Truhe
 
 In der Schatzkammer der Ruinen steht nur noch eine Truhe. Was sonst hier lag, hat
-sie gefressen — Gold, Steine, Diebe. 32 Trefferpunkte, zwei Phasen, und die Regel
+sie gefressen — Gold, Steine, Diebe. 40 Trefferpunkte, zwei Phasen, und die Regel
 einer Truhe: **Zu ist sie ein Tresor.** Jeder Hieb auf den Deckel klingt und tut
 nichts. Sie öffnet sich nur, um etwas zu nehmen, und offen ist sie nur noch Maul:
 
@@ -644,7 +652,10 @@ nichts. Sie öffnet sich nur, um etwas zu nehmen, und offen ist sie nur noch Mau
   genutzt hat, bekommt dagegen einen Hüpfer zurück, keinen Deckel.
 * **Goldregen** — sie wirft den Deckel zurück und spuckt einen Fächer Münzen,
   eine auf den Helden und die anderen gut eine Heldenbreite daneben: ein halber
-  Schritt zur Seite, und keine trifft. Die Münzen bleiben einen Moment liegen,
+  Schritt zur Seite, und keine trifft. Weite Würfe fliegen länger und kommen
+  steil herunter — auf festen 0,85 s Flug kamen sie flach und schnell, strichen
+  zwanzig Pixel über ihr Ziel hinaus durch die ganze Höhe des Helden, und ab
+  320 px Abstand gab es keinen sicheren Fleck mehr. Die Münzen bleiben einen Moment liegen,
   tun dort niemandem etwas, und **ein Hieb schlägt eine flach zurück**. Gold, das
   heimkommt, ist das Einzige, wofür sie den Deckel nicht zuhalten kann — sie
   reißt ihn auf, und die Münze geht für zwei Schaden ins Maul.
@@ -713,7 +724,10 @@ Goldregen 1,5 s, nach dem Gierschlucken 1,6 s — in beiden Hälften. Der
 Schnapper kommt nur noch nach knapp einer Sekunde Klammern, nach 0,5 s Rattern
 und für ein Herz statt zwei. Ihre Hüpfer landen vor dem Helden und tun nur noch
 im Fallen weh, der Biss kündigt sich 0,75 s an und springt mit 480 px/s. 8
-Schaden klemmen den Deckel (statt 11), und sie hat 32 statt 40 Leben.
+Schaden klemmen den Deckel (statt 11). Sie hatte danach erst 32 statt 40 Leben —
+das schoss übers Ziel: Der Leser leerte sie in 18 bis 21 s, schneller als
+Grimmzahn davor, und wer nur draufhielt, ging mit einem Herz übrig heraus.
+Jetzt wieder 40.
 
 Derselbe menschenähnliche Bot:
 
@@ -725,7 +739,53 @@ Derselbe menschenähnliche Bot:
 Wer stehen bleibt, zahlt weiter (siehe die Tabelle unter „Gemessen: lesen lohnt
 sich“). Wer sie leert, bekommt den **Goldzahn** — und ihren **Goldregen**.
 
-### Der vierte Boss: Ankhor, der Tempelkoloss
+### Der vierte Boss: Maskarill, der Gaukler
+
+Im Theater der Ruinen gibt der letzte Spieler noch jede Nacht seine Vorstellung,
+vor Reihen, auf denen seit hundert Jahren niemand mehr sitzt. 88 Trefferpunkte,
+zwei Phasen, und die Regel jeder Bühne, die von vorn beleuchtet wird: **Nur einer
+wirft einen Schatten.** Die Rampenlichter werfen ihn groß an die Rückwand — vom
+ersten Augenblick des Kampfes an, lange bevor es darauf ankommt —, und die
+Trugbilder, die er sich herbeizaubert, werfen gar keinen.
+
+* **Messerwurf** — drei Messer wirbeln über seinem Kopf (0,65 s), dann fliegen
+  sie nacheinander im Bogen dorthin, wo der Held steht. Weitergehen genügt, und
+  ein Hieb schickt eines zurück in ihn: zwei Schaden. Danach verbeugt er sich —
+  das Fenster.
+* **Radschlag** — er duckt sich, die Schellen klingen (0,6 s), dann schlägt er
+  Rad quer über die Bühne, durch den Helden hindurch und weiter. Das Rad ist
+  48 px hoch: Ein normaler Sprung klärt es. Er landet im Spagat — das Fenster.
+  Wer das Rad pariert, wirft ihn auf einen Haufen: 1,6 s schwindlig.
+* **Salto** — die Knie beugen sich (0,57 s), er springt hoch und kommt dort
+  herunter, wo der Held stand; sein Schatten auf den Brettern zeigt die Stelle,
+  und die Landung wirft einen Ring. Danach steht er schwindlig da — das Fenster.
+* **Trugbilder** — eine Verbeugung, eine Rauchwolke (0,7 s), und es gibt ihn
+  dreimal, ab der Hälfte viermal. Sie mischen sich über die Bühne, kreuzen sich,
+  schlagen Rad und Salto — nichts davon tut weh, nichts davon ist zu treffen —,
+  dann stellen sie sich in einer Reihe auf und verbeugen sich. Jetzt ein Hieb: auf
+  den mit dem Schatten, und er ist **ENTLARVT!** — die Maske springt, die
+  Trugbilder vergehen, und er kniet 2,6 s da und nimmt **doppelten Schaden**. Auf
+  ein Trugbild: *PUFF*, und jede Figur, die noch steht, wirft ein Messer; ins
+  Leere genauso. Auch diese Messer gehen erst eine halbe Sekunde blitzend hoch.
+
+Außerhalb seiner Fenster findet ihn die Klinge nie ganz: Er biegt sich weg
+(*HOPPLA!*). Überall treffbar, wurde er zwischen seinen Zügen einfach zerlegt —
+ein Held, der ihn las, hatte ihn nach 15 Sekunden am Boden, bevor der Trick ein
+einziges Mal gekommen war. Nur seine eigenen Messer, zurückgeschlagen, treffen
+immer. Wer in einem Gaukler steht, der jongliert, sich verbeugt oder im Spagat
+sitzt, verliert nichts; weh tun das Rad, die Landung des Saltos und die Messer.
+Ab der Hälfte: vier Figuren, schnelleres Mischen, ein schnelleres Rad, und hin und
+wieder ein Rad, das gleich in die Messer übergeht.
+
+![Maskarill](screenshots/40-maskarill.png)
+
+Ein Held, der ihn 0,3 s zu spät sieht und nur vom Boden aus zuschlägt, legt ihn
+in 43 s um, entlarvt ihn bei jedem Trick und verliert ein oder zwei Herzen — an
+Messer, unter die er gelaufen ist. Wer nur hinläuft und zuschlägt, nimmt sechs
+bis neun Treffer: Rad, Salto und Messer finden ihn, und die Reihe ist für ihn ein
+Ratespiel. Maskarill hinterlässt den **Gauklerschritt** und das **Trugbild**.
+
+### Der fünfte Boss: Ankhor, der Tempelkoloss
 
 Im Innenhof der Ruinen, bis zur Brust im eigenen Pflaster vergraben: ein Wächter
 aus Sandstein mit Nemes-Kopftuch in Lapis und Gold, einem Halskragen aus
@@ -736,9 +796,11 @@ Solange niemand den Hof betritt, liegen sie auf dem Boden, und er ist eine Statu
 54 Trefferpunkte, zwei Phasen, vier Züge:
 
 * **Faustschlag** — eine Faust steigt über den Helden und folgt ihm, ihr
-  Schatten wird auf dem Boden größer; dann hält sie für einen Atemzug *still* und
-  kommt herunter. Aus dem Schatten treten. Danach liegt sie so lange am Boden,
-  dass man hineinschlagen kann.
+  Schatten wird auf dem Boden größer; dann hält sie eine Drittelsekunde *still*
+  und kommt herunter. Aus dem Schatten treten. Danach liegt sie so lange am
+  Boden, dass man hineinschlagen kann. (Das Stillhalten dauerte erst 0,2 s —
+  kürzer als ein Auge, das 0,3 s hinterher ist: Wer es sah, stand schon unter
+  der Faust.)
 * **Wischer** — eine Hand geht an die Wand gegenüber, legt sich auf den Boden
   und fegt über den ganzen Hof. Drüberspringen, oder auf einem Absatz stehen.
   Sie kommt immer von der fernen Seite, quer an ihm vorbei: der längste Blick
@@ -759,7 +821,50 @@ zurück und die Faust ist wieder da.
 
 ![Ankhor](screenshots/25-tempelkoloss.png)
 
-### Der fünfte Boss: Arachna, die Netzkönigin
+### Der sechste Boss: Nyktos, der Lichtfresser
+
+Gleich hinter dem Höhleneingang liegt eine Grotte, in der kein Kristall mehr
+leuchtet: Nyktos hat jedes Licht darin gefressen. 58 Trefferpunkte, zwei Phasen,
+und seine Regel: **Im Licht ist er Fleisch.** Im Dunkeln ist er Rauch, und die
+Klinge geht durch ihn hindurch (*NUR IM LICHT!*). Steht seine Mitte im Schein
+eines leuchtenden Kristalls, ist er Fleisch — und Fleisch lässt sich schneiden.
+Vier Kristalle hat die Grotte, zwei am Boden und zwei auf den hohen Simsen, alle
+dunkel, bis der Held einen mit der Klinge anschlägt. Dann leuchtet er acht
+Sekunden (ab der Hälfte sechs), zum Ende hin schwächer — und Nyktos will ihn:
+
+* **Fressen** — hat ein Kristall 0,8 s geleuchtet, kommt er (zu dem, der am
+  weitesten vom Helden weg ist), senkt sich darauf und frisst 2,4 s lang: im
+  Licht, also in Reichweite. Das ist das Fenster. Sieben Schaden in einer
+  Mahlzeit, und er fährt **GEBLENDET!** zurück auf den Boden, 2,7 s lang fest, und
+  der Kristall bleibt hell; sonst ist er dunkel, wenn er fertig ist, und bleibt
+  eine Weile leer.
+* **Hieb** — wer am Kristall steht, wenn er ankommt, wird erst weggestoßen
+  (0,52 s Ankündigung): ein Herz, und weg vom Licht. Wer den Hieb pariert, blendet
+  ihn auf der Stelle.
+* **Schattengriff** — unter einem Helden im Dunkeln öffnet sich ein Pfuhl
+  (0,95 s): Er folgt ihm, langsamer als er geht, steht 0,35 s still, und Klauen
+  kommen heraus. Heraustreten. Ins Licht reicht er nie.
+* **Finsterwelle** — er steigt (0,7 s) und schlägt auf den Boden: Eine Welle aus
+  Dunkel läuft nach beiden Seiten — drüberspringen — und löscht jeden
+  leuchtenden Bodenkristall, über den sie läuft. Die Simse behalten ihres.
+* **Schattenkugeln** — ab der Hälfte (0,65 s): drei dunkle Kugeln treiben auf
+  den Helden und auf alles, was leuchtet. Eine, die einen Kristall erreicht,
+  löscht ihn; ein Hieb schlägt sie weg.
+
+Licht hält ihn fern: Er hängt im Dunkeln und geht nur zum Fressen ins Licht. Was
+kein Zug ist, tut nicht weh — Rauch nicht, in den man hineinläuft, und Fleisch,
+das frisst, auch nicht.
+
+![Nyktos](screenshots/41-nyktos.png)
+
+Mit den fünf Relikten bis hierher legt der Leser ihn in 41 bis 48 s um, vier
+Mahlzeiten und drei Blendungen, für null bis zwei Herzen. Wer nur zuschlägt,
+fällt ihn auch — die Klinge zündet ab und zu aus Versehen einen Kristall an —,
+aber in rund einer Minute und für 13 bis 17 Treffer: zweimal tot. Bei den 46
+Trefferpunkten aus dem Entwurf lag er nach gut einer halben Minute ohne einen
+Treffer am Boden. Er hinterlässt den **Lichtkern** und die **Irrlichter**.
+
+### Der siebte Boss: Arachna, die Netzkönigin
 
 Mitten in den Kristallhöhlen liegt die Netzkammer, und unter ihrer Decke hängt
 Arachna an einem einzigen Faden, einen Kristall im Rücken. 48 Trefferpunkte, zwei
@@ -791,6 +896,14 @@ zerschneidet ihn (vier Hiebe). So oder so kommt sie auf dem Rücken herunter, di
 Beine in der Luft, 2,6 Sekunden lang in Reichweite eines Schwerts vom Boden: das
 lange Fenster.
 
+Oben hatte sie lange keine Antwort: Seide verletzt nicht, ihre Brut klettert
+nicht, ihr Pendel geht unter den Absätzen durch — und sie hing eine Klingenlänge
+neben dem Helden. Ein Leser, der die Absätze kannte, brauchte 23 Sekunden und
+ein Herz. Jetzt hat sie die **Beinpeitsche**: Steht der Held auf ihrer Höhe und
+nah, hebt sie die rötlichen Vorderbeine (0,6 s) und fegt 96 px weit über den
+Absatz. Zurücktreten oder hinunter — oder **parieren**: Dann reißt es sie vom
+Faden (*PARIERT — SIE STÜRZT!*).
+
 ![Arachna](screenshots/31-arachna.png)
 
 Gemessen, ein Bot, der ihre Ankündigungen liest: 76 bis 89 Sekunden, 3 bis 10
@@ -799,7 +912,7 @@ Sekunden durch und kassiert dabei 14 bis 21 Treffer, die meisten von ihren
 Stürzen: Mit sieben Herzen stirbt er zwei-, dreimal. Wer sie stürzt, bekommt
 den **Seidenmantel**.
 
-### Der sechste Boss: Ignivor, der Glutwurm
+### Der achte Boss: Ignivor, der Glutwurm
 
 Fünfzehn Platten aus Obsidian, zwischen denen das Feuer des Berges läuft, ein
 langer Schädel mit zurückgeschwungenen Hörnern und einem Kiefer, der fällt, wenn
@@ -895,7 +1008,10 @@ steckt 2,3 s fest und hängt nach dem Speien 2,8 s, und er steigt näher am Held
 auf. 5 statt 7 Schaden holen ihn herunter, und er liegt 3 statt 2,4 s. Er hat 44
 statt 58 Leben, sein Durchbruch und sein Biss kosten ein Herz statt zwei, und wer
 ihm auf dem Weg herunter entgegenkommt, wird nicht mehr von den nachfolgenden
-Platten erschlagen.
+Platten erschlagen. Und er beißt nur noch im Steigen: Der Biss wurde gefragt,
+bevor gefragt wurde, ob der Kopf steigt oder fällt — wer genau das tat, was die
+Glut verlangt, und 50 bis 70 px aus ihr heraustrat, wurde vom landenden Kopf
+gebissen.
 
 Derselbe menschenähnliche Bot, mit den vier Relikten, die man bis dahin hat, in
 je fünf bzw. vier Läufen:
@@ -936,9 +1052,14 @@ stehen eine Sonne und ein Mond.
 
 **Fällt einer, ruft ihn der andere zurück.** Der Gefallene liegt als matter Stern
 am Boden, der andere steht sieben Sekunden still und ruft ihn — treffbar wie
-immer, und er greift dabei niemanden an. Fällt er dabei auch, ist der Kampf
-vorbei; sonst steht der Gefallene mit halber Gesundheit wieder auf. Also beide
-klein halten, dann einen nach dem anderen. Nach jedem Zug ist 1,5 s Ruhe, und
+immer, aber der Ruf bricht alle 1,9 s als Ring über den Boden aus, jeder eine
+halbe Sekunde vorher angesagt: Die Hände glühen auf, ein Ton, dann der Ring.
+Drüberspringen. Fällt der Rufende dabei auch, ist der Kampf vorbei; sonst steht
+der Gefallene mit halber Gesundheit wieder auf. Also beide klein halten, dann
+einen nach dem anderen. Ohne die Ringe war der Ruf sieben Sekunden Stillstand:
+Wer nur hinlief und zuschlug, fällte den ersten in einem Dutzend Sekunden, den
+Rufenden im Ruf, und kam mit drei Treffern durch — der Leser brauchte doppelt so
+lange für gleich viele. Nach jedem Zug ist 1,5 s Ruhe, und
 eine parierte Landung oder ein parierter Lauf bringt Sol 1,8 s aus dem Tritt.
 
 ![Sol und Luna](screenshots/38-sternzwillinge.png)
@@ -950,7 +1071,7 @@ Minute. Wer beide löscht, bekommt den **Zwillingsstern** — und Lunas
 
 ### Der Boss der Halle: Thalassa, die Ertrunkene Krone
 
-60 Trefferpunkte, drei Phasen, vier Züge. Ihre Züge nach Entfernung: aus der
+72 Trefferpunkte, drei Phasen, vier Züge. Ihre Züge nach Entfernung: aus der
 Nähe ein **Flutstoß**, zwei Wellen über den Boden in beide Richtungen — die
 Antwort ist Höhe, nicht Abstand. Auf Distanz ein **Ankerwurf** auf einer Bahn,
 die dort landet, wo man gerade hinläuft. Der **Sog**, der einen für gut eine
@@ -1030,8 +1151,65 @@ mehr auslassen.
 Die vorletzte gilt wie gehabt: die beste Antwort auf sie ist die Parade, nicht
 das Ausdauerhalten.
 
+Mit dem einheitlichen Prüfstand (siehe [Herausfordernd, aber keine
+Wand](#herausfordernd-aber-keine-wand)) war sie trotzdem zu leicht für die Mitte
+des Spiels: Der Leser legte sie mit den Relikten bis hierher in unter dreißig
+Sekunden ohne einen Treffer um, und wer nur draufhielt, sah fünf, sechs Züge. Zwei
+Gründe: **Ihr Sog zog niemanden** — er schob am Tempo des Helden, und dessen
+Bodenhaftung fraß das im nächsten Bild wieder auf, derselbe Fehler, den
+Gierschlunds Einatmen hatte. Jetzt trägt ihn die Strömung, 80 px/s, in der dritten
+Phase 110. Und **ihre Kugeln ließen sich blind wegschlagen**: Sie kamen innerhalb
+der Reichweite einer Klinge an ihrem Saum heraus, und wer draufhielt, schickte
+alle fünfzehn eines Kampfes zurück. Jetzt gilt für sie dieselbe Regel wie für ihre
+Wellen — springen oder parieren. Dazu 72 statt 60 Leben, damit auch ein
+Draufhauer ihr ganzes Repertoire zu sehen bekommt: Der Leser braucht jetzt rund
+35 s und verliert nichts, der Draufhauer kassiert sieben Treffer in 25.
+
 Wer sie schlägt, nimmt mit, was sie gehalten hat: die **Flutklinge**, die erste
 Hälfte des Klingen-Upgrades.
+
+### Auf den Zinnen: Grauwacht, der Wasserspeier
+
+Auf den Zinnen der Burg sitzen Wasserspeier, und einer davon hat es in hundert
+Wintern auf der Mauer nie ertragen, angesehen zu werden. 80 Trefferpunkte (mit
+den zehn Relikten bis hierher 133), und seine Regel: **Sieh ihn an, und er ist
+Stein.** Was der Held ansieht — dorthin, wohin er zuletzt gegangen ist —, ist eine
+Statue: Sie rührt sich nicht, und nichts geht durch (*STEIN!*), weder die Klinge
+noch die Sichel der Flutklinge. Dreht der Held ihm den Rücken zu, ist er Fleisch
+und kommt:
+
+* **Speien** — 2,2 s am Boden angesehen (ab der Hälfte 1,6 s), gurgelt der Stein
+  (0,6 s), und fünf Wasserstöße fallen im Bogen dorthin, wo der Held steht. Unter
+  den Bogen hineingehen hält ihn Stein; weggehen dreht ihm den Rücken zu, und er
+  wacht auf.
+* **Pirschen** — unbeobachtet huscht er dem Helden nach, langsamer als der geht.
+  Dicht hinter ihm bäumt er sich auf (0,52 s) und schlägt zu: ein Herz. Umdrehen
+  in der Ausholbewegung lässt ihn erstarren, weitergehen bringt den Helden aus
+  der Reichweite.
+* **Sturzflug** — weiter weg reißt er die Flügel auf und kreischt (0,65 s, ab der
+  Hälfte 0,57), steigt 150 bis 180 px hoch und stürzt auf den Helden: zwei
+  Herzen, der einzige Zug, der zwei kostet.
+* **Gleitflug** — ab der Hälfte: in Kopfhöhe quer über die Zinnen (0,52 s
+  Ankündigung). Drüberspringen — oder ansehen: dann sackt er 16 px ab, und nichts
+  bricht.
+
+In der Luft angesehen, fällt er als Stein. Ab sechzig Pixeln zerbricht die Statue
+auf den Zinnen: **ZERSPRUNGEN!**, ein paar Schaden für den Fall, sechs aus einem
+Sturzflug, und 2,6 s lang trifft jeder Hieb, angesehen oder nicht. Das ist sein
+Fenster — ins Taumeln kommt er nie. Eine Statue, die auf den Helden fällt, kostet
+ein Herz. So wird der Kampf ein Tanz mit dem eigenen Rücken: weggehen, damit er
+fliegt, und umdrehen, solange er hoch ist.
+
+![Grauwacht](screenshots/42-grauwacht.png)
+
+Der Leser legt ihn in 44 bis 49 s um, in fünfzehn von fünfzehn Kämpfen ohne ein
+verlorenes Herz: Jeder Zug ist eine halbe Sekunde vorher angesagt und mit einer
+Taste beantwortet, umdrehen — was ein Mensch hier verliert, ist das Lesen des
+falschen. Wer ihn immer nur ansieht und zuschlägt, nimmt in zwei Minuten 27
+Treffer und ihm keinen Punkt ab. Mit den 52 Trefferpunkten aus dem Entwurf war
+der Leser nach 31 s fertig: Ein Sprung neben einem Helden mit der Flutklinge ist
+rund zwanzig wert. Grauwacht hinterlässt den **Steinblick** und den
+**Steinsturz**.
 
 ### Im Uhrturm: Tickmar, das Uhrwerk
 
@@ -1044,11 +1222,15 @@ jedem Zug steht der Minutenzeiger auf dessen Zeichen, das Zeichen glüht, die Ti
 zählen hörbar hinauf, und der Zug kommt auf die nächste Eins:
 
 * **Pendelschlag** — 200 px weit über den Boden, hin und zurück: drüberspringen
-  oder auf eine Planke. Wer es **pariert**, klemmt es — er steht rund 1,8 s still.
-* **Zahnräder** — drei auf drei Schläge. Ein Hieb schickt eines *ins Getriebe*:
-  zwei Schaden.
-* **Glockenschlag** — der Ring läuft über den Boden bis an die Wände.
-  Drüberspringen.
+  oder auf eine Planke. Sein einziger Schlag, der zwei Herzen kostet. Wer es
+  **pariert**, klemmt es — er steht rund 1,8 s still.
+* **Zahnräder** — drei auf drei Schläge, aus der Klappe in seinem Bauch: einen
+  Schritt vor ihn, oder, wer direkt unter der Klappe steht, gerade auf ihn
+  herunter. Ein Hieb schickt eines *ins Getriebe* — zwei Schaden —, aber erst,
+  wenn es sich nach dem Aufprall einen Augenblick (0,22 s) in den Boden gebissen
+  hat.
+* **Glockenschlag** — der Ring läuft unter ihm heraus über den Boden bis an die
+  Wände. Drüberspringen.
 * **Zeigerstich** — Marken am Boden, sobald der Takt beginnt; auf die Eins stechen
   die Zeiger hinein.
 
@@ -1057,11 +1239,21 @@ zählen hörbar hinauf, und der Zug kommt auf die nächste Eins:
 Seine Beine sind immer in Reichweite, und nach jedem dritten Zug muss er sich
 aufziehen: Das Ticken stockt, das Glas klappt hoch, 2,5 s lang zählt jeder Treffer
 doppelt. Ab der Hälfte tickt er alle 0,4 s, und jede Ansage dauert 1,6 s. Nach
-jedem Zug bleiben mindestens 3 s Ruhe. Weil er immer zu treffen ist, hat er 190
-Trefferpunkte (mit den acht Relikten bis hierher 303): Der Bot, der ihn 0,3 s zu
-spät sieht, legt ihn in 47 bis 59 s um und verliert höchstens ein Herz; wer stehen
-bleibt, verliert 13 bis 16 Herzen in der Zeit, in der der Leser 0 bis 3 verliert.
-Danach gehören dem Helden der **Taktgeber** und sein **Pendelschlag**.
+jedem Zug bleiben knapp 3 s Ruhe. Weil er immer zu treffen ist, hat er 230
+Trefferpunkte (mit den Relikten bis hierher rund 385): Der Bot, der ihn 0,3 s zu
+spät sieht, legt ihn in rund einer Minute um und verliert höchstens ein Herz; wer
+stehen bleibt, verliert 13 bis 16 Herzen in der Zeit, in der der Leser 0 bis 3
+verliert.
+
+Wer dagegen nur an seinen Beinen stand und zuschlug, kam lange zu billig davon:
+In 41 Sekunden sah er sechs Züge und nahm drei, vier Treffer. Die Zahnräder
+landeten hinter einem Helden zwischen seinen Füßen und rollten von ihm weg — und
+wer dauernd schlug, schickte die übrigen aus Versehen ins Getriebe; die Glocke
+klang zwei Hände neben seiner Mitte, und zwischen ihren Ringen stand man sicher;
+und vor jedem Zug ging er erst einen ganzen Takt auf einen Helden zu, der längst
+an seinen Füßen stand. Jetzt bekommt, wer an seinen Füßen steht, den nächsten
+Einzähler auf die nächste Eins, das Pendel kostet zwei Herzen, und er hat 230 statt
+190 Leben. Danach gehören dem Helden der **Taktgeber** und sein **Pendelschlag**.
 
 ### Der Herr des Bergfrieds: Vesperon, der Blutfürst
 
@@ -1079,8 +1271,11 @@ er herunterkommt. 56 Trefferpunkte, zwei Phasen, vier Züge:
   **pariert**, legt ihn aufs Gesicht; wer ihn gegen eine Zinne lockt, auch.
 * **Blutsicheln** — ein Fächer aus Sicheln aus dem Umhang. Ein Hieb schickt sie
   zu ihm zurück.
-* **Schwarm** — Fledermäuse aus dem Mantel, nie mehr als vier, und sie jagen,
-  statt zurück ins Gebälk zu fliegen.
+* **Schwarm** — Fledermäuse aus dem Mantel, zwei auf einmal und nie mehr als
+  drei, und sie jagen, statt zurück ins Gebälk zu fliegen. Sie stoßen eine nach
+  der anderen herab, jede nach einem sichtbaren Hochziehen (siehe die
+  Fledermaus unter [Die Gegner](#die-gegner)), und nie, während er selbst
+  stürzt.
 * **Blutmond** — ab der Hälfte steigt er ganz nach oben, der Mond hinter ihm
   färbt sich, und wo es auf dem Dach rot markiert ist, regnet es.
 
@@ -1089,7 +1284,13 @@ auf seine Höhe, und genug Schaden in der Luft wirft ihn aufs Dach.
 
 ![Vesperon](screenshots/28-blutfuerst.png)
 
-Wer ihn zerstieben lässt, bekommt den **Blutdurst**.
+Der Schwarm war lange das Teuerste an ihm: Vier Fledermäuse, drei auf einen Ruf,
+stießen ohne Ankündigung und nach Belieben herab, zwei und drei auf einmal, auch
+während der Held für die Parade seines Sturzflugs stillstand. Ein Leser, der
+alles andere kommen sah, verlor sechs bis sieben Herzen — fast alle an Fledermäuse
+— und lesen lohnte sich kaum mehr als draufhauen. Jetzt verliert er rund drei
+bis vier, in gut einer Minute; der Draufhauer nimmt neun bis zehn Treffer. Wer
+ihn zerstieben lässt, bekommt den **Blutdurst**.
 
 ### Im Spiegelgrund: Umbra, dein Schatten
 
@@ -1115,9 +1316,11 @@ Was er nicht hat, ist Geduld, und was er liest, ist die des Helden:
 * **Seine eigenen Angriffe sind die Fenster.** Vor seiner Kombo setzt er die
   Füße, und seine Augen flammen auf (0,38 s, in der zweiten Hälfte 0,3) — die
   Kombo des Helden selbst hat gar keine Ankündigung, und ein Spiegel, der ohne
-  Vorwarnung so schnell zuschlägt, wäre ein Münzwurf. Nach der Kombo, nach dem
-  Ladeschlag, nach einer Rolle steht er einen Atemzug lang da: dort trifft man.
-  Eine Parade seines Hiebs bringt ihn ins Wanken wie alles andere.
+  Vorwarnung so schnell zuschlägt, wäre ein Münzwurf. Vor seinem Ladeschlag
+  zieht er die Klinge 0,5 s zurück, ein unterbrochener Ring schließt sich um ihn,
+  mit eigenem Ton. Nach der Kombo, nach dem Ladeschlag, nach einer Rolle steht er
+  einen Atemzug lang da: dort trifft man. Eine Parade seines Hiebs bringt ihn ins
+  Wanken wie alles andere.
 * **Ab der Hälfte geht er durch die Dunkelheit**: Er sinkt in den Boden und
   steigt hinter dem Helden wieder auf, Klinge voran. Die Pfütze, aus der er
   steigt, zeigt sich vorher — 0,93 Sekunden, bevor er zuschlägt.
@@ -1126,7 +1329,14 @@ Gemessen in `verify:bosses`, über vier Läufe: Wer nur draufhaut, wird in 20 bi
 25 Sekunden 15- bis 21-mal pariert und kassiert 18 bis 25 Treffer — mit sechs
 Herzen sind das drei bis vier Leben. Wer
 pariert und auf die Fenster wartet, legt ihn in 31 bis 37 Sekunden um und nimmt
-dabei höchstens einen Treffer.
+dabei höchstens einen Treffer — wenn er es im selben Bild sieht, in dem Umbra
+etwas tut. Mit 0,3 s Verspätung, wie ein Mensch, waren es lange vier Herzen im
+Mittel und bis zu acht, und drei Viertel davon kamen von einem einzigen Hieb: Der
+Ladeschlag des Helden beginnt mit einem gewöhnlichen Hieb auf den Tastendruck, und
+mit der Flutklinge wirft der seine Sichel — Umbras begann also mit einem Hieb samt
+Sichel aus dem Nichts, aus einer Klingenlänge, aus der die Sichel nicht vorbeigeht.
+Seit er vorher sichtbar ausholt, verliert derselbe Leser rund zwei Herzen in
+gut 50 Sekunden; wer nur draufhaut, nimmt in 18 Sekunden fünfzehn Treffer.
 
 Wer ihn besiegt, bekommt den **Zweiten Atem**: Der Schatten steht jetzt hinter
 dem Helden, und einmal in jedem Leben fängt er auf, was ihn fällen würde.
@@ -1153,7 +1363,9 @@ Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Lä
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
 einer bewussten Ausnahme: Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden
-selbst. Gierschlunds Schnapper war die zweite (0,42 s); er hat jetzt 0,52 s und
+selbst. Sein Ladeschlag war lange eine zweite, die niemand bemerkt hatte; er
+holt jetzt 0,5 s sichtbar aus. Die Fledermäuse waren eine dritte — sie stießen
+ohne jedes Zeichen herab — und ziehen jetzt 0,42 s hoch. Gierschlunds Schnapper war die zweite (0,42 s); er hat jetzt 0,52 s und
 kommt nur noch nach knapp einer Sekunde Klammern. Die
 Regeln halten: Gierschlunds Deckel nimmt 0 und ihr Maul 1, Ankhors Gesicht 2
 statt 1 und sein gesackter Kopf reicht bis 18 px über den Boden herab, Arachna
@@ -1212,6 +1424,14 @@ Sturmangriff quer durch die Halle, auf mittlere Distanz Splitter, die von der
 Decke fallen und dorthin zielen, wo man gleich sein wird, von weitem ein Fächer
 aus drei Splittern — in der zweiten Phase fünf, und alle Pausen um ein Fünftel
 kürzer. Denselben Zug zweimal hintereinander macht er nie.
+
+Er ließ sich lange in Dauertaumel prügeln: Ein Taumel sperrte zwei Sekunden lang
+den nächsten, aber seine Standfestigkeit lief in der Zeit weiter leer, und der
+erste Hieb danach warf ihn wieder um, jedes Mal mitten in die nächste
+Ankündigung. Wer nur draufhielt, legte ihn in 20 Sekunden um, ohne einen Treffer
+zu nehmen. Jetzt hält die Sperre 3,2 s, länger als einer seiner Züge, und
+währenddessen sinkt seine Standfestigkeit nicht; derselbe Draufhauer nimmt
+sechs, sieben Treffer.
 
 Fällt er, ist der Lauf **nicht** vorbei: die Splitter seines Herzens gehen in die
 Klinge, und der Held wird genau dorthin zurückgesetzt, wo er weggeholt wurde —
@@ -1291,6 +1511,21 @@ Und sie warf zwei Gluten links und rechts am Helden vorbei, je 34 px: Ein
 Paradefenster ist 52 px breit, zwei Gluten daneben sind zwei, die man nicht
 wenden kann. Jetzt kommt eine auf ihn und die zweite weit daneben.
 
+Drei weitere hat der einheitliche Prüfstand gefunden:
+
+* **Ein Taumel mitten im Steinatem ließ den Atem liegen** — 340 px auf dem Boden,
+  durch ihre Erholung und die nächsten Züge hindurch, für zwei Herzen bei jedem,
+  der hineintrat, sobald der nächste Zug begann. Jetzt endet der Atem (und die
+  Böe des Sturmkopfs) mit dem Taumel.
+* **Die Giftklumpen landeten nicht auf ihren Pfützen.** Der Bogen wurde von ihrer
+  Mitte aus berechnet, geworfen aber vom Kopf: Jeder Klumpen kam gut 100 px neben
+  der Pfütze herunter, die sich dann bildete, wo nichts gefallen war. Wer den
+  Bogen las, las falsch. Jetzt landet jeder dort, wo seine Pfütze entsteht.
+* **Ihre Glut brannte schon im Steigen.** Auf den Stufen neben dem Flammenkopf
+  kreuzte die geworfene Kohle die Höhe des Helden 0,2 bis 0,4 s nach dem Wurf —
+  bevor ein Auge sie hätte sehen können. Jetzt brennt sie erst im Fallen, dort,
+  wohin sie gezielt war.
+
 Ihr Fall öffnet das Tor — und lässt das **Hydrablut** zurück: Was der Held
 verliert, wächst jetzt nach, ein Herz alle achtzehn Sekunden. Für den Weg zum Tor
 ist das wenig; wer danach noch in den Kristallhort will, nimmt es mit.
@@ -1320,14 +1555,24 @@ zwanzig Sekunden in ihrer Reichweite kosten ihn Blut.
 
 ### Der Miniboss: Splitterwächter
 
-16 Trefferpunkte, drei Züge, die er nach Entfernung wählt: aus der Nähe ein
+56 Trefferpunkte, drei Züge, die er nach Entfernung wählt: aus der Nähe ein
 Sprungschlag, auf mittlere Distanz ein Sturmangriff, von weitem eine Salve aus
 drei Splittern. Jeder Zug wird angekündigt — sein Kern glüht auf —, und danach
 steht er lange genug offen für eine Antwort.
 
 Er lässt sich nicht mit gehaltener Angriffstaste erledigen: einen begonnenen Zug
 zieht er durch. Erst fünf Schadenspunkte am Stück oder eine Parade bringen ihn
-aus dem Gleichgewicht.
+aus dem Gleichgewicht — und danach 3,4 s lang nicht noch einmal, in denen seine
+Standfestigkeit auch nicht sinkt. Mit zwei Sekunden Sperre und weiter
+sinkender Standfestigkeit warf ihn der erste Hieb danach wieder um, jedes Mal
+mitten in die nächste Ankündigung: Mit der Klinge des späten Weges zerlegte ihn
+ein Draufhauer in 4,6 Sekunden, ohne dass einer seiner Züge je ankam. Vom
+Ritter, an dessen Stelle er gewachsen ist, hat er dazu die Regel **gereizt**:
+Wer in seine Ausholbewegung hineinhaut, bekommt den Schlag früher, einmal pro
+Zug. Gelesen wird er in seinen Fenstern geschlagen, nicht beim Herumgehen — der
+Leser braucht so rund 40 Sekunden und verliert nichts, wer nur draufhaut, nimmt
+fünf Treffer in 18. Mit seinen ersten 16 Trefferpunkten lag er nach acht
+Sekunden, bevor er jeden seiner drei Züge einmal gezeigt hatte.
 
 Sein Sprungschlag blieb lange hängen: die Landung fragte nach einer
 Abwärtsgeschwindigkeit, die die Kollision im Landebild schon auf null gesetzt
