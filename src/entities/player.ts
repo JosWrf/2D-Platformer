@@ -2,9 +2,8 @@ import { audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
 import { PALETTE, RAMP } from '../render/palette';
-import { withHitFlash } from '../render/sprites';
 import { ART, makeCanvas, snap } from '../render/pixel';
-import { type HeroFrame, drawGhost, heroSprite, throughNight } from './heroArt';
+import { type HeroFrame, drawGhost, heroSprite, heroWhite } from './heroArt';
 import {
   type DirName,
   type Stamp,
@@ -1337,13 +1336,21 @@ export class Player extends Body {
 
     // Untouchable after a blow: there one moment and gone the next, three
     // frames each, rather than half there all the time. Not while the blow
-    // still has him reeling - that he has to be seen taking.
+    // still has him reeling - that he has to be seen taking. A slash stays:
+    // it shows what his blade reaches, blinking or not.
     const hidden = this.invuln > 0 && this.hurtTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 1;
-    if (!hidden) {
-      const look = this.look();
-      withHitFlash(ctx, this.flash, (c) => this.drawFigure(c, look, mid, feet));
-    }
+    this.drawFigure(ctx, this.look(), mid, feet, hidden);
     this.drawGuard(ctx, mid, feet);
+  }
+
+  /**
+   * Where his eye is in the frame he is drawn in now: the middle of that
+   * pixel, in world (logical) pixels. Umbra draws its eyes where his are, and
+   * they have moved up with the hood; where his eye is shut, where it would be.
+   */
+  get eye(): { x: number; y: number } {
+    const e = heroSprite(this.look().frame).eye ?? heroSprite('idle0').eye ?? { x: 3, y: 16 };
+    return { x: snap(this.x) + 8 + this.facing * e.x * ART + ART / 2, y: snap(this.bottom) - e.y * ART - ART / 2 };
   }
 
   /** Just after a combo, while the blade goes back over his shoulder. */
@@ -1446,7 +1453,8 @@ export class Player extends Body {
    * first, so the actors' outline runs between it and him and he stays one
    * readable shape in front of his own slash.
    */
-  private drawFigure(ctx: CanvasRenderingContext2D, look: Look, mid: number, feet: number): void {
+  private drawFigure(ctx: CanvasRenderingContext2D, look: Look, mid: number, feet: number, hidden: boolean): void {
+    if (hidden && !look.smear) return;
     const { canvas, ctx: f } = figureCanvas();
     f.clearRect(0, 0, FIGURE_W, FIGURE_H);
     const body = heroSprite(look.frame);
@@ -1458,6 +1466,11 @@ export class Player extends Body {
       // In the air he is drawn a pixel higher, and his slash with him.
       f.drawImage(s.canvas, FIGURE_X - s.ox, FIGURE_Y - s.oy - (look.frame.startsWith('air') ? 1 : 0));
       behind = true;
+    }
+    if (hidden) {
+      // Blinking out: the slash alone, with no hole cut in it where he is.
+      this.blitFigure(ctx, canvas, mid, feet);
+      return;
     }
     const hand = body.hand;
     const sword = look.blade && hand ? blade(look.blade.dir, look.blade.length, look.blade.hot) : null;
@@ -1472,9 +1485,16 @@ export class Player extends Body {
       for (const [dx, dy] of MOAT) f.drawImage(body.sprite.canvas, bx + dx, by + dy);
       f.globalCompositeOperation = 'source-over';
     }
-    f.drawImage(body.sprite.canvas, bx, by);
+    // Struck: his own silhouette in white for the first frames of the blow
+    // (flash falls from 1 at six a second: two frames), then himself again -
+    // no fading veil, which the palette could only draw as a checker.
+    f.drawImage(this.flash >= FLASH_SOLID ? heroWhite(look.frame) : body.sprite.canvas, bx, by);
     if (sword && !look.blade?.behind) f.drawImage(sword.canvas, hx - sword.ox, hy - sword.oy);
+    this.blitFigure(ctx, canvas, mid, feet);
+  }
 
+  /** The figure canvas laid down with its anchor on his: as it is, or mirrored. */
+  private blitFigure(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, mid: number, feet: number): void {
     const y = feet - (FIGURE_Y + 1) * ART;
     if (this.facing > 0) {
       ctx.drawImage(canvas, mid - FIGURE_X * ART, y, FIGURE_W * ART, FIGURE_H * ART);
@@ -1537,7 +1557,7 @@ export class Player extends Body {
     if (this.chargeTimer > 0) {
       const t = Math.min(1, this.chargeTimer / this.chargeTime);
       if (this.chargeReady) {
-        at(ring(13 + (Math.floor(this.runCycle * 4) % 2), 1, GUARD_LIT, GUARD_LIT));
+        at(ring(13 + (Math.floor(this.runCycle * 4) % 2), 1, GUARD_WHITE, GUARD_WHITE));
       } else {
         at(ring(Math.round(23 - t * 10), 1, GUARD_BODY, GUARD_BODY));
       }
@@ -1546,13 +1566,13 @@ export class Player extends Body {
     if (this.parryTimer > 0) {
       const t = this.parryTimer / this.parryWindow;
       const from = this.facing > 0 ? -60 : 120;
-      const s = ring(11, t > 0.34 ? 2 : 1, GUARD_LIT, GUARD_GLOW, from, from + 120);
+      const s = ring(11, t > 0.34 ? 2 : 1, GUARD_WHITE, GUARD_GLOW, from, from + 120);
       at(s);
     }
 
     if (this.parryFlash > 0) {
       const k = 1 - this.parryFlash;
-      at(ring(Math.round(10 + k * 23), this.parryFlash > 0.5 ? 2 : 1, GUARD_LIT, GUARD_GLOW));
+      at(ring(Math.round(10 + k * 23), this.parryFlash > 0.5 ? 2 : 1, GUARD_WHITE, GUARD_GLOW));
     }
 
     if (this.shieldUp) {
@@ -1562,9 +1582,12 @@ export class Player extends Body {
     }
 
     if (this.saveFlash > 0) {
+      // The silk's rescue in the pale steel of its threads, the second
+      // breath in white and cyan.
       const k = 1 - this.saveFlash;
-      const color = this.saveColor === SILK_SAVE ? GUARD_LIT : SECOND_WIND;
-      at(ring(Math.round(9 + k * 30), this.saveFlash > 0.6 ? 3 : this.saveFlash > 0.3 ? 2 : 1, color, color));
+      const silk = this.saveColor === SILK_SAVE;
+      const thick = this.saveFlash > 0.6 ? 3 : this.saveFlash > 0.3 ? 2 : 1;
+      at(ring(Math.round(9 + k * 30), thick, silk ? GUARD_STEEL : GUARD_WHITE, silk ? GUARD_STEEL : GUARD_GLOW));
     }
   }
 }
@@ -1578,6 +1601,9 @@ interface Look {
 
 /** The swings of the combo, in order; the heavy strike stands apart. */
 const SWING_KINDS: readonly SwingKind[] = ['cut', 'rise', 'wide'];
+
+/** Above this a struck hero is drawn all white (the flash runs down from 1). */
+const FLASH_SOLID = 0.8;
 
 /** The roll: in, four quarter turns, out. */
 const ROLL_FRAMES: readonly HeroFrame[] = ['roll0', 'roll1', 'roll2', 'roll3', 'roll4', 'roll5'];
@@ -1608,10 +1634,12 @@ const MOAT: readonly (readonly [number, number])[] = [
   [0, -1],
 ];
 
+/** The shadow he stands on: the violet black the actors are outlined in. */
 const CONTACT = RAMP.slate[0];
-const GUARD_LIT = throughNight(RAMP.slate[6]);
-const GUARD_GLOW = throughNight(RAMP.blue[4]);
-const GUARD_BODY = throughNight(RAMP.blue[3]);
-const SECOND_WIND = throughNight(RAMP.violet[4]);
+/** The tells, in his own paints: white, the blade's cyan, the cloak's azure, pale steel. */
+const GUARD_WHITE = RAMP.grey[7];
+const GUARD_GLOW = RAMP.blue[4];
+const GUARD_BODY = RAMP.blue[3];
+const GUARD_STEEL = RAMP.slate[6];
 /** The colour the silk's rescue is flagged with (see hurt()). */
 const SILK_SAVE = '#e6eef8';

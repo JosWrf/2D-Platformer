@@ -1,6 +1,6 @@
 import { RAMP } from '../render/palette';
 import { makeCanvas } from '../render/pixel';
-import { type HeroFrame, throughNight } from './heroArt';
+import type { HeroFrame } from './heroArt';
 
 /**
  * The hero's sword and the slashes it leaves, on the grid.
@@ -59,13 +59,16 @@ function step(d: Dir, i: number): [number, number] {
   return [Math.trunc((i * d[0]) / n), Math.trunc((i * d[1]) / n)];
 }
 
-const STEEL_LIT = throughNight(RAMP.slate[6]);
-const STEEL = throughNight(RAMP.slate[5]);
-const GLOW = throughNight(RAMP.blue[4]);
-const GOLD_LIT = throughNight(RAMP.fire[3]);
-const GOLD = throughNight(RAMP.rust[3]);
-const SLASH_BODY = throughNight(RAMP.blue[3]);
-const SLASH_TAIL = throughNight(RAMP.blue[2]);
+/** The blade's edge in the light, and the core of a slash: white. */
+const WHITE = RAMP.grey[7];
+const STEEL = RAMP.slate[5];
+/** The blade's cyan, and the body of a slash. */
+const GLOW = RAMP.blue[4];
+const GOLD_LIT = RAMP.fire[3];
+const GOLD = RAMP.rust[3];
+/** A slash's tail, and what is left of it as it goes. */
+const SLASH_BODY = RAMP.blue[3];
+const SLASH_TAIL = RAMP.blue[2];
 
 /** Pixels as a map "x,y" -> colour, turned into a stamp with its origin. */
 function stamp(px: Map<string, string>): Stamp {
@@ -96,9 +99,9 @@ const blades = new Map<DirName, Stamp[]>();
 /**
  * The sword pointing along a direction from the fist: a gold pommel behind
  * the fist, a three-pixel gold guard across it, and `length` pixels of blade,
- * two wide - the edge that faces the light (up and to the left) pale steel,
- * the other the blade's cyan - running out to a one-pixel point. Hot, the
- * whole blade burns cyan with a pale core: the heavy strike, wound up.
+ * two wide - the edge that faces the light (up and to the left) white, the
+ * other the blade's cyan - running out to a one-pixel point. Hot, the whole
+ * blade burns white: the heavy strike, wound up and ready.
  */
 export function blade(dir: DirName, length: number, hot = false): Stamp {
   let list = blades.get(dir);
@@ -127,8 +130,8 @@ export function blade(dir: DirName, length: number, hot = false): Stamp {
     const off: Dir = Math.abs(d[0]) >= Math.abs(d[1]) ? [0, 1] : [1, 0];
     for (let i = 2; i < length + 2; i++) {
       const [x, y] = step(d, i);
-      put(x, y, hot ? GLOW : STEEL_LIT);
-      if (i < length + 1) put(x + off[0], y + off[1], i > 2 ? (hot ? STEEL_LIT : GLOW) : STEEL);
+      put(x, y, WHITE);
+      if (i < length + 1) put(x + off[0], y + off[1], i > 2 ? (hot ? WHITE : GLOW) : STEEL);
     }
     s = stamp(px);
     list[key] = s;
@@ -264,12 +267,15 @@ export function smear(kind: SwingKind, frame: 1 | 2 | 3, head: number): Stamp {
               ? art.width * Math.sin(Math.PI * Math.min(1, v ** 0.75)) ** 0.6
               : art.width * 0.5 * Math.sin(Math.PI * Math.min(1, v ** 0.8)) ** 0.6;
         if (depth > width) continue;
+        // White along the outer edge where the blade has just been, cyan
+        // through the body, blue in the tail; the last frame cools to cyan
+        // and blue and comes apart from its tail.
         let color: string;
         if (frame === 3) {
           if (v < 0.4 && (x + y) & 1) continue;
-          color = depth < 1 ? SLASH_BODY : SLASH_TAIL;
+          color = depth < 1 ? GLOW : depth < 2 ? SLASH_BODY : SLASH_TAIL;
         } else if (depth < 1 && v > (frame === 1 ? 0.5 : 0.3)) {
-          color = STEEL_LIT;
+          color = WHITE;
         } else if (depth < Math.max(1.5, width * 0.6) && v > 0.15) {
           color = GLOW;
         } else {
@@ -326,12 +332,15 @@ export function ring(r: number, thick: number, color: string, inner = color, fro
   let s = rings.get(key);
   if (!s) {
     const px = new Map<string, string>();
+    const span = to - from;
     for (let y = -r; y <= r; y++) {
       for (let x = -r; x <= r; x++) {
         const d = Math.hypot(x, y);
         if (d > r + 0.5 || d <= r + 0.5 - thick) continue;
-        const a = (Math.atan2(y, x) * 180) / Math.PI;
-        if (a < from || a > to) continue;
+        // Measured round from `from`, so an arc may run across the back.
+        let a = (Math.atan2(y, x) * 180) / Math.PI - from;
+        while (a < 0) a += 360;
+        if (span < 360 && a > span) continue;
         px.set(`${x},${y}`, d > r - 0.5 ? color : inner);
       }
     }
@@ -358,7 +367,7 @@ let silk: Stamp | null = null;
 export function silkThreads(): Stamp {
   if (!silk) {
     const px = new Map<string, string>();
-    const color = throughNight(RAMP.slate[6]);
+    const color = RAMP.slate[6];
     for (let i = 0; i < 3; i++) {
       const tilt = -0.5 + i * 0.5;
       const rx = 7.5;
@@ -384,9 +393,9 @@ export function moteHeart(): Stamp {
   if (!heart) {
     const rows = ['.GG.GG.', 'GWGGGGG', 'GGGGGGg', '.GGGgg.', '..Ggg..', '...g...'];
     const key: Record<string, string> = {
-      G: throughNight(RAMP.fire[3]),
-      g: throughNight(RAMP.rust[3]),
-      W: throughNight(RAMP.slate[6]),
+      G: RAMP.fire[3],
+      g: RAMP.rust[3],
+      W: RAMP.slate[6],
     };
     const px = new Map<string, string>();
     rows.forEach((row, y) => {

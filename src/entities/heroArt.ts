@@ -51,30 +51,12 @@ const PAINT: Record<string, string> = {
   H: RAMP.earth[3],
 };
 
-/** What he is made of: the colours his frames come out in. */
-export const HERO_PALETTE: readonly string[] = [...new Set(Object.values(PAINT))];
-
 /**
- * The actor pass darkens every body pixel a breath towards the zone's night
- * - by 16 to 21 per cent, with the darkness of the zone (game.ts, drawActors)
- * - before the frame is mapped to the palette. On a palette of ramps a breath
- * is a whole step: drawn as they are, his azure came out as the plain blue, his
- * steel as grey, and two of his paints split into a dither of two colours.
- * So every paint is laid on that much brighter, and comes out of the pass as
- * itself: checked for every zone's darkness and every phase of the dither.
- * (The palest steel can only nearly make it in the darkest grotto: a channel
- * cannot be laid on brighter than 255.)
+ * What he is made of: his sixteen paints, and the only colours his frames,
+ * his sword and his slashes come out in (the actor pass and the palette
+ * mapping leave a colour of the palette exactly as it is drawn).
  */
-const NIGHT = 0.19;
-
-/** A paint as it has to be laid on to come out of the night as itself. */
-export function throughNight(hex: string): string {
-  const v = parseInt(hex.slice(1), 16);
-  const up = (c: number): number => Math.min(255, Math.round(c / (1 - NIGHT)));
-  return `rgb(${up((v >> 16) & 255)},${up((v >> 8) & 255)},${up(v & 255)})`;
-}
-
-const LAID: Record<string, string> = Object.fromEntries(Object.entries(PAINT).map(([k, v]) => [k, throughNight(v)]));
+export const HERO_PALETTE: readonly string[] = [...new Set([...Object.values(PAINT), RAMP.grey[7]])];
 
 const FRAMES = {
   idle0: `
@@ -83,13 +65,13 @@ const FRAMES = {
     ......LLBBBBCCK
     ......LBBBBKKoS
     .....LBBBBKoSYS
-    ....dLBBBCKoSS.
-    ...gGCBBCCCKo..
+    .....LBBBCKoSS.
+    .....CBBCCCKo..
     ....BCC.LBBBB..
     ....BCCLBBBKL..
     ..WLBCCLBBBKLB.
-    ..WLBCCBBBBKBB.
-    .W.LBCKBBBBKBB.
+    ..WLBCCBBBBKLB.
+    .W.LBCKBBBBKob.
     .W.LBCKgggGgbb.
     W..BCK.dttmmt..
     M..gg..dt.tm...
@@ -107,13 +89,13 @@ const FRAMES = {
     ......LLBBBBCCK
     ......LBBBBKKoS
     .....LBBBBKoSYS
-    ....dLBBBCKoSS.
-    ...gGCBBCCCKo..
+    .....LBBBCKoSS.
+    .....CBBCCCKo..
     ....BCC.LBBBB..
     ....BCCLBBBKL..
     ..WLBCCLBBBKLB.
-    ..WLBCCBBBBKBB.
-    .W.LBCKBBBBKBB.
+    ..WLBCCBBBBKLB.
+    .W.LBCKBBBBKob.
     .W.LBCKgggGgbb.
     W..BCKKdttmmt..
     M...gg.dt.tm...
@@ -131,13 +113,13 @@ const FRAMES = {
     ......LLBBBBCCK
     ......LBBBBKKoS
     .....LBBBBKoSYS
-    ....dLBBBCKoSS.
-    ...gGCBBCCCKo..
+    .....LBBBCKoSS.
+    .....CBBCCCKo..
     ....BCC.LBBBB..
     ....BCCLBBBKL..
     ..WLBCCLBBBKLB.
-    ..WLBCCBBBBKBB.
-    .W.LBCKgggGKBB.
+    ..WLBCCBBBBKLB.
+    .W.LBCKgggGKob.
     .W.LBCKdttmmbb.
     W..BCKKdt.tm...
     M...gg.dt.tm...
@@ -154,13 +136,13 @@ const FRAMES = {
     ......LLBBBBCCK
     ......LBBBBKKoS
     .....LBBBBKoSYS
-    ....dLBBBCKoSS.
-    ...gGCBBCCCKo..
+    .....LBBBCKoSS.
+    .....CBBCCCKo..
     ....BCC.LBBBB..
     ....BCCLBBBKL..
     ..WLBCCLBBBKLB.
-    ..WLBCCBBBBKBB.
-    .W.LBCKgggGKBB.
+    ..WLBCCBBBBKLB.
+    .W.LBCKgggGKob.
     .W.LBCKdttmmbb.
     W..BCK.dt.tm...
     M..gg..dt.tm...
@@ -182,8 +164,8 @@ const FRAMES = {
     .....BBCCLBBBB...
     ...LLBBCLBBKLB...
     .LLBBBCCLBKLBB...
-    LBBBCCKKBKLBBCb..
-    gBCCKK..bbBBCC...
+    LBBBCCKKBKobBCb..
+    gBCCKK..bboBCC...
     .gK....gggGgg....
     .......dttmmt....
     .......td..mt....
@@ -206,8 +188,8 @@ const FRAMES = {
     ....LBBCCLBBBB..
     ..LLBBBCLBBKLB..
     LLBBBCCKLBKLBB..
-    gBBCCKK.BKLBBCb.
-    .gCK....bbBBCC..
+    gBBCCKK.BKobBCb.
+    .gCK....bboBCC..
     .......gggGgg...
     .......dttmmt...
     .......td..mt...
@@ -229,8 +211,8 @@ const FRAMES = {
     ...LLBBCCLBBBB..
     LLLBBBCCLBBBKL..
     gBBBCCKKLBBBKLB.
-    .gCCK...BBBBKBB.
-    ........BBBBKBB.
+    .gCCK...BBBBKLB.
+    ........BBBBKob.
     .......gggGggbb.
     .......dttmmt...
     ........tdmt....
@@ -253,7 +235,7 @@ const FRAMES = {
     ....LBBCCLBBBB..
     .LLLBBCCLBBBKL..
     LBBBBCCKLBBBKLB.
-    gBCCKK..BBBBBBbb
+    gBCCKK..BBBBBobb
     .gK.....BBBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -278,7 +260,7 @@ const FRAMES = {
     .....BBCCLBBBB..
     ...LLBBCLBBBKL..
     .LLBBBCCLBBBKLB.
-    LBBBCCKKBBBBBBbb
+    LBBBCCKKBBBBBobb
     gBCCKK..BBBBCC..
     .gK....gggGgg...
     .......dttmmt...
@@ -302,7 +284,7 @@ const FRAMES = {
     ....LBBCCLBBBB..
     ..LLBBBCLBBBKL..
     LLBBBCCKLBBBKLB.
-    gBBCCKK.BBBBBBbb
+    gBBCCKK.BBBBBobb
     .gCK....BBBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -325,8 +307,8 @@ const FRAMES = {
     ...LLBBCCLBBBB..
     LLLBBBCCLBBBKL..
     gBBBCCKKLBBBKLB.
-    .gCCK...BBBBKBB.
-    ........BBBBKBB.
+    .gCCK...BBBBKLB.
+    ........BBBBKob.
     .......gggGggbb.
     .......dttmmt...
     ........tdmtt...
@@ -349,8 +331,8 @@ const FRAMES = {
     ....LBBCCLBBBB..
     .LLLBBCCLBBKLB..
     LBBBBCCKLBKLBB..
-    gBCCKK..BKLBBCb.
-    .gK.....bbBBCC..
+    gBCCKK..BKobBCb.
+    .gK.....bboBCC..
     .......gggGgg...
     .......dttmmt...
     .......td.mmtt..
@@ -374,8 +356,8 @@ const FRAMES = {
     ...CCLBBBB..
     ..BCLBBBKL..
     .LBCLBBKLB..
-    LBBCBBKLBC..
-    LBCCBbbBCC..
+    LBBCBBKobC..
+    LBCCBbboCC..
     LBCKgggGgg..
     BCK.dttmmt..
     gK...dtmt...
@@ -396,7 +378,7 @@ const FRAMES = {
     ..LBBBCKoSS..
     ...BBCCCKo...
     ...CCLBBBB...
-    ..BCLBBBKLBbb
+    ..BCLBBBKLobb
     .LBCLBBBKLB..
     LBBCBBBBKB...
     LBCCBBBBCC...
@@ -421,7 +403,7 @@ const FRAMES = {
     ..KCCLBBBCKoSS..
     ...KKKBBCCCKo...
     .....KCCLBBBB...
-    .......LBBBKLBbb
+    .......LBBBKLobb
     ..W....LBBBKLB..
     ..W....BBBBKB...
     .W.....BBBBCC...
@@ -444,7 +426,7 @@ const FRAMES = {
     gLBBBBLBBBBKKoS.
     gBBBBLBBBBKoSYS.
     .KCCCLBBBCKoSSbb
-    ..KKKgBBCCCKoKLB
+    ..KKK.BBCCCKoKLB
     .....KCCLBBBKLB.
     .......LBBBBKL..
     ..W....LBBBBB...
@@ -466,12 +448,12 @@ const FRAMES = {
     ........LLLBBBC..
     .......LLBBBBCCK.
     .......LBBBBKKoS.
-    .....GLBBBBKoSYS.
-    ....d.LBBBCKoSS..
-    ...gGCCBBCCCKo...
+    ......LBBBBKoSYS.
+    ......LBBBCKoSS..
+    .....CCBBCCCKo...
     ....BCC..LBBBB...
     ....BCC.LBBBBB...
-    ..WLBCC.LBBBKLBbb
+    ..WLBCC.LBBBKLobb
     ..WLBCC.BBBBKLB..
     .W.LBCK.BBBBKB...
     .W.LBCKgggGgg....
@@ -488,9 +470,9 @@ const FRAMES = {
     ....LLLBBBC...
     ...LLBBBBCCK..
     ...LBBHbKKoS..
-    ..LBBBBKLSYS..
-    ..LBBBCKLSS...
-    ..CBBCCCKL....
+    ..LBBBKobSYS..
+    ..LBBBCKLBS...
+    ..CBBCCCLB....
     .BCC.LBBKL....
     .BCCLBBBBB....
     LBCCLBBBBB....
@@ -518,8 +500,8 @@ const FRAMES = {
     .BCC..LBBBB...
     .BCC.LBBBKL...
     LBCC.LBBBKLB..
-    LBCC.BBBBBKLB.
-    LBCK.BBBBCCKLb
+    LBCC.BBBBBKob.
+    LBCK.BBBBCCKob
     LBCKdgggGgg.KH
     BCKKdt..tm....
     .ggdt....tm...
@@ -537,9 +519,9 @@ const FRAMES = {
     ...LBBBBKKoS..
     ..LBBBBKoSYS..
     ..LBBBCKoSS...
-    ..CBbHCCKo....
-    .BCCKLLLBB....
-    .BCCLKKLLB....
+    ..CBBHobbo....
+    .BCC.LKLBB....
+    .BCCLBBKLB....
     LBCCLBBBBB....
     LBCCBBBBBC....
     LBCKBBBBCC....
@@ -555,51 +537,51 @@ const FRAMES = {
     --------^-----
   `,
   atk_strike: `
-    .......LLBB.....
-    .....LLLBBBC....
-    ....LLBBBBCCK...
-    ....LBBBBKKoS...
-    ...LBBBBKoSYS...
-    ...LBBBCKoSS....
-    ..CCBBCCCKo.....
-    .BCC..LBBBB.....
-    .BCC.LBBBKLLBBb.
-    LBCC.LBBBKBBBBHb
-    LBCC.BBBBBC.....
-    LBCK.BBBBCC.....
-    LBCK.gggGgg.....
-    BCKKdttmmt......
-    .gg.dt..tm......
-    ...dt....tm.....
-    ...dt.....tm....
-    ...dt.....tm....
-    ...dt.....tm....
-    ...Kb.....obb...
-    ...KK.....bbbb..
-    -------^--------
+    .......LLBB....
+    .....LLLBBBC...
+    ....LLBBBBCCK..
+    ....LBBBBKKoS..
+    ...LBBBBKoSYS..
+    ...LBBBCKoSS...
+    ..CCBBCCCKo....
+    .BCC..LBBBB....
+    .BCC.LBBKLLBoob
+    LBCC.LBBKBBBbbH
+    LBCC.BBBBBC....
+    LBCK.BBBBCC....
+    LBCK.gggGgg....
+    BCKKdttmmt.....
+    .gg.dt..tm.....
+    ...dt....tm....
+    ...dt.....tm...
+    ...dt.....tm...
+    ...dt.....tm...
+    ...Kb.....obb..
+    ...KK.....bbbb.
+    -------^-------
   `,
   atk_follow: `
-    ........LLBB....
-    ......LLLBBBC...
-    .....LLBBBBCCK..
-    .....LBBBBKKoS..
-    ....LBBBBKoSYS..
-    ....LBBBCKoSS...
-    ..CC.BBCCCKo....
-    .BCC...LBBKL....
-    .BCC..LBBBBKLB..
-    LBCC..LBBBBBKLB.
-    LBCC..BBBBBC.KLb
-    LBCK..BBBBCC..Hb
-    LBCKdgggGgg.....
-    BCKKdt..tm......
-    .ggdt....tm.....
-    ...dt.....tm....
-    ...dt.....tm....
-    ...dt.....tm....
-    ...Kb.....obb...
-    ...KK.....bbbb..
-    -------^--------
+    ........LLBB...
+    ......LLLBBBC..
+    .....LLBBBBCCK.
+    .....LBBBBKKoS.
+    ....LBBBBKoSYS.
+    ....LBBBCKoSS..
+    ..CC.BBCCCKo...
+    .BCC...LBBKL...
+    .BCC..LBBBBKLB.
+    LBCC..LBBBBBKob
+    LBCC..BBBBBC.ob
+    LBCK..BBBBCC..H
+    LBCKdgggGgg....
+    BCKKdt..tm.....
+    .ggdt....tm....
+    ...dt.....tm...
+    ...dt.....tm...
+    ...dt.....tm...
+    ...Kb.....obb..
+    ...KK.....bbbb.
+    -------^-------
   `,
   atk_rise: `
     .......LLBB....
@@ -607,8 +589,8 @@ const FRAMES = {
     ....LLBBBBCCK..
     ....LBBBBKKoS..
     ...LBBBBKoSYS..
-    ...LBBBCKoSS.bH
-    ..CCBBCCCKo.KLb
+    ...LBBBCKoSS.oH
+    ..CCBBCCCKo.obb
     .BCC..LBBBBKLB.
     .BCC.LBBBBKLB..
     LBCC.LBBBKLB...
@@ -635,9 +617,9 @@ const FRAMES = {
     ..CCBBCCCKo...
     .BCC..LBBKL...
     .BCC.LBBBKLB..
-    LBCC.LBBBBKL..
-    LBCC.BBBBBKLb.
-    LBCK.BBBBCCHb.
+    LBCC.LBBBBKLB.
+    LBCC.BBBBBKob.
+    LBCK.BBBBCCH..
     LBCK.gggGgg...
     BCKKdttmmt....
     .gg.dt..tm....
@@ -654,9 +636,9 @@ const FRAMES = {
     ....LLLBBBC.
     ...LLBBBBCCK
     ...LBBHbKKoS
-    ..LBBBBKLSYS
-    ..LBBBCKLSS.
-    ...BBCCCKL..
+    ..LBBBKobSYS
+    ..LBBBCKLBS.
+    ...BBCCCLB..
     .....LBBKL..
     ...CLBBBBB..
     ..BCLBBBBB..
@@ -685,8 +667,8 @@ const FRAMES = {
     ......LBBBB...
     ...CCLBBBKL...
     ..BCCLBBBKLB..
-    .LBCCBBBBBKLB.
-    LBBCKgggGggKLb
+    .LBCCBBBBBKob.
+    LBBCKgggGggKob
     LBCCdttmmt..KH
     LBCKdt.tmmt...
     BCK.dt..tmm...
@@ -705,9 +687,9 @@ const FRAMES = {
     ...LBBBBKKoS
     ..LBBBBKoSYS
     ..LBBBCKoSS.
-    ...BbHCCKo..
-    ....KLLLBB..
-    ...CLKKLLB..
+    ...BBHobbo..
+    .....LKLBB..
+    ...CLBBKLB..
     ..BCLBBBBB..
     .LBCBBBBBC..
     LBBCBBBBCC..
@@ -724,53 +706,53 @@ const FRAMES = {
     --------^---
   `,
   air_strike: `
-    .......LLBB.....
-    .....LLLBBBC....
-    ....LLBBBBCCK...
-    ....LBBBBKKoS...
-    ...LBBBBKoSYS...
-    ...LBBBCKoSS....
-    ....BBCCCKo.....
-    ......LBBBB.....
-    ...CCLBBBKLLBBb.
-    ..BCCLBBBKBBBBHb
-    .LBCCBBBBBC.....
-    LBBCKBBBBCC.....
-    LBCCKgggGgg.....
-    LBCKdttmmt......
-    BCK.dt.tmmt.....
-    gK..dt..tmm.....
-    g....dt..tm.....
-    ......Kb.ob.....
-    .......K.bb.....
-    ................
-    ................
-    ................
-    -------^--------
+    .......LLBB....
+    .....LLLBBBC...
+    ....LLBBBBCCK..
+    ....LBBBBKKoS..
+    ...LBBBBKoSYS..
+    ...LBBBCKoSS...
+    ....BBCCCKo....
+    ......LBBBB....
+    ...CCLBBKLLBoob
+    ..BCCLBBKBBBbbH
+    .LBCCBBBBBC....
+    LBBCKBBBBCC....
+    LBCCKgggGgg....
+    LBCKdttmmt.....
+    BCK.dt.tmmt....
+    gK..dt..tmm....
+    g....dt..tm....
+    ......Kb.ob....
+    .......K.bb....
+    ...............
+    ...............
+    ...............
+    -------^-------
   `,
   air_follow: `
-    ........LLBB....
-    ......LLLBBBC...
-    .....LLBBBBCCK..
-    .....LBBBBKKoS..
-    ....LBBBBKoSYS..
-    ....LBBBCKoSS...
-    .....BBCCCKo....
-    .......LBBKL....
-    ...CC.LBBBBKLB..
-    ..BCC.LBBBBBKLB.
-    .LBCC.BBBBBC.KLb
-    LBBCKgggGggC..Hb
-    LBCCdttmmt......
-    LBCKdt.tmmt.....
-    BCK.dt..tmm.....
-    gK...dt..tm.....
-    g.....Kb.ob.....
-    .......K.bb.....
-    ................
-    ................
-    ................
-    -------^--------
+    ........LLBB...
+    ......LLLBBBC..
+    .....LLBBBBCCK.
+    .....LBBBBKKoS.
+    ....LBBBBKoSYS.
+    ....LBBBCKoSS..
+    .....BBCCCKo...
+    .......LBBKL...
+    ...CC.LBBBBKLB.
+    ..BCC.LBBBBBKob
+    .LBCC.BBBBBC.ob
+    LBBCKgggGggC..H
+    LBCCdttmmt.....
+    LBCKdt.tmmt....
+    BCK.dt..tmm....
+    gK...dt..tm....
+    g.....Kb.ob....
+    .......K.bb....
+    ...............
+    ...............
+    ...............
+    -------^-------
   `,
   air_rise: `
     .......LLBB....
@@ -778,8 +760,8 @@ const FRAMES = {
     ....LLBBBBCCK..
     ....LBBBBKKoS..
     ...LBBBBKoSYS..
-    ...LBBBCKoSS.bH
-    ....BBCCCKo.KLb
+    ...LBBBCKoSS.oH
+    ....BBCCCKo.obb
     ......LBBBBKLB.
     ...CCLBBBBKLB..
     ..BCCLBBBKLB...
@@ -807,9 +789,9 @@ const FRAMES = {
     ....BBCCCKo..
     ......LBBKL..
     ...CCLBBBKLB.
-    ..BCCLBBBBKL.
-    .LBCCBBBBBKLb
-    LBBCKBBBBCCHb
+    ..BCCLBBBBKLB
+    .LBCCBBBBBKob
+    LBBCKBBBBCCH.
     LBCCKgggGgg..
     LBCKdttmmt...
     BCK.dt.tmmt..
@@ -833,8 +815,8 @@ const FRAMES = {
     .BCC.LBBBB...
     .BCCLBBBKL...
     LBCCLBBBKLB..
-    LBCCBBBBBKLBH
-    LBCKBBBBCCKBb
+    LBCCBBBBBKobH
+    LBCKBBBBCCKbb
     LBCKgggGgg...
     BCKKdttmmt...
     .gg.dt..tm...
@@ -857,8 +839,8 @@ const FRAMES = {
     .....LBBBB...
     ...CLBBBKL...
     ..BCLBBBKLB..
-    .LBCBBBBBKLBH
-    LBBCBBBBCCKBb
+    .LBCBBBBBKobH
+    LBBCBBBBCCKbb
     LBCCgggGgg...
     LBCKdttmmt...
     BCK.dt.tmmt..
@@ -880,9 +862,9 @@ const FRAMES = {
     ..LBBBCKoSS.
     ..CBBCCCKo..
     .BCC.LBBBB..
-    .BCCLBBKLB..
-    LBCCLBKLBB..
-    LBCCBKLBBC..
+    .BCCLBBLBB..
+    LBCCLBLBBB..
+    LBCCBobBBC..
     LBCKHbBBCC..
     LBCKgggGgg..
     BCK.dttmmt..
@@ -904,9 +886,9 @@ const FRAMES = {
     ..LBBBCKoSS.
     ..CBBCCCKo..
     .BCC.LBBBB..
-    .BCCLBBKLB..
-    LBCCLBKLBB..
-    LBCCBKLBBC..
+    .BCCLBBLBB..
+    LBCCLBLBBB..
+    LBCCBobBBC..
     LBCKHbBBCC..
     LBCKgggGgg..
     BCKKdttmmt..
@@ -928,10 +910,10 @@ const FRAMES = {
     ..LBBBCKoSS.
     ..CBBCCCKo..
     .BCC.LBBBB..
-    .BCCLBBKLB..
-    LBCCLBKLBB..
-    LBCCBKLBBC..
-    LBCKHbBGgg..
+    .BCCLBBLBB..
+    LBCCLBLBBB..
+    LBCCBobBBC..
+    LBCKHbgGgg..
     LBCKdttmmt..
     BCKKdt.tm...
     .gg.dt.tm...
@@ -951,10 +933,10 @@ const FRAMES = {
     ..LBBBCKoSS.
     ..CBBCCCKo..
     .BCC.LBBBB..
-    .BCCLBBKLB..
-    LBCCLBKLBB..
-    LBCCBKLBBC..
-    LBCKHbBGgg..
+    .BCCLBBLBB..
+    LBCCLBLBBB..
+    LBCCBobBBC..
+    LBCKHbgGgg..
     LBCKdttmmt..
     BCK.dt.tm...
     gg..dt.tm...
@@ -974,9 +956,9 @@ const FRAMES = {
     ......LBBBCKoSS..
     .......BBCCCKo...
     .....BBCCLBBBB...
-    ...LLBBCLBBKLB...
-    .LLBBBCCLBKLBB...
-    LBBBCCKKBKLBBC...
+    ...LLBBCLBBLBB...
+    .LLBBBCCLBLBBB...
+    LBBBCCKKBobBBC...
     gBCCKK..HbBBCC...
     .gK....gggGgg....
     .......dttmmt....
@@ -998,9 +980,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ....LBBCCLBBBB..
-    ..LLBBBCLBBKLB..
-    LLBBBCCKLBKLBB..
-    gBBCCKK.BKLBBC..
+    ..LLBBBCLBBLBB..
+    LLBBBCCKLBLBBB..
+    gBBCCKK.BobBBC..
     .gCK....HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1021,9 +1003,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ...LLBBCCLBBBB..
-    LLLBBBCCLBBKLB..
-    gBBBCCKKLBKLBB..
-    .gCCK...BKLBBC..
+    LLLBBBCCLBBLBB..
+    gBBBCCKKLBLBBB..
+    .gCCK...BobBBC..
     ........HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1045,9 +1027,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ....LBBCCLBBBB..
-    .LLLBBCCLBBKLB..
-    LBBBBCCKLBKLBB..
-    gBCCKK..BKLBBC..
+    .LLLBBCCLBBLBB..
+    LBBBBCCKLBLBBB..
+    gBCCKK..BobBBC..
     .gK.....HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1070,9 +1052,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     .....BBCCLBBBB..
-    ...LLBBCLBBKLB..
-    .LLBBBCCLBKLBB..
-    LBBBCCKKBKLBBC..
+    ...LLBBCLBBLBB..
+    .LLBBBCCLBLBBB..
+    LBBBCCKKBobBBC..
     gBCCKK..HbBBCC..
     .gK....gggGgg...
     .......dttmmt...
@@ -1094,9 +1076,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ....LBBCCLBBBB..
-    ..LLBBBCLBBKLB..
-    LLBBBCCKLBKLBB..
-    gBBCCKK.BKLBBC..
+    ..LLBBBCLBBLBB..
+    LLBBBCCKLBLBBB..
+    gBBCCKK.BobBBC..
     .gCK....HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1117,9 +1099,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ...LLBBCCLBBBB..
-    LLLBBBCCLBBKLB..
-    gBBBCCKKLBKLBB..
-    .gCCK...BKLBBC..
+    LLLBBBCCLBBLBB..
+    gBBBCCKKLBLBBB..
+    .gCCK...BobBBC..
     ........HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1141,9 +1123,9 @@ const FRAMES = {
     ......LBBBCKoSS.
     .......BBCCCKo..
     ....LBBCCLBBBB..
-    .LLLBBCCLBBKLB..
-    LBBBBCCKLBKLBB..
-    gBCCKK..BKLBBC..
+    .LLLBBCCLBBLBB..
+    LBBBBCCKLBLBBB..
+    gBCCKK..BobBBC..
     .gK.....HbBBCC..
     .......gggGgg...
     .......dttmmt...
@@ -1166,9 +1148,9 @@ const FRAMES = {
     ..LBBBCKoSS.
     ...BBCCCKo..
     ...CCLBBBB..
-    ..BCLBBKLB..
-    .LBCLBKLBB..
-    LBBCBKLBBC..
+    ..BCLBBLBB..
+    .LBCLBLBBB..
+    LBBCBobBBC..
     LBCCHbBBCC..
     LBCKgggGgg..
     BCK.dttmmt..
@@ -1190,9 +1172,9 @@ const FRAMES = {
     ..LBBBCKoSS.
     ...BBCCCKo..
     ...CCLBBBB..
-    ..BCLBBKLB..
-    .LBCLBKLBB..
-    LBBCBKLBBC..
+    ..BCLBBLBB..
+    .LBCLBLBBB..
+    LBBCBobBBC..
     LBCCHbBBCC..
     LBCKgggGgg..
     BCK.dttmmt..
@@ -1215,9 +1197,9 @@ const FRAMES = {
     ..KCCLBBBCKoSS.
     ...KKKBBCCCKo..
     .....KCCLBBBB..
-    .......LBBKLB..
-    .......LBKLBB..
-    .......BKLBBC..
+    .......LBBLBB..
+    .......LBLBBB..
+    .......BobBBC..
     .......HbBBCC..
     .......gggGgg..
     .......dttmmt..
@@ -1240,9 +1222,9 @@ const FRAMES = {
     .KCCCLBBBCKoSS.
     ..KKK.BBCCCKo..
     .....KCCLBBBB..
-    .......LBBKLB..
-    .......LBKLBB..
-    .......BKLBBC..
+    .......LBBLBB..
+    .......LBLBBB..
+    .......BobBBC..
     .......HbBBCC..
     .......gggGgg..
     .......dttmmt..
@@ -1261,7 +1243,7 @@ const FRAMES = {
     .....LLBBBBCCK...
     .....LBBBBKKoS...
     ....LBBBBKoSoS...
-    ...gLBBBCKoSo.bb.
+    ....LBBBCKoSo.bb.
     .....BBCCCKoKLB..
     .....BCLBBBKLB...
     ..W.LBCLBBKLB....
@@ -1282,15 +1264,15 @@ const FRAMES = {
     ...........LLBB..
     .........LLLBBBC.
     ........LLBBBBCCK
-    .....G..LBBBBKKoS
-    ....d..LBBBBKoSoS
-    ...gGCCLBBBCKoSo.
+    ........LBBBBKKoS
+    .......LBBBBKoSoS
+    .....CCLBBBCKoSo.
     ....BCC.BBCCCKo..
     ....BCC..LBBBB...
     ..WLBCC.LBBBKL...
     ..WLBCC.LBBBKLB..
-    .W.LBCK.BBBBKBB..
-    .W.LBCK.BBBBKBB..
+    .W.LBCK.BBBBKLB..
+    .W.LBCK.BBBBKob..
     W..BCK.gggGggbb..
     M..gg..dttmmmt...
     .......dt..tmm...
@@ -1309,7 +1291,7 @@ const FRAMES = {
     .BCC.LBBBCKoSS.
     .BCC..BBCCCKo..
     LBCC..LBBBBB...
-    LBCC..BBBBKLBbb
+    LBCC..BBBBKLobb
     LBCK..BBBBKLB..
     LBCKdgggGgKB...
     BCKKdt..tmm....
@@ -1384,7 +1366,7 @@ const FRAMES = {
     .....BBCCCKo...
     .......LBBBB...
     ...CC.LBBBBB...
-    ..BCC.LBBBKLBbb
+    ..BCC.LBBBKLobb
     .LBCC.BBBBKLB..
     LBBCK.BBBBKB...
     LBCCKgggGgg....
@@ -1401,9 +1383,9 @@ const FRAMES = {
     ....LLLBBBC...
     ...LLBBBBCCK..
     ...LBBHbKKoS..
-    ..LBBBBKLSYS..
-    ..LBBBCKLSS...
-    ..CBBCCCKL....
+    ..LBBBKobSYS..
+    ..LBBBCKLBS...
+    ..CBBCCCLB....
     .BCC.LBBKL....
     .BCCLBBBBB....
     LBCCLBBBBB....
@@ -1425,9 +1407,9 @@ const FRAMES = {
     ....LLLBBBC.
     ...LLBBBBCCK
     ...LBBHbKKoS
-    ..LBBBBKLSYS
-    ..LBBBCKLSS.
-    ...BBCCCKL..
+    ..LBBBKobSYS
+    ..LBBBCKLBS.
+    ...BBCCCLB..
     .....LBBKL..
     ...CLBBBBB..
     ..BCLBBBBB..
@@ -1459,6 +1441,8 @@ export interface HeroSprite {
   readonly anchor: number;
   /** His sword hand ('H'): art pixels forward of that column, and up from his feet. */
   readonly hand: { readonly x: number; readonly y: number } | null;
+  /** His eye (the cyan 'Y'), the same way; null where it is shut. */
+  readonly eye: { readonly x: number; readonly y: number } | null;
 }
 
 const made = new Map<HeroFrame, HeroSprite>();
@@ -1474,12 +1458,15 @@ export function heroSprite(name: HeroFrame): HeroSprite {
     const ground = rows.pop() ?? '^';
     const anchor = ground.indexOf('^');
     let hand: { x: number; y: number } | null = null;
+    let eye: { x: number; y: number } | null = null;
     rows.forEach((row, y) => {
       const x = row.indexOf('H');
       if (x >= 0) hand = { x: x - anchor, y: rows.length - 1 - y };
+      const e = row.indexOf('Y');
+      if (e >= 0 && !eye) eye = { x: e - anchor, y: rows.length - 1 - y };
     });
-    const sprite = new PixelSprite(rows, LAID);
-    s = { sprite, w: sprite.w, h: sprite.h, anchor, hand };
+    const sprite = new PixelSprite(rows, PAINT);
+    s = { sprite, w: sprite.w, h: sprite.h, anchor, hand, eye };
     made.set(name, s);
   }
   return s;
@@ -1494,6 +1481,29 @@ export function drawHero(ctx: CanvasRenderingContext2D, name: HeroFrame, mid: nu
   const s = heroSprite(name);
   const column = facing > 0 ? s.anchor : s.w - 1 - s.anchor;
   s.sprite.draw(ctx, mid - column * ART, feet - s.h * ART, facing);
+}
+
+const whites = new Map<HeroFrame, HTMLCanvasElement>();
+
+/**
+ * A frame of him all in white: what a blow shows for its first frames.
+ * Made once per frame - a silhouette, not a filter over the whole screen.
+ */
+export function heroWhite(name: HeroFrame): HTMLCanvasElement {
+  let canvas = whites.get(name);
+  if (!canvas) {
+    const rows = FRAMES[name]
+      .split('\n')
+      .map((r) => r.trim())
+      .filter((r) => r.length > 0)
+      .slice(0, -1);
+    canvas = new PixelSprite(
+      rows.map((r) => r.replace(/[^.]/g, 'w')),
+      { w: RAMP.grey[7] },
+    ).canvas;
+    whites.set(name, canvas);
+  }
+  return canvas;
 }
 
 /**
@@ -1525,7 +1535,7 @@ export function drawGhost(ctx: CanvasRenderingContext2D, name: HeroFrame, tone: 
     const marked = rows.map((row, y) =>
       [...row].map((c, x) => (c === '.' ? '.' : solid(x - 1, y) && solid(x + 1, y) && solid(x, y - 1) && solid(x, y + 1) ? 'i' : 'e')).join(''),
     );
-    ghost = new PixelSprite(marked, { e: throughNight(GHOST_TONES[t][0]), i: throughNight(GHOST_TONES[t][1]) });
+    ghost = new PixelSprite(marked, { e: GHOST_TONES[t][0], i: GHOST_TONES[t][1] });
     list[t] = ghost;
   }
   const s = heroSprite(name);
