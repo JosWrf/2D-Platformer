@@ -622,7 +622,7 @@ Herzkern wieder ab.
 | --- | --- | --- |
 | **Schleim** | hüpft stur geradeaus | drüber oder drauf |
 | **Fledermaus** | fliegt in Wellen an, zieht vor dem Sturz hoch | Timing |
-| **Skelett** | patrouliert, schlägt telegrafiert | parieren oder ausweichen |
+| **Skelett** | patrouliert, hebt das Schwert eine halbe Sekunde vor dem Hieb | parieren oder ausweichen |
 | **Dunkler Magier** | schwebt, wirft Kugeln | Kugeln zurückparieren |
 | **Zunder** | läuft heran und zündet sich | **auf Abstand erledigen** |
 | **Schildwache** | alles in den Schild hinein bleibt dort | **von hinten, oder parieren** |

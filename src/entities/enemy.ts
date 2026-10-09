@@ -599,6 +599,16 @@ export class Bat extends Enemy {
 
 /* ----------------------------------------------------------------- skeleton */
 
+/**
+ * How long a skeleton holds its sword up before the cut: half a second, like
+ * every other blow in the game. It was 0.36 - to an eye 0.3 s behind, the
+ * raised sword showed for six hundredths of a second before it came down, and
+ * in Morvain's throne room, where they are summoned into a fight that already
+ * asks for the eyes elsewhere, that was a heart now and then that nobody
+ * could have read.
+ */
+const SKELETON_WINDUP = 0.5;
+
 export class Skeleton extends Enemy {
   private state: 'patrol' | 'chase' | 'windup' | 'swing' | 'cooldown' = 'patrol';
   private timer = 0;
@@ -651,7 +661,7 @@ export class Skeleton extends Enemy {
           this.vx = approach(this.vx, this.dir * 108, 900 * dt);
           if (dist < 46) {
             this.state = 'windup';
-            this.timer = 0.36;
+            this.timer = SKELETON_WINDUP;
             this.vx = 0;
           } else if (dist > this.aggroRange * 1.5) {
             this.state = 'patrol';
@@ -738,7 +748,10 @@ export class Skeleton extends Enemy {
       ctx.fillStyle = '#151a26';
       ctx.fillRect(-4, -34, 3, 3);
       ctx.fillRect(1, -34, 3, 3);
-      ctx.fillStyle = '#ff7a3c';
+      // Its eyes flare while the sword is up: the tell is the blade and the
+      // eyes, so it reads even when the blade is behind something.
+      const winding = this.state === 'windup';
+      ctx.fillStyle = winding ? '#ffd27a' : '#ff7a3c';
       ctx.fillRect(-3.5, -33.5, 2, 2);
       ctx.fillRect(1.5, -33.5, 2, 2);
       // Rusty sword.
