@@ -99,9 +99,20 @@ export class Vesper extends Enemy {
     this.aggroRange = 520;
   }
 
-  /** His bats keep off while he winds up and makes his dive. */
+  /**
+   * His bats keep off while he winds up and makes his dive, and while he is
+   * down on the roof: that is the window the dive's parry earns, and bats
+   * coming down into it cost a hero who read him most of what he still lost -
+   * punished for punishing.
+   */
   override get holdsSwarm(): boolean {
-    return this.state === 'diveWind' || this.state === 'dive';
+    return (
+      this.state === 'diveWind' ||
+      this.state === 'dive' ||
+      this.state === 'fall' ||
+      this.state === 'stunned' ||
+      this.state === 'grounded'
+    );
   }
 
   get phase(): 1 | 2 {
@@ -191,7 +202,10 @@ export class Vesper extends Enemy {
 
   override touchPlayer(world: World): void {
     if (this.state === 'dormant' || this.state === 'intro' || this.state === 'dying') return;
-    if (this.state === 'moon' || this.state === 'stunned' || this.state === 'grounded') return;
+    // Getting up off the roof is not a blow: it ends the window, it does not
+    // punish whoever was using it - with nothing before it but the beat of
+    // his wings, it caught a hero standing at his side every time.
+    if (this.state === 'moon' || this.state === 'stunned' || this.state === 'grounded' || this.state === 'rise') return;
     const p = world.player;
     if (this.state === 'dive') {
       if (this.hitThisMove || p.dead || p.isInvulnerable) return;

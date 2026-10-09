@@ -456,8 +456,9 @@ Was sich geändert hat, steht bei jedem Boss selbst; in Kürze:
   Pendel kostet zwei; der Prismarch und der Splitterwächter taumeln nicht mehr
   doppelt, und der Splitterwächter ist *gereizt* wie der Ritter.
 * **Zu stark, weil nicht zu lesen:** Umbra holt vor dem Ladeschlag 0,5 s aus;
-  jede Fledermaus zieht vor dem Sturz hoch, und Vesperons stoßen eine nach der
-  anderen herab, nie während er selbst stürzt.
+  jede Fledermaus zieht vor dem Sturz eine halbe Sekunde hoch, und Vesperons
+  stoßen eine nach der anderen herab, nie während er stürzt oder am Boden liegt —
+  wo er auch beim Aufstehen niemanden mehr trifft.
 * **Zu kurz:** Gallert, Gierschlund, Thalassa, Tickmar und der Splitterwächter
   haben mehr Leben — jeweils so viel, dass der Kampf seine Züge zeigen kann,
   bevor er vorbei ist.
@@ -647,7 +648,7 @@ Stacheln darunter) war einer neun Sekunden nach Laufbeginn weg, bevor der
 Spieler ihn je gesehen hätte. Jetzt wird der **Landeplatz** geprüft, und wenn es
 in beide Richtungen schlecht aussieht, hüpft er auf der Stelle.
 
-Die **Fledermaus** zieht vor jedem Sturz eine knappe halbe Sekunde (0,42 s) hoch,
+Die **Fledermaus** zieht vor jedem Sturz eine halbe Sekunde lang hoch,
 weg vom Helden, mit glühenden Augen und einem Schrei — vorher stieß sie ohne jedes
 Zeichen aus dem Schweben herab, 90 px in 0,37 s. Und sie setzt sich nicht mehr auf
 Planken: Lag der Held darunter, landete sie auf dem Brett und blieb hüpfend dort
@@ -1370,7 +1371,7 @@ er herunterkommt. 56 Trefferpunkte, zwei Phasen, vier Züge:
   drei, und sie jagen, statt zurück ins Gebälk zu fliegen. Sie stoßen eine nach
   der anderen herab, jede nach einem sichtbaren Hochziehen (siehe die
   Fledermaus unter [Die Gegner](#die-gegner)), und nie, während er selbst
-  stürzt.
+  stürzt oder am Boden liegt.
 * **Blutmond** — ab der Hälfte steigt er ganz nach oben, der Mond hinter ihm
   färbt sich, und wo es auf dem Dach rot markiert ist, regnet es.
 
@@ -1381,11 +1382,15 @@ auf seine Höhe, und genug Schaden in der Luft wirft ihn aufs Dach.
 
 Der Schwarm war lange das Teuerste an ihm: Vier Fledermäuse, drei auf einen Ruf,
 stießen ohne Ankündigung und nach Belieben herab, zwei und drei auf einmal, auch
-während der Held für die Parade seines Sturzflugs stillstand. Ein Leser, der
-alles andere kommen sah, verlor sechs bis sieben Herzen — fast alle an Fledermäuse
-— und lesen lohnte sich kaum mehr als draufhauen. Jetzt verliert er rund drei
-bis vier, in gut einer Minute; der Draufhauer nimmt neun bis zehn Treffer. Wer
-ihn zerstieben lässt, bekommt den **Blutdurst**.
+während der Held für die Parade seines Sturzflugs stillstand — und auch dann,
+wenn er den Lohn dieser Parade einholte, den Fürsten auf dem Dach. Ein Leser, der
+alles andere kommen sah, verlor sechs bis sieben Herzen, fast alle an
+Fledermäuse, und lesen lohnte sich kaum mehr als draufhauen. Dazu traf ihn
+Vesperon selbst, wenn er sich vom Dach erhob, ohne jedes Zeichen außer dem
+Flügelschlag — das beendet jetzt das Fenster, statt den zu bestrafen, der es
+nutzt. Jetzt verliert der Leser null bis drei Herzen in knapp einer Minute; der
+Draufhauer nimmt zehn Treffer in gut einer. Wer ihn zerstieben lässt, bekommt
+den **Blutdurst**.
 
 ### Im Spiegelgrund: Umbra, dein Schatten
 
@@ -1423,9 +1428,9 @@ Was er nicht hat, ist Geduld, und was er liest, ist die des Helden:
 Gemessen in `verify:bosses`, über vier Läufe: Wer nur draufhaut, wird in 20 bis
 25 Sekunden 15- bis 21-mal pariert und kassiert 18 bis 25 Treffer — mit sechs
 Herzen sind das drei bis vier Leben. Wer
-pariert und auf die Fenster wartet, legt ihn in 31 bis 37 Sekunden um und nimmt
-dabei höchstens einen Treffer — wenn er es im selben Bild sieht, in dem Umbra
-etwas tut. Mit 0,3 s Verspätung, wie ein Mensch, waren es lange vier Herzen im
+pariert und auf die Fenster wartet, legt ihn in 31 bis 41 Sekunden um und nimmt
+dabei zwei, drei Treffer (gemessen über drei Duelle) — wenn er es im selben Bild
+sieht, in dem Umbra etwas tut. Mit 0,3 s Verspätung, wie ein Mensch, waren es lange vier Herzen im
 Mittel und bis zu acht, und drei Viertel davon kamen von einem einzigen Hieb: Der
 Ladeschlag des Helden beginnt mit einem gewöhnlichen Hieb auf den Tastendruck, und
 mit der Flutklinge wirft der seine Sichel — Umbras begann also mit einem Hieb samt
@@ -1454,20 +1459,20 @@ Beide werden am Leben gehalten; gezählt wird, was durchkommt, über mehrere Lä
 | Ankhor, 60 s | Faust 0,95 s, Wischer 0,78 s, Sonne 0,55 s | 26–27 Herzen | 1–2 |
 | Arachna, 40 s | Sturz 0,7 s (Ring steht 0,25 s still), Netz 0,57 s, Brut 0,6 s, Pendel 0,75 s | 19–27 Herzen | 0–1 |
 | Ignivor, 45 s | Durchbruch 0,55 s Stillstand | 7–12 Herzen | 0–5 |
-| Vesperon, 40 s | Sturzflug 0,57 s, Fledermaus 0,42 s | 29–33 Herzen | 9–16 |
+| Vesperon, 40 s | Sturzflug 0,57 s, Fledermaus 0,5 s | 22–30 Herzen | 5–11 |
 
-Dieser Bot reagiert im selben Bild, in dem etwas geschieht, und er kennt keine
-Fledermaus, die vorher hochzieht — bei Vesperon zahlt er darum seit den neuen
-Fledermäusen eher mehr. Wie es einem Menschen geht, der alles 0,3 s später
-sieht, misst `verify:balance` (siehe [Herausfordernd, aber keine
+Dieser Bot reagiert im selben Bild, in dem etwas geschieht; einer Fledermaus,
+die losstößt, geht er aus dem Weg, und unter einen Sturzflug läuft er hinein,
+statt an der Linie entlang wegzulaufen. Wie es einem Menschen geht, der alles
+0,3 s später sieht, misst `verify:balance` (siehe [Herausfordernd, aber keine
 Wand](#herausfordernd-aber-keine-wand)); dort kostet Vesperon den Leser jetzt
-rund drei Herzen statt sechs bis sieben.
+rund ein Herz statt sechs bis sieben.
 
 Jeder Zug, der wehtut, ist mindestens eine halbe Sekunde vorher zu sehen — mit
 einer bewussten Ausnahme: Umbras Kombo (0,3 bis 0,38 s) ist die Kombo des Helden
 selbst. Sein Ladeschlag war lange eine zweite, die niemand bemerkt hatte; er
 holt jetzt 0,5 s sichtbar aus. Die Fledermäuse waren eine dritte — sie stießen
-ohne jedes Zeichen herab — und ziehen jetzt 0,42 s hoch. Gierschlunds Schnapper war die zweite (0,42 s); er hat jetzt 0,52 s und
+ohne jedes Zeichen herab — und ziehen jetzt 0,5 s hoch. Gierschlunds Schnapper war die zweite (0,42 s); er hat jetzt 0,52 s und
 kommt nur noch nach knapp einer Sekunde Klammern. Die
 Regeln halten: Gierschlunds Deckel nimmt 0 und ihr Maul 1, Ankhors Gesicht 2
 statt 1 und sein gesackter Kopf reicht bis 18 px über den Boden herab, Arachna

@@ -443,10 +443,13 @@ export class Slime extends Enemy {
  * How long a bat pulls up before it dives: it stops, rises a little, its eyes
  * burn and it screeches - then it comes. It used to dive out of its hover with
  * nothing before it, a fall of 90 px in 0.37 s: from Vesperon's swarm, which
- * keeps four of them over the hero, that was six hearts a fight to a hero who
- * saw everything else coming, and most of what reading him cost.
+ * kept four of them over the hero, that was six hearts a fight to a hero who
+ * saw everything else coming, and most of what reading him cost. Half a
+ * second, like every other blow in the game: at 0.42 his bats still cost a
+ * hero who read him four hearts in seven, mostly while he went in on the
+ * lord lying on the roof.
  */
-const BAT_TELL = 0.42;
+const BAT_TELL = 0.5;
 
 export class Bat extends Enemy {
   private phase = rand(0, Math.PI * 2);

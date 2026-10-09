@@ -47,9 +47,12 @@ export const ROAD = [
   { kind: 'thalassa', name: 'Thalassa', relic: 'flutklinge', band: 'middle' },
   { kind: 'gargoyle', name: 'Grauwacht', relic: 'steinblick', band: 'late' },
   { kind: 'clock', name: 'Tickmar', relic: 'taktgeber', band: 'late' },
-  { kind: 'vesper', name: 'Vesperon', relic: 'blutdurst', band: 'late' },
-  { kind: 'knight', name: 'Morvain', relic: 'schattenschritt', band: 'late' },
-  { kind: 'shadow', name: 'Umbra', relic: 'zweiteratem', band: 'late' },
+  // These three are decided by a handful of parries and dives a fight, and
+  // one bad fight in three moves the median by hearts: their readers are
+  // counted over more fights (see verify-balance.mjs).
+  { kind: 'vesper', name: 'Vesperon', relic: 'blutdurst', band: 'late', runs: 7 },
+  { kind: 'knight', name: 'Morvain', relic: 'schattenschritt', band: 'late', runs: 7 },
+  { kind: 'shadow', name: 'Umbra', relic: 'zweiteratem', band: 'late', runs: 7 },
   // A mini-boss: a lighter fight than the ones around it, measured as one.
   { kind: 'warden', name: 'Splitterwächter', relic: 'splitterparade', band: 'middle' },
   { kind: 'hydra', name: 'Die Fünfkronige', relic: 'hydrablut', band: 'late' },

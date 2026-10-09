@@ -585,17 +585,29 @@ results.vesper = await page.evaluate(() => {
     for (let f = 0; f < 60 * seconds; f++) {
       const actions = {};
       if (dodge) {
-        // Off the line of a locked dive, and a roll through a crescent.
+        // Off the line of a locked dive - in under it, towards the side he
+        // comes from: the line ends at the hero's feet and slides on past them,
+        // so away from where it ends is along it. (This used to step away from
+        // the end of the line, which tracks the hero: it ran the same way
+        // every time, along the slide, and met him there.) And a roll through
+        // a crescent.
         if (boss.state === 'diveWind' && boss.timer < 0.3 && Math.abs(boss.target.x - p.cx) < 90) {
-          actions[boss.target.x > p.cx ? 'left' : 'right'] = true;
+          actions[boss.cx > p.cx ? 'right' : 'left'] = true;
         }
         for (const q of g.projectiles) {
           if (!q.friendly && q.kind === 'blood' && Math.hypot(q.cx - p.cx, q.cy - p.cy) < 90) actions.dash = true;
         }
         for (const m of boss.marks) if (Math.abs(m.x - p.cx) < 36 && m.t > 0.3) actions[m.x > p.cx ? 'left' : 'right'] = true;
-        // His bats get swatted, the way anyone would.
+        // A bat that has pulled up and goes, comes down at where he stood: he
+        // goes too, away from it, and it comes down short. The rest of his
+        // bats get swatted, the way anyone would.
+        const diver = g.enemies.find(
+          (e) => e.kind === 'bat' && !e.dead && ((e.tell > 0 && e.tell < 0.08) || e.diving) && Math.abs(e.cx - p.cx) < 160 && e.cy < p.cy + 10,
+        );
         const bat = g.enemies.find((e) => e.kind === 'bat' && !e.dead && Math.abs(e.cx - p.cx) < 70 && Math.abs(e.cy - p.cy) < 60);
-        if (bat) {
+        if (diver && !actions.left && !actions.right) {
+          actions[diver.cx > p.cx ? 'left' : 'right'] = true;
+        } else if (bat) {
           p.facing = bat.cx > p.cx ? 1 : -1;
           actions.attack = f % 12 < 3;
         }
@@ -783,6 +795,11 @@ results.mimic = await page.evaluate(() => {
   boss.phaseTwo = true;
   fight(15, left, false);
   fight(15, right, false);
+  // Its breath is one move among five, picked at random: thirty seconds of
+  // its second half can go by without one - whenever the fights before this
+  // one happened to draw the dice differently. So on, from the far side,
+  // until one has been seen whole (or a minute more has passed).
+  for (let k = 0; k < 4 && winds.gulpWind.length === 0; k++) fight(15, k % 2 ? right : left, false);
   // The snap is only for a hero who clings to it, and the posts above stand
   // next to it only when it happens to hop there: a run in which it never
   // did, from the first frame of the wind-up on, measured no snap at all and
@@ -1355,12 +1372,12 @@ results.shadow = await page.evaluate(() => {
   };
 
   let jumpHold = 0;
-  const duel = (seconds, style) => {
+  const duel = (seconds, style, done = () => false) => {
     h.hits = 0;
     let dealt = 0;
     let killedAt = -1;
     for (let f = 0; f < 60 * seconds; f++) {
-      if (boss.state === 'dying' || boss.dead) {
+      if (boss.state === 'dying' || boss.dead || done()) {
         killedAt = +(f / 60).toFixed(1);
         break;
       }
@@ -1390,7 +1407,7 @@ results.shadow = await page.evaluate(() => {
             a.parry = true;
           }
         } else if (open) swingAt(36, 8);
-        else if (boss.plan === 'windup' || boss.plan === 'combo') p.facing = dx > 0 ? 1 : -1;
+        else if (boss.plan === 'windup' || boss.plan === 'combo' || boss.plan === 'draw') p.facing = dx > 0 ? 1 : -1;
         else if (b.chargeReady || boss.plan === 'leap') {
           if (dist < 110) a[away] = true;
         } else if (dist < 90) a[away] = true;
@@ -1418,15 +1435,45 @@ results.shadow = await page.evaluate(() => {
   out.masher = duel(30, 'mash');
   out.masher.turned = turned;
   out.masher.hearts = p.maxHp;
-  // In its second half, left alone: the step through the dark.
+  // In its second half, left alone: the step through the dark - one pick in
+  // five or so, so twenty seconds can go by without it, depending on how the
+  // fights before this one drew the dice. On until it has been seen (or a
+  // minute more has passed).
   reset();
   boss.phaseTwo = true;
   duel(20, 'stand');
+  for (let k = 0; k < 4 && !seen.has('fade'); k++) duel(15, 'stand');
   out.moves = [...seen].sort();
   reset();
   h.why = {};
-  out.reader = duel(150, 'read');
+  // Three duels, the median of them: one alone swings by two hits on how the
+  // dice of the fights before it fell. The first two end a blow short of its
+  // fall - the blow that would fell it leaves it one point instead - so that
+  // the third can still fell it, for the checks after this one.
+  const reads = [];
+  for (let k = 0; k < 2; k++) {
+    reset();
+    h.why = {};
+    const realHurt = boss.hurt;
+    let spent = false;
+    boss.hurt = function (amount, dir, world) {
+      if (boss.hp - amount <= 0) {
+        spent = true;
+        boss.hp = 1;
+        return;
+      }
+      return realHurt.call(this, amount, dir, world);
+    };
+    reads.push(duel(150, 'read', () => spent));
+    boss.hurt = realHurt;
+  }
+  reset();
+  h.why = {};
+  reads.push(duel(150, 'read'));
   out.readerHitDuring = { ...h.why };
+  out.readers = reads.map((r) => `${r.killedAt} s, ${r.hits}`);
+  out.reader = [...reads].sort((x, y) => x.hits - y.hits)[1];
+  out.reader.allFelled = reads.every((r) => r.killedAt > 0);
   out.windupMin = windups.length ? Math.min(...windups) : null;
   out.fadeMin = fades.length ? Math.min(...fades) : null;
   out.fades = fades.length;
@@ -1548,7 +1595,7 @@ const checks = [
     'Umbra turns a masher\'s blows aside and answers them - two lives\' worth of blows before it falls, if it falls',
     u.masher.turned >= 4 && u.masher.hits >= 2 * u.masher.hearts,
   ],
-  ['Umbra loses to a hero who parries and waits for its openings', u.reader.killedAt > 0 && u.reader.hits <= 3],
+  [`Umbra loses to a hero who parries and waits for its openings (three duels: ${u.readers?.join(' / ')})`, u.reader.allFelled && u.reader.hits <= 3],
   ['Umbra falls, heals the hero, opens the wards, and leaves the Zweiter Atem', ends(u.end, 'SCHATTEN')],
 ];
 let failed = 0;

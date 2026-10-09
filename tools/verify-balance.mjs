@@ -21,7 +21,10 @@
  * Usage:
  *   node tools/verify-balance.mjs                  every boss, three fights each
  *   node tools/verify-balance.mjs --boss wyrm      one boss (comma list for more)
- *   node tools/verify-balance.mjs --runs 5         more fights per boss
+ *   node tools/verify-balance.mjs --runs 5         more fights per boss (a boss
+ *                                                  the road marks with runs:
+ *                                                  has its reader fight at
+ *                                                  least that often)
  *   node tools/verify-balance.mjs --style reader   only the reader (or masher)
  *   node tools/verify-balance.mjs --dist dir       another build than dist/
  */
@@ -76,7 +79,8 @@ for (const boss of ROAD) {
   const styles = STYLE === 'both' ? ['reader', 'masher'] : [STYLE];
   for (const style of styles) {
     if (style === 'reader' && !reader) continue;
-    for (let r = 0; r < RUNS; r++) {
+    const runs = style === 'reader' ? Math.max(RUNS, boss.runs ?? 0) : RUNS;
+    for (let r = 0; r < runs; r++) {
       await stage(bench, boss.kind);
       if (style === 'reader') await useReader(bench.page, reader);
       const cap = style === 'reader' ? 180 : 120;
