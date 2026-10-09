@@ -101,6 +101,78 @@ export function compose(w: number, h: number, parts: readonly (readonly [Grid, n
   return cells.map((r) => r.join(''));
 }
 
+/** A blank w×h frame to draw into with plot(). */
+export function blank(w: number, h: number): string[][] {
+  const cells: string[][] = [];
+  for (let y = 0; y < h; y++) cells.push(new Array<string>(w).fill('.'));
+  return cells;
+}
+
+/** Sets one cell of a frame being built, if it is inside it. */
+export function plot(cells: string[][], x: number, y: number, c: string): void {
+  const row = cells[y];
+  if (row && x >= 0 && x < row.length) row[x] = c;
+}
+
+/** A frame being built, finished. */
+export function rows(cells: readonly (readonly string[])[]): string[] {
+  return cells.map((r) => r.join(''));
+}
+
+/**
+ * A filled oval in a frame being built: the cells whose centres fall inside
+ * the ellipse round (cx, cy) - cell coordinates, so 3.5 is the middle of the
+ * fourth column - with radii rx and ry.
+ */
+export function oval(cells: string[][], cx: number, cy: number, rx: number, ry: number, c: string): void {
+  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) {
+    for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+      const dx = (x + 0.5 - cx) / rx;
+      const dy = (y + 0.5 - cy) / ry;
+      if (dx * dx + dy * dy <= 1) plot(cells, x, y, c);
+    }
+  }
+}
+
+/**
+ * The smear of a swing as a frame's worth of cells: the band of an arc round
+ * (cx, cy) at radius r, from angle a0 to a1 (screen angles, clockwise from
+ * the right), thin where the swing began and `thick` cells at its widest just
+ * behind the head, running out to a point. The outer cells take `edge`, the
+ * middle of the band `core`. Worked out once, when the frame is made.
+ */
+export function smear(
+  cells: string[][],
+  cx: number,
+  cy: number,
+  r: number,
+  a0: number,
+  a1: number,
+  thick: number,
+  core: string,
+  edge: string,
+): void {
+  const span = a1 - a0;
+  const h = cells.length;
+  const w = cells[0]?.length ?? 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = x + 0.5 - cx;
+      const dy = y + 0.5 - cy;
+      const d = Math.hypot(dx, dy);
+      let off = Math.atan2(dy, dx) - a0;
+      if (span < 0) off = -off;
+      off = ((off % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      const t = off / Math.abs(span);
+      if (t > 1) continue;
+      const half = (thick / 2) * Math.sin(Math.PI * Math.pow(t, 0.7)) ** 0.8;
+      const gap = Math.abs(d - r);
+      if (half < 0.35 || gap > half) continue;
+      plot(cells, x, y, gap <= half * 0.45 ? core : edge);
+    }
+  }
+}
+
 /**
  * The eight directions of travel, as an index: 0 right, then clockwise on
  * screen - 1 down-right, 2 down, 3 down-left, 4 left, 5 up-left, 6 up,
@@ -140,8 +212,8 @@ export class Sheet<F extends string> {
 
   constructor(
     readonly frames: Readonly<Record<F, Grid>>,
-    private readonly key: Readonly<Record<string, string>>,
-    private readonly palettes: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
+    readonly key: Readonly<Record<string, string>>,
+    readonly palettes: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
   ) {}
 
   sprite(frame: F, palette = ''): PixelSprite {

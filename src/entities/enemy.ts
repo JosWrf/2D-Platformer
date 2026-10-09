@@ -1,10 +1,41 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
+import { ring as pixelRing } from '../render/pen';
+import { ART, snap } from '../render/pixel';
 import { glow, shadow, withHitFlash } from '../render/sprites';
 import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Body } from './entity';
+import {
+  BAT,
+  type BatFrame,
+  CHARGER_FEET,
+  CHARGER_SPINE,
+  KLINGENLAEUFER,
+  type ChargerFrame,
+  MAGE,
+  MAGE_H,
+  MAGE_SPINE,
+  type MageFrame,
+  SCHILDWACHE,
+  SHIELD_H,
+  SHIELD_SPINE,
+  type ShieldFrame,
+  SKELETON,
+  SKELETON_H,
+  SKELETON_SPINE,
+  type SkeletonFrame,
+  SLIME,
+  SLIME_H,
+  type SlimeFrame,
+  ZUNDER,
+  ZUNDER_FEET,
+  type ZunderFrame,
+  homeZone,
+  keyColor,
+  paletteFor,
+} from './foe-art';
 import { Projectile } from './projectile';
 import { type RelicId, mightOf } from './relics';
 
@@ -349,6 +380,37 @@ export abstract class Enemy extends Body {
   }
 }
 
+/* ------------------------------------------------------------- the roster */
+
+/**
+ * A roster monster's health once it has taken a blow: a bar one art pixel
+ * tall a little over its head, the lost part in a dark red. It sits on the
+ * actor layer like the monster, so it gets the same outline and reads against
+ * any background. `top` is where the monster's drawing ends above.
+ */
+function drawPips(ctx: CanvasRenderingContext2D, e: Enemy, top: number): void {
+  if (e.hp >= e.maxHp || e.maxHp <= 1) return;
+  const cells = Math.max(4, Math.round(e.w / ART));
+  const x = snap(e.cx - (cells * ART) / 2);
+  const y = snap(top - 6);
+  ctx.fillStyle = '#571c27';
+  ctx.fillRect(x, y, cells * ART, ART);
+  const left = Math.max(1, Math.round((cells * Math.max(0, e.hp)) / e.maxHp));
+  ctx.fillStyle = '#f5555d';
+  ctx.fillRect(x, y, left * ART, ART);
+}
+
+/**
+ * The contact line under a monster that walks or hops: on the floor below
+ * it, narrower and fainter the higher it is, gone more than a few tiles up.
+ */
+function footShadow(ctx: CanvasRenderingContext2D, world: World, e: Enemy, width: number, strength: number): void {
+  const gap = world.level.groundBelow(e.cx, e.bottom - 2, 5);
+  if (gap >= 5 * TILE) return;
+  const k = clamp(1 - (gap - 2) / 180, 0.3, 1);
+  shadow(ctx, e.cx, e.bottom - 2 + gap + 1, width * k, strength * k);
+}
+
 /* -------------------------------------------------------------------- slime */
 
 export class Slime extends Enemy {
@@ -364,7 +426,7 @@ export class Slime extends Enemy {
   }
 
   protected override deathColor(): string {
-    return PALETTE.slime;
+    return keyColor(SLIME, paletteFor(homeZone(this)), '3');
   }
 
   override update(dt: number, world: World): void {
@@ -406,34 +468,27 @@ export class Slime extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
-  override draw(ctx: CanvasRenderingContext2D): void {
-    shadow(ctx, this.cx, this.bottom + 1, this.w * 0.9, 0.3);
-    const squish = this.onGround ? Math.sin(this.anim * 6) * 0.06 : clamp(-this.vy / 900, -0.2, 0.25);
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      ctx.scale(1 + squish * 0.6, 1 - squish);
-      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
-      g.addColorStop(0, PALETTE.slime);
-      g.addColorStop(1, PALETTE.slimeDark);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-this.w / 2, 0);
-      ctx.quadraticCurveTo(-this.w / 2, -this.h * 1.25, 0, -this.h * 1.2);
-      ctx.quadraticCurveTo(this.w / 2, -this.h * 1.25, this.w / 2, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(-4, -this.h * 0.75, 4, 2.5, -0.4, 0, Math.PI * 2);
-      ctx.fill();
-      // Eyes.
-      ctx.fillStyle = '#10240f';
-      ctx.fillRect(this.facing * 2 - 5, -this.h * 0.62, 3, 4);
-      ctx.fillRect(this.facing * 2 + 2, -this.h * 0.62, 3, 4);
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+  /** When the slime last came down, for the frame it lands on; and whether it was down. */
+  private landedAt = -1;
+  private grounded = true;
+
+  /**
+   * Drawn frames, not a scaled blob: it gathers itself flat a moment before
+   * it hops - its hop timer is running out - goes up tall and narrow, comes
+   * down long, lands squashed, and wobbles between two frames while it sits.
+   */
+  override draw(ctx: CanvasRenderingContext2D, world: World): void {
+    if (this.onGround && !this.grounded) this.landedAt = this.anim;
+    this.grounded = this.onGround;
+    let frame: SlimeFrame;
+    if (!this.onGround) frame = this.vy < -140 ? 'rise' : this.vy > 160 ? 'fall' : 'idle0';
+    else if (this.anim - this.landedAt < 0.09) frame = 'land';
+    else if (this.stun <= 0 && this.hopTimer < 0.14) frame = 'crouch';
+    else frame = Math.floor(this.anim * 2.6) % 2 === 0 ? 'idle0' : 'idle1';
+    const palette = paletteFor(homeZone(this));
+    footShadow(ctx, world, this, this.w * 1.3, 0.34);
+    withHitFlash(ctx, this.flash, (c) => SLIME.draw(c, frame, this.cx, this.bottom, 9, SLIME_H, this.facing, palette));
+    drawPips(ctx, this, this.bottom - (frame === 'rise' ? 28 : 22));
   }
 }
 
@@ -471,7 +526,7 @@ export class Bat extends Enemy {
   }
 
   protected override deathColor(): string {
-    return PALETTE.bat;
+    return keyColor(BAT, paletteFor(homeZone(this)), 'd');
   }
 
   /**
@@ -550,52 +605,27 @@ export class Bat extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
+  /**
+   * Four wing beats while it circles. Pulling up to dive it is a different
+   * shape altogether - wings flung up and wide, trembling between two frames,
+   * mouth open on its fangs, eyes white-hot - with a glow round its head that
+   * grows as the half second runs out; diving, it folds its wings back.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.cy);
-      const flap = Math.sin(this.anim * 18) * 0.9;
-      ctx.fillStyle = PALETTE.batDark;
-      for (const s of [-1, 1]) {
-        ctx.save();
-        ctx.scale(s, 1);
-        ctx.rotate(flap * 0.35 * s);
-        ctx.beginPath();
-        ctx.moveTo(2, -1);
-        ctx.quadraticCurveTo(13, -9 - flap * 4, 20, -2 - flap * 3);
-        ctx.quadraticCurveTo(13, 1, 9, 5);
-        ctx.quadraticCurveTo(6, 2, 2, 3);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      ctx.fillStyle = PALETTE.bat;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 7, 6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      // Ears.
-      ctx.beginPath();
-      ctx.moveTo(-4, -5);
-      ctx.lineTo(-6, -11);
-      ctx.lineTo(-1, -6);
-      ctx.closePath();
-      ctx.moveTo(4, -5);
-      ctx.lineTo(6, -11);
-      ctx.lineTo(1, -6);
-      ctx.closePath();
-      ctx.fill();
-      // Its eyes - burning up while it pulls up to dive.
-      const burn = this.tell > 0 ? 1 - this.tell / BAT_TELL : 0;
-      if (burn > 0) glow(ctx, this.facing * 1.5, -1, 9 + burn * 7, `rgba(255,90,120,${(0.35 + burn * 0.45).toFixed(2)})`);
-      ctx.fillStyle = burn > 0 ? '#ffd0da' : '#ff5773';
-      const eye = 2.5 + burn * 1.5;
-      ctx.fillRect(this.facing * 2 - 4, -2, eye, eye);
-      ctx.fillRect(this.facing * 2 + 1, -2, eye, eye);
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+    let frame: BatFrame;
+    if (this.tell > 0) frame = Math.floor(this.anim * 14) % 2 === 0 ? 'tell0' : 'tell1';
+    else if (this.diving) frame = 'dive';
+    else frame = BAT_BEATS[Math.floor(this.anim * 11) % 4];
+    const palette = paletteFor(homeZone(this));
+    const burn = this.tell > 0 ? 1 - this.tell / BAT_TELL : 0;
+    if (burn > 0) glow(ctx, this.cx, this.cy - 2, 10 + burn * 12, keyColor(BAT, palette, 'e'), 0.3 + burn * 0.5);
+    withHitFlash(ctx, this.flash, (c) => BAT.draw(c, frame, this.cx, this.cy, 11, 8, this.facing, palette));
+    drawPips(ctx, this, this.cy - 12);
   }
 }
+
+/** The wing beat, down and up again. */
+const BAT_BEATS: readonly BatFrame[] = ['fly0', 'fly1', 'fly2', 'fly3'];
 
 /* ----------------------------------------------------------------- skeleton */
 
@@ -625,7 +655,7 @@ export class Skeleton extends Enemy {
   }
 
   protected override deathColor(): string {
-    return PALETTE.skeleton;
+    return '#c7cfdd';
   }
 
   override update(dt: number, world: World): void {
@@ -716,66 +746,39 @@ export class Skeleton extends Enemy {
     };
   }
 
-  override draw(ctx: CanvasRenderingContext2D): void {
-    shadow(ctx, this.cx, this.bottom + 1, this.w, 0.3);
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      ctx.scale(this.facing, 1);
-
-      const walk = Math.abs(this.vx) > 12 ? Math.sin(this.anim * 9) * 4 : 0;
-      // Legs.
-      ctx.fillStyle = PALETTE.skeletonDark;
-      ctx.fillRect(-6 + walk * 0.4, -12, 4, 12);
-      ctx.fillRect(2 - walk * 0.4, -12, 4, 12);
-      // Ribcage.
-      ctx.fillStyle = PALETTE.skeleton;
-      ctx.fillRect(-7, -26, 14, 14);
-      ctx.fillStyle = PALETTE.skeletonDark;
-      for (let i = 0; i < 3; i++) ctx.fillRect(-6, -24 + i * 4, 12, 1.5);
-      // Tattered cape.
-      ctx.fillStyle = 'rgba(80,50,90,0.85)';
-      ctx.beginPath();
-      ctx.moveTo(-6, -27);
-      ctx.lineTo(-13, -6);
-      ctx.lineTo(-6, -10);
-      ctx.lineTo(-4, -27);
-      ctx.closePath();
-      ctx.fill();
-      // Skull.
-      ctx.fillStyle = PALETTE.skeleton;
-      ctx.fillRect(-6, -37, 12, 11);
-      ctx.fillStyle = '#151a26';
-      ctx.fillRect(-4, -34, 3, 3);
-      ctx.fillRect(1, -34, 3, 3);
-      // Its eyes flare while the sword is up: the tell is the blade and the
-      // eyes, so it reads even when the blade is behind something.
-      const winding = this.state === 'windup';
-      ctx.fillStyle = winding ? '#ffd27a' : '#ff7a3c';
-      ctx.fillRect(-3.5, -33.5, 2, 2);
-      ctx.fillRect(1.5, -33.5, 2, 2);
-      // Rusty sword.
-      const raise = this.state === 'windup' ? -1.4 : this.state === 'swing' ? 0.7 : -0.2;
-      ctx.save();
-      ctx.translate(7, -22);
-      ctx.rotate(raise);
-      ctx.fillStyle = '#4a3324';
-      ctx.fillRect(-3, -2, 7, 4);
-      ctx.fillStyle = '#9aa3b8';
-      ctx.beginPath();
-      ctx.moveTo(4, -3);
-      ctx.lineTo(26, -2);
-      ctx.lineTo(30, 0);
-      ctx.lineTo(26, 2);
-      ctx.lineTo(4, 3);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+  /**
+   * The sword held out at the hero while it walks; through the wind-up it is
+   * straight up over the skull and the eyes glare yellow where they glowed
+   * coal-red - the blade and the eyes both, so the tell reads even when the
+   * blade is behind something - with a glow round the skull. The cut is one
+   * frame with the smear of the blade in it, and after it the sword hangs.
+   */
+  override draw(ctx: CanvasRenderingContext2D, world: World): void {
+    let frame: SkeletonFrame;
+    switch (this.state) {
+      case 'windup':
+        frame = Math.floor(this.anim * 16) % 2 === 0 ? 'windup0' : 'windup1';
+        break;
+      case 'swing':
+        frame = 'cut';
+        break;
+      case 'cooldown':
+        frame = 'low';
+        break;
+      default:
+        // One step for every five art pixels walked, so the feet do not slide.
+        frame = Math.abs(this.vx) > 12 ? SKELETON_STEPS[Math.floor(Math.abs(this.x) / 10) % 4] : 'stand';
+    }
+    const palette = paletteFor(homeZone(this));
+    footShadow(ctx, world, this, 28, 0.34);
+    if (this.state === 'windup') glow(ctx, this.cx, this.bottom - 35, 14, '#ffd27a', 0.6);
+    withHitFlash(ctx, this.flash, (c) => SKELETON.draw(c, frame, this.cx, this.bottom, SKELETON_SPINE, SKELETON_H, this.facing, palette));
+    drawPips(ctx, this, this.bottom - (frame === 'windup0' || frame === 'windup1' ? 60 : 40));
   }
 }
+
+/** A walk cycle: stride, pass, the other stride, pass. */
+const SKELETON_STEPS: readonly SkeletonFrame[] = ['walk0', 'walk1', 'walk2', 'walk3'];
 
 /* --------------------------------------------------------------------- mage */
 
@@ -795,7 +798,7 @@ export class DarkMage extends Enemy {
   }
 
   protected override deathColor(): string {
-    return PALETTE.mage;
+    return keyColor(MAGE, paletteFor(homeZone(this)), 'l');
   }
 
   override update(dt: number, world: World): void {
@@ -852,49 +855,25 @@ export class DarkMage extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
+  /**
+   * The robe stirs between two frames while it hovers. Casting, the orb on
+   * its staff swells into a flaring cross of white and its eyes go white in
+   * the hood, with the orb's glow grown round it - the whole of the cast, so
+   * the orb that follows is never a surprise.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      ctx.scale(this.facing, 1);
-      // Robe.
-      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
-      g.addColorStop(0, PALETTE.mage);
-      g.addColorStop(1, PALETTE.mageDark);
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-4, -26);
-      ctx.lineTo(4, -26);
-      ctx.quadraticCurveTo(12, -8, 11, 0);
-      ctx.lineTo(-11, 0);
-      ctx.quadraticCurveTo(-12, -8, -4, -26);
-      ctx.closePath();
-      ctx.fill();
-      // Hood.
-      ctx.fillStyle = PALETTE.mageDark;
-      ctx.beginPath();
-      ctx.moveTo(-7, -24);
-      ctx.quadraticCurveTo(0, -40, 7, -24);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#1a0d20';
-      ctx.fillRect(-4, -28, 8, 6);
-      ctx.fillStyle = '#ff6bd6';
-      ctx.fillRect(0, -27, 3, 2.5);
-      ctx.fillRect(-4, -27, 3, 2.5);
-      // Staff.
-      ctx.fillStyle = '#4d3a2a';
-      ctx.fillRect(9, -34, 3, 34);
-      const orbGlow = this.casting > 0 ? 1 : 0.55;
-      ctx.globalAlpha = orbGlow;
-      ctx.fillStyle = '#e07bff';
-      ctx.beginPath();
-      ctx.arc(10.5, -36, 5 + (this.casting > 0 ? 2 : 0), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+    const casting = this.casting > 0;
+    const frame: MageFrame = casting
+      ? Math.floor(this.anim * 12) % 2 === 0
+        ? 'cast0'
+        : 'cast1'
+      : Math.floor(this.anim * 2.5) % 2 === 0
+        ? 'idle0'
+        : 'idle1';
+    const palette = paletteFor(homeZone(this));
+    glow(ctx, this.cx + this.facing * 14, this.bottom - 45, casting ? 22 : 12, keyColor(MAGE, palette, 'o'), casting ? 0.7 : 0.3);
+    withHitFlash(ctx, this.flash, (c) => MAGE.draw(c, frame, this.cx, this.bottom, MAGE_SPINE, MAGE_H, this.facing, palette));
+    drawPips(ctx, this, this.bottom - 42);
   }
 }
 
@@ -930,7 +909,7 @@ export class Bomber extends Enemy {
   }
 
   protected override deathColor(): string {
-    return '#ff9a5c';
+    return '#ffa214';
   }
 
   /** Any death lights the fuse instead of ending it. That is the whole trick. */
@@ -1021,67 +1000,30 @@ export class Bomber extends Enemy {
     if (this.touchesHazard(world)) this.light(0.2);
   }
 
-  override draw(ctx: CanvasRenderingContext2D): void {
+  /**
+   * The tell: it swells, and a ring closes in on it. Both are needed - the
+   * swell reads up close, the ring reads across the room. The swell is four
+   * drawn frames, each a pixel rounder with its seams split wider on the fire
+   * inside, and it shudders a pixel to and fro; the ring is one art pixel of
+   * the blast's own colour round the reach of the blast, closing in.
+   */
+  override draw(ctx: CanvasRenderingContext2D, world: World): void {
     const lit = this.state === 'fuse';
-    // The tell: it swells, and a ring closes in on it. Both are needed - the
-    // swell reads up close, the ring reads across the room.
     const heat = lit ? 1 - Math.max(0, this.fuse) / 0.9 : 0;
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.55);
-      const grow = 1 + heat * 0.25;
-      ctx.scale(grow, grow);
-
-      if (lit) {
-        const halo = ctx.createRadialGradient(0, -10, 0, 0, -10, 34);
-        halo.addColorStop(0, `rgba(255,170,90,${(0.35 + heat * 0.4).toFixed(2)})`);
-        halo.addColorStop(1, 'rgba(255,170,90,0)');
-        ctx.fillStyle = halo;
-        ctx.fillRect(-34, -44, 68, 68);
-      }
-
-      // Body: a taut sac on two stubby legs.
-      const g = ctx.createRadialGradient(-3, -14, 2, 0, -10, 14);
-      g.addColorStop(0, lit ? '#ffd9a0' : '#7a5a3c');
-      g.addColorStop(1, lit ? '#c1481f' : '#3a2a1e');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.ellipse(0, -11, 10, 10, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#2a1d14';
-      ctx.fillRect(-6, -3, 4, 3);
-      ctx.fillRect(2, -3, 4, 3);
-
-      // Seams, which glow apart as it fills.
-      ctx.strokeStyle = lit ? `rgba(255,220,150,${(0.4 + heat * 0.6).toFixed(2)})` : 'rgba(0,0,0,0.35)';
-      ctx.lineWidth = 1.5;
-      for (const a of [-0.6, 0.6]) {
-        ctx.beginPath();
-        ctx.moveTo(Math.sin(a) * 9, -11 - Math.cos(a) * 9);
-        ctx.quadraticCurveTo(Math.sin(a) * 3, -11, Math.sin(a) * 9, -11 + Math.cos(a) * 9);
-        ctx.stroke();
-      }
-      // Eyes, wide open once it is lit.
-      ctx.fillStyle = lit ? '#fff6dc' : '#e8c88c';
-      const eye = lit ? 2.4 : 1.6;
-      ctx.fillRect(-4.5, -15, eye, eye);
-      ctx.fillRect(2.2, -15, eye, eye);
-      ctx.restore();
-
-      if (lit) {
-        // The closing ring, in world space so its size means distance.
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(255,190,110,${(0.35 + heat * 0.5).toFixed(2)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(this.cx, this.cy, BOOM_RADIUS * (1 - heat * 0.72), 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-    });
-    this.drawHpPips(ctx);
+    let frame: ZunderFrame;
+    if (lit) frame = heat < 0.25 ? 'fuse0' : heat < 0.5 ? 'fuse1' : heat < 0.75 ? 'fuse2' : 'fuse3';
+    else if (Math.abs(this.vx) > 8) frame = Math.floor(Math.abs(this.x) / 8) % 2 === 0 ? 'walk0' : 'walk1';
+    else frame = 'stand';
+    const palette = paletteFor(homeZone(this));
+    const shudder = lit && Math.floor(this.anim * 30) % 2 === 0 ? ART : 0;
+    footShadow(ctx, world, this, this.w * 1.2, 0.34);
+    if (lit) glow(ctx, this.cx, this.cy - 4, 18 + heat * 14, '#ffa214', 0.35 + heat * 0.4);
+    withHitFlash(ctx, this.flash, (c) => ZUNDER.draw(c, frame, this.cx + shudder, this.bottom, 9, ZUNDER_FEET, this.facing, palette));
+    if (lit) {
+      // The closing ring, in world space so its size means distance.
+      pixelRing(ctx, this.cx, this.cy, BOOM_RADIUS * (1 - heat * 0.72), `rgba(255,200,37,${(0.45 + heat * 0.15).toFixed(2)})`);
+    }
+    drawPips(ctx, this, this.bottom - 26);
   }
 }
 
@@ -1117,7 +1059,7 @@ export class Shieldman extends Enemy {
   }
 
   protected override deathColor(): string {
-    return '#9aa6c4';
+    return '#92a1b9';
   }
 
   override hurt(amount: number, fromDir: number, world: World): void {
@@ -1228,70 +1170,33 @@ export class Shieldman extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
-  override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.6);
-      ctx.scale(this.facing, 1);
-
-      // Body, then the spear, then the shield on top of both: in this mirrored
-      // space local +x is forward, and the shield was drawn at -11 - which put
-      // it squarely on his back, where it guarded nothing and read as nothing.
-      ctx.fillStyle = '#2b3348';
-      ctx.fillRect(-9, -30, 15, 30);
-      ctx.fillStyle = '#3d4763';
-      ctx.fillRect(-9, -30, 15, 5);
-      ctx.fillStyle = '#1b2133';
-      ctx.fillRect(-7, -26, 11, 4);
-      // Helm with a slit.
-      ctx.fillStyle = '#39425c';
-      ctx.fillRect(-8, -38, 14, 9);
-      ctx.fillStyle = this.exposed ? '#ff9c6a' : '#9fd0ff';
-      ctx.fillRect(-1, -35, 7, 2);
-
-      // The spear, thrust over the rim of the shield rather than through it.
-      const out = this.state === 'thrust' ? 16 : this.state === 'thrustWind' ? -5 : 0;
-      ctx.fillStyle = '#5a4a34';
-      ctx.fillRect(0, -27, 13 + out, 3);
-      ctx.fillStyle = '#c7d2e8';
-      ctx.beginPath();
-      ctx.moveTo(13 + out, -29.5);
-      ctx.lineTo(21 + out, -25.5);
-      ctx.lineTo(13 + out, -21.5);
-      ctx.closePath();
-      ctx.fill();
-
-      // The shield: forward and covering him, or swung down while exposed.
-      ctx.save();
-      if (this.exposed) {
-        ctx.translate(4, -5);
-        ctx.rotate(1.15);
-      } else {
-        ctx.translate(9, -16);
-      }
-      ctx.fillStyle = '#4a5674';
-      ctx.beginPath();
-      ctx.moveTo(-5, -15);
-      ctx.lineTo(5, -12);
-      ctx.lineTo(5, 12);
-      ctx.lineTo(-5, 15);
-      ctx.closePath();
-      ctx.fill();
-      // A lit rim along the leading edge, so the guarded side is the side that
-      // catches the light.
-      ctx.fillStyle = '#8d9dc2';
-      ctx.fillRect(3, -12, 2.5, 24);
-      ctx.fillStyle = '#6d7c9f';
-      ctx.fillRect(-4, -12, 2.5, 24);
-      ctx.fillStyle = '#a8b6d6';
-      ctx.beginPath();
-      ctx.arc(0, 0, 3.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+  /**
+   * The shield stands in front of it - its forward side, whichever way it
+   * faces - with a lit rim along the leading edge, so the guarded side is the
+   * side that catches the light. The thrust is drawn as a lean back with the
+   * spear drawn in, then the spear out past the shield. Parried, the shield
+   * lies on the floor, the eye slit burns orange, and a glow marks it: open.
+   */
+  override draw(ctx: CanvasRenderingContext2D, world: World): void {
+    let frame: ShieldFrame;
+    switch (this.state) {
+      case 'exposed':
+        frame = 'open';
+        break;
+      case 'thrustWind':
+        frame = 'wind';
+        break;
+      case 'thrust':
+        frame = 'thrust';
+        break;
+      default:
+        frame = Math.abs(this.vx) > 8 ? (Math.floor(Math.abs(this.x) / 9) % 2 === 0 ? 'walk0' : 'walk1') : 'stand';
+    }
+    const palette = paletteFor(homeZone(this));
+    footShadow(ctx, world, this, 30, 0.36);
+    if (this.exposed) glow(ctx, this.cx + this.facing * 2, this.bottom - 31, 12, '#ffa214', 0.6);
+    withHitFlash(ctx, this.flash, (c) => SCHILDWACHE.draw(c, frame, this.cx, this.bottom, SHIELD_SPINE, SHIELD_H, this.facing, palette));
+    drawPips(ctx, this, this.bottom - 40);
   }
 }
 
@@ -1322,7 +1227,7 @@ export class Charger extends Enemy {
   }
 
   protected override deathColor(): string {
-    return '#c2705a';
+    return keyColor(KLINGENLAEUFER, paletteFor(homeZone(this)), 'a');
   }
 
   override hurt(amount: number, fromDir: number, world: World): void {
@@ -1425,57 +1330,39 @@ export class Charger extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
-  override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.6);
-      ctx.scale(this.facing, 1);
-      const dazed = this.state === 'dazed';
-      if (dazed) ctx.rotate(0.18);
-      const crouch = this.state === 'wind' ? 3 : 0;
-
-      // Low, wide body built around the plate on its head.
-      const g = ctx.createLinearGradient(0, -20, 0, 0);
-      g.addColorStop(0, '#7c4a3a');
-      g.addColorStop(1, '#3a201a');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-13, -16 + crouch);
-      ctx.lineTo(9, -19 + crouch);
-      ctx.lineTo(13, -4);
-      ctx.lineTo(-13, -4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#2a1712';
-      ctx.fillRect(-11, -5, 5, 5);
-      ctx.fillRect(4, -5, 5, 5);
-
-      // The ram plate, which is also where it hurts itself.
-      ctx.fillStyle = dazed ? '#8a7a6a' : '#b9a08a';
-      ctx.beginPath();
-      ctx.moveTo(9, -22 + crouch);
-      ctx.lineTo(17, -14 + crouch);
-      ctx.lineTo(9, -6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.fillRect(10, -20 + crouch, 2, 12);
-
-      // Eye: a slit that opens wide before the run.
-      ctx.fillStyle = dazed ? '#ffd9a0' : this.state === 'wind' ? '#ffd166' : '#e08a5c';
-      ctx.fillRect(2, -16 + crouch, 4, this.state === 'wind' ? 3 : 1.8);
-      if (dazed) {
-        // Stars, so the window reads without watching the health pips.
-        ctx.fillStyle = 'rgba(255,240,200,0.85)';
-        for (let i = 0; i < 3; i++) {
-          const a = this.anim * 5 + i * 2.1;
-          ctx.fillRect(Math.cos(a) * 9 - 1, -26 + Math.sin(a) * 4, 2.5, 2.5);
-        }
+  /**
+   * It digs in before the run - haunches up, head down, the eye slit flung
+   * wide and yellow, trembling between two frames - and runs with its legs
+   * stretched out. Dazed against a wall it sags with its eye dull, and three
+   * stars go round over its head, so the window reads without watching the
+   * health bar.
+   */
+  override draw(ctx: CanvasRenderingContext2D, world: World): void {
+    let frame: ChargerFrame;
+    switch (this.state) {
+      case 'dazed':
+        frame = 'dazed';
+        break;
+      case 'wind':
+        frame = Math.floor(this.anim * 18) % 2 === 0 ? 'wind0' : 'wind1';
+        break;
+      case 'run':
+        frame = Math.floor(Math.abs(this.x) / 14) % 2 === 0 ? 'run0' : 'run1';
+        break;
+      default:
+        frame = Math.abs(this.vx) > 8 && Math.floor(Math.abs(this.x) / 8) % 2 === 1 ? 'walk1' : 'walk0';
+    }
+    const palette = paletteFor(homeZone(this));
+    footShadow(ctx, world, this, 34, 0.36);
+    withHitFlash(ctx, this.flash, (c) => KLINGENLAEUFER.draw(c, frame, this.cx, this.bottom, CHARGER_SPINE, CHARGER_FEET, this.facing, palette));
+    if (this.state === 'dazed') {
+      ctx.fillStyle = '#ffeb57';
+      for (let i = 0; i < 3; i++) {
+        const a = this.anim * 5 + i * 2.1;
+        ctx.fillRect(snap(this.cx + this.facing * 6 + Math.cos(a) * 10), snap(this.bottom - 30 + Math.sin(a) * 4), ART, ART);
       }
-      ctx.restore();
-    });
-    this.drawHpPips(ctx);
+    }
+    drawPips(ctx, this, this.bottom - 30);
   }
 }
 
