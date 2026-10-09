@@ -10,6 +10,7 @@ import type { World } from '../world/context';
 import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Body } from './entity';
 import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
+import { clusterPart, heartAt, heartPart, shardPart } from './prism-art';
 import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
 import {
   BAT,
@@ -3008,79 +3009,50 @@ export class Prismarch extends Enemy {
     super.touchPlayer(world);
   }
 
+  /** Its heart lights the crystal round it, and blazes before every move. */
+  override lights(): GlowLight[] {
+    if (this.dead || !this.engaged) return [];
+    return [{ x: this.cx, y: this.bottom - 56, radius: 80 + this.core * 70, rgb: '246,150,210', strength: 0.35 + this.core * 0.45, tint: 0.3 }];
+  }
+
+  /*
+   * Drawn for the grid (prism-art.ts): the cluster at one of three drawn
+   * leans, its heart over it in the beat it is at - or blazing, which is the
+   * tell - and the ring of shards turning round both, the half of it behind
+   * the cluster drawn first. A struck Prismarch is white for two frames.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.6);
-      ctx.scale(this.facing, 1);
-      const lean = this.state === 'chargeWind' ? -0.14 : this.state === 'charge' ? 0.18 : 0;
-      ctx.rotate(lean);
-      const heat = 0.4 + this.core * 0.6;
+    shadow(ctx, this.cx, this.bottom, this.w * 0.6);
+    const lean: -1 | 0 | 1 = this.state === 'chargeWind' ? -1 : this.state === 'charge' ? 1 : 0;
+    const blaze = this.core > 0.6;
+    withHitFlash(
+      ctx,
+      solidFlash(this.flash),
+      (c) => {
+        this.drawShards(c, false);
+        blit(c, clusterPart(lean), this.cx, this.bottom, this.facing < 0);
+        const h = heartAt(lean);
+        const beat = blaze ? 2 : ([0, 1, 2, 1] as const)[Math.floor(this.anim * 5) % 4];
+        blit(c, heartPart(beat, blaze), this.cx + this.facing * h.x, this.bottom + h.y);
+        this.drawShards(c, true);
+      },
+      { x: this.cx - 110, y: this.bottom - 150, w: 220, h: 160 },
+    );
+  }
 
-      // A ring of shards turning slowly around the body.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = 0; i < 6; i++) {
-        const a = this.anim * 0.5 + (i / 6) * Math.PI * 2;
-        const rx = Math.cos(a) * (30 + this.core * 8);
-        const ry = -this.h * 0.55 + Math.sin(a) * 15;
-        ctx.globalAlpha = 0.25 + Math.cos(a) * 0.15 + this.core * 0.2;
-        ctx.fillStyle = '#8fe8ff';
-        ctx.beginPath();
-        ctx.moveTo(rx, ry - 9);
-        ctx.lineTo(rx + 5, ry);
-        ctx.lineTo(rx, ry + 9);
-        ctx.lineTo(rx - 5, ry);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-
-      // Body: a standing prism.
-      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
-      g.addColorStop(0, '#2f5f88');
-      g.addColorStop(0.55, '#1d3a5e');
-      g.addColorStop(1, '#0f1c34');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(0, -this.h - 6);
-      ctx.lineTo(20, -this.h + 22);
-      ctx.lineTo(16, -8);
-      ctx.lineTo(-16, -8);
-      ctx.lineTo(-20, -this.h + 22);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(160,225,255,0.18)';
-      ctx.beginPath();
-      ctx.moveTo(0, -this.h - 6);
-      ctx.lineTo(20, -this.h + 22);
-      ctx.lineTo(0, -14);
-      ctx.closePath();
-      ctx.fill();
-
-      // The heart, which is also the tell.
-      const cy = -this.h * 0.52;
-      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 44 * heat);
-      halo.addColorStop(0, `rgba(150,235,255,${(0.55 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(150,235,255,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-44, cy - 44, 88, 88);
-      ctx.fillStyle = `rgba(226,250,255,${(0.65 + heat * 0.35).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.moveTo(0, cy - 15);
-      ctx.lineTo(11, cy);
-      ctx.lineTo(0, cy + 15);
-      ctx.lineTo(-11, cy);
-      ctx.closePath();
-      ctx.fill();
-
-      // Feet, so it stands rather than floats.
-      ctx.fillStyle = '#12233d';
-      ctx.fillRect(-15, -9, 12, 9);
-      ctx.fillRect(3, -9, 12, 9);
-      ctx.restore();
-    });
+  /**
+   * The ring of shards turning slowly round it, each tumbling as it goes;
+   * wider, and a step brighter, while the heart blazes. `front`: the half of
+   * the ring that passes in front of the cluster, or the half behind.
+   */
+  private drawShards(ctx: CanvasRenderingContext2D, front: boolean): void {
+    const rx = 62 + this.core * 16;
+    for (let i = 0; i < 6; i++) {
+      const a = this.anim * 0.5 + (i / 6) * Math.PI * 2;
+      if (Math.sin(a) > 0 !== front) continue;
+      const step = (((Math.floor(this.anim * 3 + i * 1.7)) % 8) + 8) % 8;
+      blit(ctx, shardPart(step, this.core > 0.5), this.cx + Math.cos(a) * rx, this.bottom - 58 + Math.sin(a) * 18);
+    }
   }
 }
 
