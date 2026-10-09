@@ -14,7 +14,8 @@ export type Action =
   | 'confirm'
   | 'calm'
   | 'music'
-  | 'sound';
+  | 'sound'
+  | 'help';
 
 const BINDINGS: Record<string, Action[]> = {
   ArrowLeft: ['left'],
@@ -47,6 +48,7 @@ const BINDINGS: Record<string, Action[]> = {
   KeyB: ['calm'],
   KeyM: ['music'],
   KeyN: ['sound'],
+  KeyH: ['help'],
   Enter: ['confirm'],
 };
 

@@ -239,7 +239,9 @@ export interface VictoryInfo {
  */
 export function drawVictory(ctx: CanvasRenderingContext2D, v: VictoryInfo, time: number): void {
   const title = v.trueEnding ? 'DAS WAHRE ENDE' : 'SIEG!';
-  const [color, lower, shadow] = v.trueEnding ? [UI.cyan, '#0cf1ff', '#0069aa'] : [UI.goldLight, UI.goldDark, UI.amber];
+  // Two tones, light over dark, and a shadow as dark as the outline: a third
+  // tone of the same gold inside strokes two pixels wide was mush.
+  const [color, lower, shadow] = v.trueEnding ? [UI.cyan, '#0cf1ff', '#03193f'] : [UI.goldLight, UI.goldDark, '#391f21'];
   text(ctx, title, ART_W / 2, 52, { scale: 2, color, lower, align: 'center', ...OVER, shadow });
   blit(ctx, studIcon(), ART_W / 2 - 3, 72);
   box(ctx, ART_W / 2 - 70, 75, 64, 1, UI.slate);
@@ -308,27 +310,37 @@ function controls(): HTMLCanvasElement {
 
 export interface TitleInfo {
   build: string;
+  /** The scene with the call to start, or the page of every control. */
+  page: 'main' | 'controls';
 }
 
 /**
- * The title: the logotype over the scene the game is standing in, quieted
- * a step down the palette rather than blacked out; the name of the
- * story under it, the call to start, the controls on a card along the bottom,
- * and which build this is in the corner.
+ * The title: the logotype over a scene of its own - the hero on a crag,
+ * Burg Nachtfall under its moon across the valley - the name of the story
+ * under it, the call to start and one other hint; every control on a page
+ * of its own behind H. And which build this is, in the corner.
  */
 export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: number): void {
-  blit(ctx, logo(), Math.round(ART_W / 2 - logoCentre()), 12);
-  text(ctx, 'Die Klinge von Nachtfall', ART_W / 2, 61, { color: UI.cyan, align: 'center', ...OVER });
-  text(ctx, 'Vierzehn Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.', ART_W / 2, 76, {
-    font: 'small',
-    color: UI.mist,
-    align: 'center',
-    ...OVER,
-  });
+  text(ctx, `STAND ${info.build}`, ART_W - 5, 4, { font: 'small', color: UI.steel, align: 'right' });
+  if (info.page === 'controls') {
+    text(ctx, 'STEUERUNG', ART_W / 2, 52, { scale: 2, color: UI.white, lower: UI.mist, align: 'center', ...OVER, shadow: UI.ink });
+    blit(ctx, studIcon(), ART_W / 2 - 3, 72);
+    box(ctx, ART_W / 2 - 70, 75, 64, 1, UI.slate);
+    box(ctx, ART_W / 2 + 6, 75, 64, 1, UI.slate);
+    blit(ctx, controls(), 6, 92);
+    keyRow(ctx, [[['H'], 'ZURÜCK'], [['LEERTASTE'], 'STARTEN']], ART_W / 2, 160, UI.cream);
+    return;
+  }
+  // The words on the left, over the hero; the castle and its moon on the right.
+  blit(ctx, logo(), Math.round(TITLE_WORDS_X - logoCentre()), 12);
+  text(ctx, 'Die Klinge von Nachtfall', TITLE_WORDS_X, 61, { color: UI.cyan, align: 'center', ...OVER });
+  ['Achtzehn Bosse stehen zwischen dir und dem Tor nach Hause —', 'keiner lässt sich umgehen.'].forEach((line, i) =>
+    text(ctx, line, TITLE_WORDS_X, 76 + i * 9, { font: 'small', color: UI.mist, align: 'center', ...OVER }),
+  );
   // The call to start, pulsing between two steps of the slate ramp rather
   // than vanishing: whenever someone looks, it is there to be read.
   const on = blinkOn(time, 1.6, 0.6);
-  text(ctx, 'LEERTASTE ZUM STARTEN', ART_W / 2, 146, {
+  text(ctx, 'LEERTASTE ZUM STARTEN', TITLE_CALL_X, 214, {
     scale: 2,
     color: on ? UI.white : UI.mist,
     lower: on ? UI.frost : UI.slate,
@@ -336,6 +348,9 @@ export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: 
     ...OVER,
     shadow: UI.night,
   });
-  blit(ctx, controls(), 6, ART_H - 58);
-  text(ctx, `STAND ${info.build}`, ART_W - 5, 4, { font: 'small', color: UI.steel, align: 'right' });
+  keyRow(ctx, [[['H'], 'STEUERUNG']], TITLE_CALL_X, 240, UI.frost);
 }
+
+/** The middle of the words, left of the moon; and the call to start, right of the crag. */
+const TITLE_WORDS_X = 168;
+const TITLE_CALL_X = 320;

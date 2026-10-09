@@ -21,6 +21,7 @@ import { Portal } from './entities/portal';
 import { Projectile } from './entities/projectile';
 import { BLOOD_PER_HEART, GOLD_PER_HEART, HYDRA_REGROW, RELICS, SILK_REGROW, STONE_GAZE_PACE, TUMBLE_TIME, type RelicId, relic } from './entities/relics';
 import { SKILLS, SNARE_PACE, SNARE_PACE_BOSS, drawSnare, skillForRelic, skillInfo } from './entities/skills';
+import { drawHero } from './entities/heroArt';
 import { Particles } from './fx/particles';
 import { Background } from './render/background';
 import { Decor } from './render/decor';
@@ -38,6 +39,7 @@ import {
   drawBossBar,
   drawCounters,
   drawHearts,
+  drawStatusPlate,
   drawProgress,
   drawRelicBadge,
   drawSkillPanel as drawSkillCard,
@@ -45,9 +47,11 @@ import {
 } from './ui/hud';
 import { UI, screen } from './ui/kit';
 import * as screens from './ui/screens';
+import { LEDGE_HERO_X, LEDGE_TOP, LEDGE_Y, titleLedge } from './ui/titleScene';
 import type { PauseEntry } from './ui/screens';
 import type { World } from './world/context';
 import { Arena, Level } from './world/level';
+import { ZONE_START } from './world/levelData';
 import { TILE, Tile } from './world/tiles';
 
 const TILE_LAVA_TOP = Tile.LavaTop;
@@ -63,6 +67,12 @@ export const VIEW_W = 960;
 export const VIEW_H = 540;
 /** The outline round everything the hero reads: a deep violet-black, not black. */
 const OUTLINE_ABGR = abgrOf('#120c24');
+/**
+ * Where the title's camera stands, from where Burg Nachtfall begins, in
+ * logical pixels: far enough in that its backdrop is the castle's alone, not
+ * yet dissolving into the next one, the moon right of the middle.
+ */
+const TITLE_VIEW_X = -180;
 
 export type GameState = 'title' | 'playing' | 'paused' | 'dead' | 'victory';
 
@@ -379,6 +389,10 @@ export class Game implements World {
   private pausePage: 'relics' | 'skills' = 'relics';
   private currentZone = '';
   private titlePulse = 0;
+  /** The title's two pages: the scene with the call to start, and every control. */
+  private titlePage: 'main' | 'controls' = 'main';
+  /** Where the title looks: across at Burg Nachtfall, not at the road's first step. */
+  private titleCamera: Camera | null = null;
   private readonly enemySpawns: SpawnRecord[] = [];
   /** Spawn keys of the bosses that have been beaten. They do not come back. */
   private readonly felledBosses = new Set<string>();
@@ -1070,9 +1084,14 @@ export class Game implements World {
       this.camera.follow(this.player.cx, this.player.cy, 0, dt);
       this.particles.update(dt);
       for (const d of this.decor) d.update(dt, this.particles, this.isVisible(d.x, d.y));
-      if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
+      if (input.pressed('help') || (this.titlePage === 'controls' && input.pressed('pause'))) {
         audio.unlock();
         audio.play('confirm');
+        this.titlePage = this.titlePage === 'main' ? 'controls' : 'main';
+      } else if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
+        audio.unlock();
+        audio.play('confirm');
+        this.titlePage = 'main';
         this.state = 'playing';
       }
       input.endFrame();
@@ -1617,6 +1636,10 @@ export class Game implements World {
    *   5. The whole buffer mapped to the palette, then shown pixel for pixel.
    */
   render(ctx: CanvasRenderingContext2D): void {
+    if (this.state === 'title' && !this.dialogue) {
+      this.renderTitle(ctx);
+      return;
+    }
     const a = this.art.ctx;
     a.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
     a.imageSmoothingEnabled = false;
@@ -1724,7 +1747,7 @@ export class Game implements World {
     this.drawLighting(ui);
     ui.save();
     ui.translate(-this.camera.renderX, -this.camera.renderY);
-    this.particles.drawTexts(ui);
+    this.particles.drawTexts(ui, { x: this.camera.renderX, y: this.camera.renderY, w: VIEW_W, h: VIEW_H });
     ui.restore();
     if (this.state === 'playing' || this.state === 'dead') this.drawHud(ui);
     this.drawOverlays(ui);
@@ -1757,10 +1780,9 @@ export class Game implements World {
     } else {
       switch (this.state) {
         case 'title':
-          // The top, where the logotype and the words are, a step darker.
-          all = pm.darken(1);
-          top = pm.darken(2);
-          topRows = 92;
+          // The scene is painted for the title and stands as it is; the page
+          // of controls lies over it a step darker.
+          if (this.titlePage === 'controls') all = pm.darken(2);
           break;
         case 'paused':
         case 'victory':
@@ -1783,6 +1805,88 @@ export class Game implements World {
     if (!all && !top) return null;
     for (let y = 0; y < ART_H; y++) this.fadeBuffer[y] = y < topRows && top ? top : all;
     return this.fadeBuffer;
+  }
+
+  /**
+   * The title: a scene of its own rather than the road's first step under
+   * the words - Burg Nachtfall's backdrop with its moon, the crag in front
+   * (ui/titleScene.ts), and the hero on it, breathing, looking across at the
+   * castle; then the palette pass and the words, like any frame.
+   */
+  private renderTitle(ctx: CanvasRenderingContext2D): void {
+    const a = this.art.ctx;
+    a.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+    a.imageSmoothingEnabled = false;
+    a.globalAlpha = 1;
+    a.globalCompositeOperation = 'source-over';
+    a.fillStyle = '#000000';
+    a.fillRect(0, 0, VIEW_W, VIEW_H);
+    let cam = this.titleCamera;
+    if (!cam) {
+      cam = new Camera(VIEW_W, VIEW_H);
+      cam.worldBounds = this.camera.worldBounds;
+      cam.x = ZONE_START.castle + TITLE_VIEW_X;
+      cam.y = Math.max(0, cam.worldBounds.h - VIEW_H);
+      this.titleCamera = cam;
+    }
+    this.background.draw(a, cam, this.time);
+    a.save();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.drawImage(titleLedge(), 0, LEDGE_Y);
+    a.restore();
+
+    // The hero, outlined like every actor.
+    const c = this.actors.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+    c.clearRect(0, 0, ART_W, ART_H);
+    c.imageSmoothingEnabled = false;
+    c.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+    const breath = (['idle0', 'idle1', 'idle2', 'idle3'] as const)[Math.floor(this.time * 2.5) % 4];
+    drawHero(c, breath, LEDGE_HERO_X * ART, LEDGE_TOP * ART, 1);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    const actorsImage = c.getImageData(0, 0, ART_W, ART_H);
+    settleActors(actorsImage, OUTLINE_ABGR, 0, 0);
+    c.putImageData(actorsImage, 0, 0);
+    a.save();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.drawImage(this.actors.canvas, 0, 0);
+    a.restore();
+
+    this.paletteMap ??= new PaletteMap();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    const image = a.getImageData(0, 0, ART_W, ART_H);
+    const field = this.lightPass.field(cam, []);
+    this.groundCover.fill(0);
+    const actors = actorCoverage();
+    this.paletteMap.map(
+      image,
+      Math.round(cam.renderX / ART),
+      Math.round(cam.renderY / ART),
+      field,
+      this.groundCover,
+      actors.length === ART_W * ART_H ? actors : null,
+      this.fadeRows(this.paletteMap),
+    );
+    const direct = ctx.canvas.width === ART_W && ctx.canvas.height === ART_H;
+    (direct ? ctx : a).putImageData(image, 0, 0);
+    const ui = direct ? ctx : a;
+    ui.save();
+    ui.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+    ui.imageSmoothingEnabled = false;
+    ui.globalAlpha = 1;
+    ui.globalCompositeOperation = 'source-over';
+    this.drawOverlays(ui);
+    ui.restore();
+    if (!direct) {
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(this.art.canvas, 0, 0, VIEW_W, VIEW_H);
+      ctx.restore();
+    }
   }
 
   /**
@@ -1857,6 +1961,7 @@ export class Game implements World {
   }
 
   private drawHud(ctx: CanvasRenderingContext2D): void {
+    drawStatusPlate(ctx, this.player.maxHp, this.score, this.gems, this.totalGems, this.deaths);
     drawHearts(ctx, this.player.hp, this.player.maxHp);
     drawCounters(ctx, this.score, this.gems, this.totalGems, this.deaths);
 
@@ -2126,7 +2231,7 @@ export class Game implements World {
   private drawTitle(ctx: CanvasRenderingContext2D): void {
     // Which build this is. One cached index.html looks exactly like the new
     // one, and then a missing feature is indistinguishable from a bug.
-    screens.drawTitle(ctx, { build: __BUILD__ }, this.titlePulse);
+    screens.drawTitle(ctx, { build: __BUILD__, page: this.titlePage }, this.titlePulse);
   }
 
   private drawVictory(ctx: CanvasRenderingContext2D): void {

@@ -2,10 +2,12 @@ import { rand } from '../core/math';
 import { ART } from '../render/pixel';
 import { parseColor } from '../render/sprites';
 import { UI, paletteColor } from '../ui/kit';
-import { capHeight, drawText } from '../ui/pixelfont';
+import { capHeight, drawText, lineHeight, measureText } from '../ui/pixelfont';
 
 /** From a word's top to where it stands: (x, y) is its foot, as it always was. */
 const TEXT_RISE = capHeight();
+/** How far in from the screen's edges a floating word is kept: four art pixels. */
+const SAFE = 4 * ART;
 
 /*
  * What a particle looks like over its life. Callers everywhere hand a spawn
@@ -247,10 +249,21 @@ export class Particles {
    * In their last moments they blink out instead of fading: a fade would come
    * out of the palette as a dither crawling over the letters.
    */
-  drawTexts(ctx: CanvasRenderingContext2D): void {
+  drawTexts(ctx: CanvasRenderingContext2D, view?: { x: number; y: number; w: number; h: number }): void {
     for (const t of this.texts) {
       if (t.life < 0.3 && Math.floor(t.life * 20) % 2 === 0) continue;
-      drawText(ctx, t.text, t.x, t.y - TEXT_RISE, { color: paletteColor(t.color), outline: UI.ink, align: 'center' });
+      const style = { color: paletteColor(t.color), outline: UI.ink, align: 'center' as const };
+      let x = t.x;
+      let y = t.y - TEXT_RISE;
+      // Kept whole inside the screen, four art pixels in from its edges: a
+      // word called out at the edge of the fight is still read whole, not
+      // cut to "OMMEN!".
+      if (view) {
+        const half = measureText(t.text, style) / 2 + SAFE;
+        x = Math.min(Math.max(x, view.x + half), view.x + view.w - half);
+        y = Math.min(Math.max(y, view.y + SAFE), view.y + view.h - SAFE - lineHeight(style));
+      }
+      drawText(ctx, t.text, x, y, style);
     }
   }
 

@@ -34,6 +34,28 @@ const LEFT = 6;
 
 /* ------------------------------------------------------------- status */
 
+/**
+ * A plate of the darkest ink behind a cluster of the HUD, its corners cut by
+ * a pixel: whatever the world shows behind the corner - a lit wall, a bright
+ * sky - the hearts and the counters stand on the same dark ground.
+ */
+function plate(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  box(ctx, x + 1, y, w - 2, h, UI.ink);
+  box(ctx, x, y + 1, 1, h - 2, UI.ink);
+  box(ctx, x + w - 1, y + 1, 1, h - 2, UI.ink);
+}
+
+/** The plate behind the hearts and the counters under them. */
+export function drawStatusPlate(ctx: CanvasRenderingContext2D, maxHp: number, score: number, gems: number, totalGems: number, deaths: number): void {
+  const small = { font: 'small' } as const;
+  const w = Math.max(
+    maxHp * (HEART_W + 1) - 1,
+    9 + textWidth(`${gems}/${totalGems}`),
+    textWidth('PUNKTE ', small) + textWidth(`${score}`, small) + textWidth('  TODE ', small) + textWidth(`${deaths}`, small),
+  );
+  plate(ctx, LEFT - 3, 2, w + 6, 31);
+}
+
 /** The hearts, one per point of health: full in red, empty in old wine. */
 export function drawHearts(ctx: CanvasRenderingContext2D, hp: number, maxHp: number): void {
   for (let i = 0; i < maxHp; i++) blit(ctx, heartIcon(i < hp), LEFT + i * (HEART_W + 1), 5);
@@ -92,6 +114,8 @@ export function drawProgress(ctx: CanvasRenderingContext2D, progress: number, zo
   const x = ART_W - LEFT - TRACK_W;
   const y = 6;
   const f = Math.round((TRACK_W - 2) * clamp(progress, 0, 1));
+  const pw = Math.max(TRACK_W, textWidth(zone, { font: 'small' })) + 6;
+  plate(ctx, ART_W - LEFT + 3 - pw, y - 4, pw, 23);
   box(ctx, x, y, TRACK_W, 6, UI.ink);
   box(ctx, x + 1, y + 1, TRACK_W - 2, 4, UI.night);
   box(ctx, x + 1, y + 4, TRACK_W - 2, 1, UI.dusk);
