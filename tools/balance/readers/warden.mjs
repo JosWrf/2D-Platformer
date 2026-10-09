@@ -13,8 +13,9 @@
  *   - the volley (far): three splinters that bend after the hero. Facing
  *     them, a parry as they arrive - timed off their flight, with a person's
  *     error in it - turns them back;
- *   - after each move he stands open, and while he walks about: in to a
- *     sword's length, never into him, and swing;
+ *   - after each move he stands open: in to a sword's length, never into
+ *     him, and swing - but not while he walks about, where the next tell
+ *     can light under the blade (a blow into his wind-up provokes him);
  *   - landed on the board by a jump: off it again, not onto him.
  */
 export default function reader(g, h) {
@@ -35,6 +36,7 @@ export default function reader(g, h) {
   let jumpedLunge = -1;
   let lunges = 0;
   let lastSeen = null;
+  const LAG_S = h.LAG / 60;
   /** A parry being got ready: the frame to press it on, how long to hold it, which way to face. */
   let parryAt = -1;
   let parryHold = 0;
@@ -125,6 +127,7 @@ export default function reader(g, h) {
     const lagF = world - v.clock;
     const lagS = lagF / 60;
     if (v.state === 'lungeWind' && lastSeen !== 'lungeWind') lunges++;
+    const volleySeen = v.state === 'volleyWind' && lastSeen !== 'volleyWind';
     lastSeen = v.state;
     const a = {};
     const s = v.state;
@@ -150,6 +153,7 @@ export default function reader(g, h) {
     // When the first one that would reach him gets to where a parry catches it.
     let orbSide = 0;
     let entry = -1;
+    let batSide = 0;
     for (const q of v.orbs) {
       const pts = flight(q, 90).slice(lagF);
       const side = Math.sign(q.x - p.cx) || p.facing;
@@ -165,17 +169,35 @@ export default function reader(g, h) {
           break;
         }
       }
+      // Too close for a parry, it can still be batted: does it cross the
+      // blade's sweep before it gets to him?
+      const sx = side > 0 ? p.x + p.w - 4 : p.x - 36;
+      for (let k = 0; k < Math.min(pts.length, 14); k++) {
+        if (overlap(pts[k].x - q.w / 2, pts[k].y - q.h / 2, q.w, q.h, p.x, p.y, p.w, p.h)) break;
+        if (overlap(pts[k].x - q.w / 2, pts[k].y - q.h / 2, q.w, q.h, sx, p.cy - 18, 40, 32)) {
+          if (k >= 2) batSide = side;
+          break;
+        }
+      }
     }
     /** A parry for something `frames` from now: meant for the middle of the window, off by up to 0.07 s. */
     const planParry = (frames, side) => {
       const jitter = (Math.random() * 2 - 1) * 0.07 * 60;
-      parryAt = h.frame + Math.max(1, Math.round(frames - p.parryWindow * 30 + jitter));
+      parryAt = world + Math.max(1, Math.round(frames - p.parryWindow * 30 + jitter));
       parrySide = side;
     };
     const parryFree = (frames) => (p.parryCooldown ?? 0) * 60 < frames - p.parryWindow * 30 - 5;
     // Seen in time (at least 0.15 s before they arrive), and the guard free by then.
     if (entry >= 9 && parryAt < 0 && parryHold === 0 && parryFree(entry)) planParry(entry, orbSide);
-    if (entry < 0 && parryAt >= 0 && s !== 'slam' && h.frame > parryAt + 20) parryAt = -1;
+    // Or off the tell itself, seen in time: the splinters leave when the core
+    // has burnt down, and the middle one flies straight at him, bending in.
+    if (volleySeen && v.timer - LAG_S >= 0.15 && parryAt < 0 && parryHold === 0) {
+      const d = Math.max(0, Math.abs(dx) - (p.w / 2 + 30) - 7);
+      const fly = (-200 + Math.sqrt(200 * 200 + 380 * d)) / 190;
+      const frames = (v.timer - lagS + fly) * 60;
+      if (parryFree(frames)) planParry(frames, dir);
+    }
+    if (entry < 0 && parryAt >= 0 && s !== 'slam' && world > parryAt + 20) parryAt = -1;
 
     /* ------------------------------------------------------------ moves */
     if (s !== 'slam') parriedSlam = false;
@@ -201,9 +223,20 @@ export default function reader(g, h) {
         // Out of the ring - unless there is no getting out in time (his back
         // to the wall): then the parry, timed off the fall he is watching.
         const need = Math.abs(target - p.cx) / 225 + 0.1;
-        if (need < tRem || parriedSlam) a[target > p.cx ? 'right' : 'left'] = true;
-        else if (parryAt < 0 && parryFree(tRem * 60) && tRem > 0.15) {
-          planParry(tRem * 60, Math.sign(L - p.cx) || p.facing);
+        // Coming down on top of him, his body touches the hero's head a few
+        // frames before his feet touch the floor: the parry is for that touch.
+        const on = Math.abs(L - p.cx) < v.w / 2 + p.w / 2;
+        const discT = v.vy * v.vy + 2 * G_BOSS * (p.y - bottom);
+        // (The later root: his feet passing the hero's head on the way down.)
+        const tTouch = on && discT > 0 ? (-v.vy + Math.sqrt(discT)) / G_BOSS - lagS : tRem;
+        // (A parry that takes the first touch leaves him untouchable through the landing.)
+        const tParry = Math.min(tTouch, tRem);
+        if (parriedSlam) {
+          // Decided: stand, and face where he comes down.
+          parrySide = Math.sign(L - p.cx) || p.facing;
+        } else if (need < tRem) a[target > p.cx ? 'right' : 'left'] = true;
+        else if (parryAt < 0 && parryFree(tParry * 60) && Math.min(tTouch, tRem) > 0.15) {
+          planParry(tParry * 60, Math.sign(L - p.cx) || p.facing);
           parriedSlam = true;
         }
       }
@@ -234,27 +267,58 @@ export default function reader(g, h) {
         // Over him: come down on the side he has gone past, clear of him.
         if (s === 'lunge' && Math.sign(v.vx) === dir) a[away] = true;
       } else if (Math.sign(dx) !== p.facing) a[toward] = true;
-    } else if (s === 'volleyWind') {
-      if (Math.sign(dx) !== p.facing) a[toward] = true;
+    } else if (s === 'volleyWind' || parryAt >= 0) {
+      // Standing for it, facing what comes: a parry is timed to where he
+      // stands, and walking into the splinters brings them on sooner.
+      const side = parryAt >= 0 ? parrySide : Math.sign(dx);
+      if (side !== p.facing) a[side > 0 ? 'right' : 'left'] = true;
     } else {
-      // Open, or walking about: to a sword's length and swing. Sliding in
-      // from a lunge he is not there yet - where he stops is where he is.
+      // Open, or walking about: to a sword's length. Sliding in from a lunge
+      // he is not there yet - where he stops is where he is. The blade only
+      // while he stands open, and only a swing that lands before he is free:
+      // a blow into his wind-up provokes him (GEREIZT), and the blow that
+      // follows comes faster than an eye 0.3 s behind can answer.
+      // (Never nearer than where the eye last saw him: while he walks about
+      // he can stop dead for a wind-up, and walking on to where he would have
+      // been puts the hero against him.)
       const closing = s === 'recover' && Math.sign(v.vx) === -dir ? (v.vx * v.vx) / (2 * BRAKE) : 0;
-      const at = closing > 10 ? Math.min(edge, seenEdge - closing) : edge;
+      const at = closing > 10 ? Math.min(edge, seenEdge - closing) : Math.min(edge, seenEdge);
       if (at > 24) a[toward] = true;
-      else if (at < 6) a[away] = true;
+      else if (at < 8) a[away] = true;
       else if (Math.sign(dx) !== p.facing) a[toward] = true;
-      if (edge < 32 && edge > 2) h.swing(a);
+      // He walks for at least 0.4 s once he is free, before any tell: a swing
+      // begun while the eye still has him standing lands before his next
+      // wind-up, even one begun just after he is free again.
+      const open = (s === 'recover' || s === 'wait') && v.timer - lagS > -0.25;
+      if (open && edge < 32 && edge > 2) h.swing(a);
+    }
+
+    // A splinter too close to parry, about to cross the blade's sweep: the
+    // blade, facing it.
+    if (batSide && parryAt < 0 && parryHold === 0 && floor) {
+      if (batSide !== p.facing) {
+        a.left = batSide < 0;
+        a.right = batSide > 0;
+      }
+      h.swing(a);
+    }
+    // A parried blow that left him standing in the hero (a slam onto a hero
+    // with his back to the wall): out, while the parry's breath of safety
+    // lasts, by the side with room - whatever the eye still shows of him.
+    if (p.parryFlash > 0.4 && Math.abs(dx) < v.w / 2 + p.w / 2 + 2 && floor) {
+      a.left = false;
+      a.right = false;
+      a[room.right - p.cx > p.cx - room.left ? 'right' : 'left'] = true;
     }
 
     // The parry, when its moment comes: facing what is coming, standing.
-    if (parryAt >= 0 && h.frame >= parryAt - 8 && floor) {
+    if (parryAt >= 0 && world >= parryAt - 8 && floor) {
       a.left = false;
       a.right = false;
       a.attack = false;
       if (parrySide !== p.facing) a[parrySide > 0 ? 'right' : 'left'] = true;
     }
-    if (parryAt >= 0 && h.frame >= parryAt) {
+    if (parryAt >= 0 && world >= parryAt) {
       parryHold = 2;
       parryAt = -1;
     }

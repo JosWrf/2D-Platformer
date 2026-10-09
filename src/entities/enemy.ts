@@ -1,7 +1,7 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
-import { shadow, withHitFlash } from '../render/sprites';
+import { glow, shadow, withHitFlash } from '../render/sprites';
 import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Body } from './entity';
@@ -102,6 +102,13 @@ export abstract class Enemy extends Body {
    * boss that has fallen from being built again at the next checkpoint.
    */
   spawnKey = '';
+  /**
+   * True while what this one called up should leave the hero to it: a
+   * summoner's swarm (keyed by the summoner's kind) holds off meanwhile.
+   */
+  get holdsSwarm(): boolean {
+    return false;
+  }
   facing: 1 | -1 = -1;
   flash = 0;
   stun = 0;
@@ -432,10 +439,21 @@ export class Slime extends Enemy {
 
 /* ---------------------------------------------------------------------- bat */
 
+/**
+ * How long a bat pulls up before it dives: it stops, rises a little, its eyes
+ * burn and it screeches - then it comes. It used to dive out of its hover with
+ * nothing before it, a fall of 90 px in 0.37 s: from Vesperon's swarm, which
+ * keeps four of them over the hero, that was six hearts a fight to a hero who
+ * saw everything else coming, and most of what reading him cost.
+ */
+const BAT_TELL = 0.42;
+
 export class Bat extends Enemy {
   private phase = rand(0, Math.PI * 2);
   private diving = false;
   private diveCooldown = rand(0.5, 2);
+  /** Seconds left of the pull-up before a dive; 0 when it is not about to. */
+  private tell = 0;
 
   constructor(x: number, y: number) {
     super('bat', x, y);
@@ -444,10 +462,32 @@ export class Bat extends Enemy {
     this.hp = this.maxHp = 2;
     this.scoreValue = 30;
     this.aggroRange = 260;
+    // It flies: a plank is not somewhere to land. They used to settle on one
+    // whenever the hero was below it, and sit there bouncing.
+    this.ignorePlatforms = true;
   }
 
   protected override deathColor(): string {
     return PALETTE.bat;
+  }
+
+  /**
+   * Bats of one swarm - Vesperon's, which share his key - come down one at a
+   * time: while one pulls up or dives, the rest keep circling. Four of them
+   * diving as they pleased came down two and three at once, and no reading of
+   * the one in front of the hero helped against the one behind him. Nor do
+   * they come while their summoner is busy with him himself (see holdsSwarm):
+   * a hero standing for the parry of a dive cannot also turn to a bat.
+   */
+  private waitsItsTurn(world: World): boolean {
+    if (!this.spawnKey) return false;
+    return world.enemies.some(
+      (e) =>
+        e !== this &&
+        !e.dead &&
+        ((e instanceof Bat && e.spawnKey === this.spawnKey && (e.tell > 0 || e.diving)) ||
+          (e.kind === this.spawnKey && e.holdsSwarm)),
+    );
   }
 
   override update(dt: number, world: World): void {
@@ -459,6 +499,7 @@ export class Bat extends Enemy {
     const dist = Math.hypot(dx, dy);
 
     if (this.stun > 0) {
+      this.tell = 0;
       this.vy += 900 * dt;
     } else if (this.diving) {
       this.diveCooldown -= dt;
@@ -466,15 +507,28 @@ export class Bat extends Enemy {
         this.diving = false;
         this.diveCooldown = rand(1.2, 2.2);
       }
-    } else {
-      this.diveCooldown -= dt;
-      if (dist < this.aggroRange && this.diveCooldown <= 0) {
+    } else if (this.tell > 0) {
+      // Pulling up: away from the hero and a little higher, slowing to a stop.
+      this.tell -= dt;
+      this.vx = approach(this.vx, -Math.sign(dx) * 30, 600 * dt);
+      this.vy = approach(this.vy, -40, 600 * dt);
+      if (this.tell <= 0) {
+        this.tell = 0;
         this.diving = true;
         this.diveCooldown = 0.9;
         const len = dist || 1;
         this.vx = (dx / len) * 250;
         this.vy = (dy / len) * 250;
-        audio.play('screech', 1.4);
+      }
+    } else {
+      this.diveCooldown -= dt;
+      if (dist < this.aggroRange && this.diveCooldown <= 0) {
+        if (this.waitsItsTurn(world)) {
+          this.diveCooldown = rand(0.25, 0.5);
+        } else {
+          this.tell = BAT_TELL;
+          audio.play('screech', 1.4);
+        }
       } else {
         const targetX = dist < this.aggroRange ? player.cx - Math.sign(dx) * 70 : this.homeX;
         const targetY = (dist < this.aggroRange ? player.cy - 60 : this.homeY) + Math.sin(this.phase) * 16;
@@ -527,9 +581,13 @@ export class Bat extends Enemy {
       ctx.lineTo(1, -6);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#ff5773';
-      ctx.fillRect(this.facing * 2 - 4, -2, 2.5, 2.5);
-      ctx.fillRect(this.facing * 2 + 1, -2, 2.5, 2.5);
+      // Its eyes - burning up while it pulls up to dive.
+      const burn = this.tell > 0 ? 1 - this.tell / BAT_TELL : 0;
+      if (burn > 0) glow(ctx, this.facing * 1.5, -1, 9 + burn * 7, `rgba(255,90,120,${(0.35 + burn * 0.45).toFixed(2)})`);
+      ctx.fillStyle = burn > 0 ? '#ffd0da' : '#ff5773';
+      const eye = 2.5 + burn * 1.5;
+      ctx.fillRect(this.facing * 2 - 4, -2, eye, eye);
+      ctx.fillRect(this.facing * 2 + 1, -2, eye, eye);
       ctx.restore();
     });
     this.drawHpPips(ctx);
@@ -1422,9 +1480,11 @@ const WARDEN_STAGGER_REST = 3.4;
  * Health before the hero is sized up. Sixteen was a third of the knight's;
  * with the relics of the road it fell in eight seconds to a hero who read it,
  * before it had shown each of its three moves once, and a hero who only held
- * the attack key saw one move in nine seconds - which his silk caught.
+ * the attack key saw one move in nine seconds - which his silk caught. At 46,
+ * one who stood at it swinging was through in fifteen seconds for four blows,
+ * against half a minute and none for one who struck only while it stood open.
  */
-const WARDEN_HP = 46;
+const WARDEN_HP = 56;
 
 /**
  * The Shard Warden: what the rift grew in the knight's place.

@@ -11,10 +11,11 @@
  *     enough to be clear of where it lands and slides, and goes in from there;
  *   - on the roof (after a dive, or knocked down): in to a sword's length of
  *     him, never into him - he takes off out of a crowd - and swing;
- *   - what flies at him (the blood sickles, a bat coming down, the drops of
- *     the blood moon), seen and led as the eye leads it: where standing still
- *     would be hit, a step whichever way is clear - under the sickles, as
- *     often as not - and a swing at whatever comes into the blade's reach;
+ *   - what flies at him (the blood sickles, a bat coming down - or pulling
+ *     up to, eyes burning - the drops of the blood moon), seen and led as the
+ *     eye leads it: where standing still would be hit, a step whichever way
+ *     is clear - under the sickles, as often as not - and a swing at whatever
+ *     comes into the blade's reach;
  *   - his bats, while they hang over him out of a sword's reach: on the move,
  *     to and fro across the open middle, so that a bat comes down where he
  *     was (measured against standing and swinging at them, and against going
@@ -143,7 +144,7 @@ export default function reader(g, h) {
       marks: boss.marks.filter((m) => m.t >= 0).map((m) => ({ x: m.x, t: m.t })),
       bats: g.enemies
         .filter((e) => e.kind === 'bat' && !e.dead && e.cx > room.left && e.cx < room.right)
-        .map((e) => ({ x: e.cx, y: e.cy, vx: e.vx, vy: e.vy, w: e.w, h: e.h })),
+        .map((e) => ({ x: e.cx, y: e.cy, vx: e.vx, vy: e.vy, w: e.w, h: e.h, tell: e.tell ?? 0 })),
       shots: h.hostile(),
     });
     // How much of the world has moved since what he sees now.
@@ -214,7 +215,25 @@ export default function reader(g, h) {
       threats.push({ x: lead(q.x, q.vx), y: lead(q.y, q.vy), vx: q.vx, vy: q.vy, w: q.w, h: q.h, home: q.deflectable, bat: false });
     }
     for (const b of v.bats) {
-      // Only a bat already coming down at him has a course to read.
+      // A bat pulling up - eyes burning - comes down at where he stands when
+      // it has: its course from there, at its dive speed, once its pull-up
+      // has run out (it rises a little meanwhile, which the eye ignores).
+      // (Seen near the end of its pull-up, it is already coming: as far along
+      // that course as the time it has been coming.) Until it has gone, its
+      // course is not set - it comes at wherever he stands when it goes - so
+      // a step taken before that only moves where it comes: he waits for it
+      // to go, and steps then.
+      const left = b.tell - ran * DT;
+      if (b.tell > 0) {
+        const ddx = p.cx - b.x;
+        const ddy = p.cy - b.y;
+        const len = Math.hypot(ddx, ddy) || 1;
+        const vx = (ddx / len) * 250;
+        const vy = (ddy / len) * 250;
+        threats.push({ x: b.x - vx * left, y: b.y - vy * left, vx, vy, w: b.w, h: b.h, home: false, bat: true, pending: left > 0.02 });
+        continue;
+      }
+      // Otherwise only a bat already coming down at him has a course to read.
       const sp = Math.hypot(b.vx, b.vy);
       if (sp < 200) continue;
       threats.push({ x: lead(b.x, b.vx), y: lead(b.y, b.vy), vx: b.vx, vy: b.vy, w: b.w, h: b.h, home: false, bat: true });
@@ -229,6 +248,7 @@ export default function reader(g, h) {
     const firstHit = (xs) => {
       let first = Infinity;
       for (const q of threats) {
+        if (q.pending) continue;
         let x = q.x;
         let y = q.y;
         let vy = q.vy;
@@ -321,7 +341,7 @@ export default function reader(g, h) {
     // facing it or free to turn.
     if (floor) {
       for (const q of threats) {
-        if (!q.home && !q.bat) continue;
+        if (q.pending || (!q.home && !q.bat)) continue;
         const side = Math.sign(q.x - p.cx) || p.facing;
         if (plan && side !== plan.side) continue;
         const front = side > 0 ? p.x + p.w - 4 : p.x - 36;

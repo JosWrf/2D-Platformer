@@ -10,8 +10,12 @@ const VESPER_HP = 56;
 const VESPER_POISE = 9;
 /** How high he holds, above the roof. */
 const HOVER = 236;
-/** At most this many of his bats at once. */
-const MAX_BATS = 4;
+/**
+ * At most this many of his bats at once, and he calls two at a time. Four,
+ * three to a call, was most of what the fight cost a hero who read it: about
+ * six hearts in seven, against one for everything the lord does himself.
+ */
+const MAX_BATS = 3;
 
 interface Mark {
   x: number;
@@ -49,7 +53,8 @@ type VesperState =
  *                  on his face.
  *   Blutsicheln  - crescents of blood thrown from the cape. A swing of the
  *                  blade sends them back up at him.
- *   Schwarm      - bats out of his cloak. There are never more than four.
+ *   Schwarm      - bats out of his cloak, two at a call and never more than
+ *                  three; they come down one at a time, never while he dives.
  *   Blutmond     - from half health on, once in a while: he climbs to the top
  *                  of the sky and it rains red where it is marked.
  *
@@ -92,6 +97,11 @@ export class Vesper extends Enemy {
     this.scoreValue = 1100;
     this.contactDamage = 1;
     this.aggroRange = 520;
+  }
+
+  /** His bats keep off while he winds up and makes his dive. */
+  override get holdsSwarm(): boolean {
+    return this.state === 'diveWind' || this.state === 'dive';
   }
 
   get phase(): 1 | 2 {
@@ -386,7 +396,7 @@ export class Vesper extends Enemy {
         this.flyTo(dt, this.cx, this.floorY - HOVER, 2);
         if (this.timer <= 0) {
           const alive = world.enemies.filter((e) => e.kind === 'bat' && !e.dead && e.spawnKey === 'vesper').length;
-          const count = Math.min(3, MAX_BATS - alive);
+          const count = Math.min(2, MAX_BATS - alive);
           for (let i = 0; i < count; i++) {
             const bat = new Bat(this.cx + (i - 1) * 30, this.cy - 10);
             bat.spawnKey = 'vesper';

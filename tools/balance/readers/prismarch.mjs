@@ -82,7 +82,7 @@ export default function reader(g, h) {
   /** Plans a parry for something arriving `frames` from now: meant for the middle of the window, off by up to 0.07 s. */
   const planParry = (frames, side) => {
     const jitter = (Math.random() * 2 - 1) * 0.07 * 60;
-    parryAt = h.frame + Math.max(1, Math.round(frames - p.parryWindow * 30 + jitter));
+    parryAt = world + Math.max(1, Math.round(frames - p.parryWindow * 30 + jitter));
     parrySide = side;
   };
   /** Whether the guard will be free again by the time a parry `frames` from now is pressed. */
@@ -147,6 +147,7 @@ export default function reader(g, h) {
     const lagF = world - v.clock;
     const lagS = lagF / 60;
     const s = v.state;
+    const fanSeen = s === 'fanWind' && lastSeen !== 'fanWind';
     if (s === 'chargeWind' && lastSeen !== 'chargeWind') {
       charges++;
       // What is left of the lean when it is first seen, the 0.3 s late it is.
@@ -207,7 +208,7 @@ export default function reader(g, h) {
       const sg = Math.sign(d);
       const vv = v0 * sg;
       const t1 = Math.max(0, (235 - vv) / 1500);
-      const tt = Math.max(0, t - tw - 1 / 60);
+      const tt = Math.max(0, t - tw);
       const go = tt <= t1 ? vv * tt + 750 * tt * tt : vv * t1 + 750 * t1 * t1 + 235 * (tt - t1);
       return x0 + sg * Math.min(Math.abs(d), go);
     };
@@ -226,11 +227,15 @@ export default function reader(g, h) {
         for (let off = -120; off <= 120; off += 6) {
           const x = p.cx + off;
           if (!inRoom(x)) continue;
-          // Not into the Prismarch either.
+          // Not into the Prismarch either - and not pressed up against it,
+          // where its bulk leaves one side to step to under the next shard.
           const e = dx > 0 ? bxc - (x + p.w / 2) : x - p.w / 2 - (bxc + v.w);
           if (e < 4) continue;
           const c = clearance(x, wait);
-          const score = (c >= CLEAR_ROCK ? 1000 : c * 10) - Math.abs(off) - wait;
+          // Once going one way, keep going: turning about costs the time it
+          // takes, and two half-plans in turn are worse than either.
+          const keepOn = Math.abs(p.vx) > 40 && Math.sign(off) === Math.sign(p.vx) ? 20 : 0;
+          const score = (c >= CLEAR_ROCK ? 1000 : c * 10) - Math.abs(off) - wait - Math.max(0, 40 - e) + keepOn;
           if (!best || score > best.score) best = { x, wait, score };
         }
       }
@@ -240,6 +245,7 @@ export default function reader(g, h) {
     /* --------------------------------------------------------- splinters */
     let orbEntry = -1;
     let orbSide = 0;
+    let batSide = 0;
     for (const q of v.orbs) {
       const pts = flight(q, 90).slice(lagF);
       const side = Math.sign(q.x - p.cx) || p.facing;
@@ -253,9 +259,28 @@ export default function reader(g, h) {
           break;
         }
       }
+      // Too close for a parry, it can still be batted: does it cross the
+      // blade's sweep before it gets to him?
+      const sx = side > 0 ? p.x + p.w - 4 : p.x - 36;
+      for (let k = 0; k < Math.min(pts.length, 14); k++) {
+        if (overlap(pts[k].x - q.w / 2, pts[k].y - q.h / 2, q.w, q.h, p.x, p.y, p.w, p.h)) break;
+        if (overlap(pts[k].x - q.w / 2, pts[k].y - q.h / 2, q.w, q.h, sx, p.cy - 18, 40, 32)) {
+          if (k >= 2) batSide = side;
+          break;
+        }
+      }
     }
     // Seen in time (at least 0.15 s before they arrive), and the guard free by then.
     if (orbEntry >= 9 && parryAt < 0 && parryHold === 0 && parryFree(orbEntry)) planParry(orbEntry, orbSide);
+    // Or off the tell itself, if it was seen in time (in its first half; the
+    // second half's is too short for that): the splinters leave when the
+    // heart has burnt down, and the middle one flies straight at him.
+    if (fanSeen && v.timer - LAG_S >= 0.15 && parryAt < 0 && parryHold === 0) {
+      const d = Math.max(0, Math.abs(dx) - (p.w / 2 + 30) - 7);
+      const fly = (-215 + Math.sqrt(215 * 215 + 380 * d)) / 190;
+      const frames = (v.timer - lagS + fly) * 60;
+      if (parryFree(frames)) planParry(frames, dir);
+    }
 
     /* ------------------------------------------------------------ moves */
     let committed = false;
@@ -317,16 +342,20 @@ export default function reader(g, h) {
       if (rockTarget !== null) {
         want = rockTarget;
         tol = 3;
-      } else if (s === 'fanWind' || (orbEntry >= 0 && orbEntry < 60)) {
+      } else if (s === 'fanWind' || parryAt >= 0 || (orbEntry >= 0 && orbEntry < 60)) {
+        // Standing for them, facing them; with no parry to time, the blade
+        // goes at them as they come.
         want = p.cx;
+        if (parryAt < 0 && parryHold === 0) h.swing(a);
       } else {
         // Open, or walking about. Into a sword's length when it is spent; in
         // its second half, while it walks, a step further off.
         const spent = s === 'recover' && v.timer - lagS > 0.3;
-        const rain = s === 'rain' || s === 'rainWind';
+        const rain = s === 'rain' || s === 'rainWind' || rocks.length > 0;
         const far = v.half && !spent && !rain;
-        // Under the shards, room on both sides to step: its own bulk is a wall.
-        const keep = s === 'rain' ? 60 : far ? 54 : 14;
+        // Under the shards, room on both sides to step - its own bulk is a
+        // wall - from the moment it starts calling them down.
+        const keep = rain ? 90 : far ? 54 : 14;
         tol = keep > 14 ? 10 : 8;
         // Sliding in from a charge or a stagger it is not there yet - where it stops is where it is.
         const closing = s === 'recover' && Math.sign(v.vx) === -dir ? (v.vx * v.vx) / 1600 : 0;
@@ -336,7 +365,7 @@ export default function reader(g, h) {
         if (!inRoom(spot)) spot = p.cx;
         want = spot;
         // The blade's water carries well past its edge.
-        if (edge < (keep > 14 ? 110 : 32) && edge > 2) h.swing(a);
+        if (edge < (keep > 14 ? 120 : 32) && edge > 2) h.swing(a);
       }
       // Never walk in under a shard that is coming down, nor across under one
       // to get somewhere: as far towards where he wants to be as stays clear
@@ -347,29 +376,41 @@ export default function reader(g, h) {
         const n = Math.ceil(Math.abs(want - p.cx) / 4);
         for (let i = 1; i <= n; i++) {
           const x = p.cx + ((want - p.cx) * i) / n;
-          if (crosses(x) || clearance(x) < CLEAR_ROCK) break;
+          if (crosses(x) || clearance(x) < CLEAR_ROCK + 6) break;
           best = x;
         }
         if (best !== want) tol = 3;
         want = best;
       }
-      // Let go where the slide of his feet carries him the rest of the way.
-      const stops = p.cx + (Math.sign(p.vx) * p.vx * p.vx) / 4000;
-      if (want - stops > tol) a.right = true;
-      else if (stops - want > tol) a.left = true;
+      // Let go where the slide of his feet carries him the rest of the way -
+      // letting go, not pulling back: a key the other way turns him round.
+      const go = want - p.cx;
+      const slid = (p.vx * p.vx) / 4000;
+      if (go > tol && (p.vx <= 0 || go - slid > tol)) a.right = true;
+      else if (go < -tol && (p.vx >= 0 || -go - slid > tol)) a.left = true;
       else if (Math.sign(dx) !== p.facing && rockTarget === null) a[toward] = true;
     }
 
-    // The parry, when its moment comes: facing what is coming, standing still.
-    if (parryAt >= 0 && h.frame >= parryAt - 6 && floor) {
-      if (!committed && rockTarget === null) {
+    // A splinter too close to parry, about to cross the blade's sweep: the
+    // blade, facing it.
+    if (batSide && parryAt < 0 && parryHold === 0 && floor) {
+      if (batSide !== p.facing) {
+        a.left = batSide < 0;
+        a.right = batSide > 0;
+      }
+      h.swing(a);
+    }
+    // The parry, when its moment comes: facing what is coming, standing still
+    // (unless a shard is coming down on him: out from under it first).
+    if (parryAt >= 0 && world >= parryAt - 6 && floor) {
+      if (rockTarget === null) {
         a.left = false;
         a.right = false;
+        if (parrySide !== p.facing) a[parrySide > 0 ? 'right' : 'left'] = true;
       }
       a.attack = false;
-      if (parrySide !== p.facing && !a.left && !a.right) a[parrySide > 0 ? 'right' : 'left'] = true;
     }
-    if (parryAt >= 0 && h.frame >= parryAt) {
+    if (parryAt >= 0 && world >= parryAt) {
       parryHold = 2;
       parryAt = -1;
     }
@@ -378,7 +419,8 @@ export default function reader(g, h) {
       a.attack = false;
       parryHold--;
     }
-    if (parryAt >= 0 && orbEntry < 0 && s !== 'chargeWind' && s !== 'charge') parryAt = -1;
+    // A plan whose moment has long gone by without anything to catch: dropped.
+    if (parryAt >= 0 && world > parryAt + 12) parryAt = -1;
     // Coming down off a board, or thrown: not onto it. (Over a charge he has
     // his own way down, above.)
     if (!overCharge && !jump.busy && s !== 'charge' && landsOn(bxc, bxc + v.w)) {
