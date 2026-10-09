@@ -158,8 +158,27 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
         return g.enemies.find((e) => e.kind === kind && !e.dead) ?? null;
       };
 
-      /** Down, or on the way down: a boss in its death throes is a boss that has been felled. */
-      h.felled = (b) => !b || b.dead || b.hp <= 0 || b.state === 'dying';
+      /**
+       * Down, or on the way down: a boss in its death throes is a boss that
+       * has been felled. Not the hydra by her health, though: it is the sum of
+       * her necks, and it reaches nothing whenever every neck is cut or burnt
+       * at once - which is not the end of her while a cut one can grow back.
+       */
+      h.felled = (b) => !b || b.dead || b.state === 'dying' || (kind !== 'hydra' && b.hp <= 0);
+
+      /**
+       * What the boss was doing, for the book of where the hearts went: its
+       * state, and for the bosses whose state alone says little, which of its
+       * moves or limbs was at it.
+       */
+      h.label = (b) => {
+        if (!b) return 'none';
+        if (kind === 'clock') return `${b.state}:${b.move ?? '-'}`;
+        if (kind === 'twins') return `${b.sol?.state}/${b.luna?.state}`;
+        if (kind === 'hydra') return `${b.state}:${b.necks?.[b.acting]?.kind ?? '-'}`;
+        if (kind === 'shadow') return `${b.state}:${b.plan}`;
+        return b.state;
+      };
 
       /*
        * The room. Arena bosses stand between two wards; the knight has his
@@ -219,6 +238,18 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
           h.tick({ right: f < 40 || !b?.engaged });
         }
         g.dialogue = null;
+        // The rooms without wards of their own are read again now that they
+        // are shut: read at the door, the hydra's lair ran on through her open
+        // gates to the walls of the shaft beyond, and the knight's throne
+        // room was guessed at fifty tiles from where it begins.
+        if (!h.arena && spawn && kind !== 'prismarch') {
+          const r = wallsAround(spawn.tx, spawn.ty);
+          if (r.right - r.left >= 20 * TILE) {
+            h.room.left = r.left;
+            h.room.right = r.right;
+            h.room.mid = (r.left + r.right) / 2;
+          }
+        }
         return h.find();
       };
 
@@ -387,7 +418,7 @@ export async function stage(bench, kind, relics = relicsBefore(kind)) {
             felledAt = g.time - t0;
             break;
           }
-          const before = b?.state;
+          const before = h.label(b);
           h.tick(act(b) ?? {});
           h.watchHp(b, before);
         }

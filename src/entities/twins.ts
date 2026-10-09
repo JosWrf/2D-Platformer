@@ -27,6 +27,17 @@ const BODY_H = 44;
 const HOVER = 5;
 /** Seconds the standing twin needs to call the fallen one back. */
 const REVIVE = 7;
+/**
+ * The call is no free moment: what the caller pours into the star breaks out
+ * of it as a ring along the floor - the first CALL_FIRST seconds in, then
+ * every CALL_PULSE - its hands burning up for CALL_TELL before each one.
+ * Without it the call was seven seconds of a twin standing still: a hero who
+ * only walked up and swang felled the first in a dozen seconds and the caller
+ * in the call, three blows in all, where one who read them took twice as long.
+ */
+const CALL_FIRST = 1.4;
+const CALL_PULSE = 1.9;
+const CALL_TELL = 0.5;
 /** How long a twin stands after every move of its own: the window. */
 const REST = 1.6;
 /**
@@ -317,8 +328,10 @@ function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, outer: nu
  * zurück." A twin brought down is not gone; it lies on the floor as a dim star,
  * and the other stops whatever it is doing, stands still and calls it back.
  * That takes seven seconds, and in those seven seconds it does nothing else -
- * it can be hit like always, and if it falls too before the ring around the
- * star is full, both are down and the fight is over. If the ring fills, the
+ * it can be hit like always - though the call breaks out of it as a ring
+ * along the floor every couple of seconds, each one told - and if it falls
+ * too before the ring around the star is full, both are down and the fight
+ * is over. If the ring fills, the
  * fallen one stands up again with half of its health. So the fight is won by
  * bringing both of them low and then one after the other, not by taking one
  * apart while the other stays whole; the bar shows both, and a bar under
@@ -364,7 +377,7 @@ export class Twins extends Enemy {
   /** Turns since the last Finsternis. */
   private turns = 0;
   /** A twin lying on the floor, the other calling it back, and the seconds left. */
-  private revive: { fallen: Twin; channeler: Twin; left: number } | null = null;
+  private revive: { fallen: Twin; channeler: Twin; left: number; pulse: number; told: boolean } | null = null;
   private revivals = 0;
   /** Which twin the last overlaps() found, for the hurt() that follows it. */
   private struck: Twin | null = null;
@@ -1305,7 +1318,7 @@ export class Twins extends Enemy {
     o.state = 'channel';
     o.glow = 0;
     o.facing = t.x >= o.x ? 1 : -1;
-    this.revive = { fallen: t, channeler: o, left: REVIVE };
+    this.revive = { fallen: t, channeler: o, left: REVIVE, pulse: CALL_FIRST, told: false };
     this.acting = null;
     audio.play('crumble', 1.2);
     audio.play(t.who === 'sol' ? 'bossRoar' : 'screech', 1.5);
@@ -1336,6 +1349,26 @@ export class Twins extends Enemy {
         life: 0.5,
         shape: 'spark',
       });
+    }
+    // A ring out of the caller, each one told: none so close to the end that
+    // it would come out of a twin already risen.
+    if (r.left > CALL_TELL + 0.4) {
+      r.pulse -= dt;
+      if (r.pulse <= CALL_TELL) {
+        if (!r.told) {
+          r.told = true;
+          audio.play('tell', c.who === 'sol' ? 0.95 : 1.3);
+        }
+        c.glow = Math.max(c.glow, 1 - Math.max(0, r.pulse) / CALL_TELL);
+      }
+      if (r.pulse <= 0) {
+        this.rings.push({ x: c.x, dir: -1, hit: false }, { x: c.x, dir: 1, hit: false });
+        this.flares.push({ x: c.x, y: this.floorY - 40, t: 0, life: 0.4, radius: 46, rgb: c.who === 'sol' ? '255,214,140' : '200,220,255', round: true });
+        audio.play('burst', 0.85);
+        world.camera.addShake(3);
+        r.pulse = CALL_PULSE;
+        r.told = false;
+      }
     }
     if (r.left <= 0) this.completeRevive(world);
   }

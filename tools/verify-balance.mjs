@@ -14,6 +14,10 @@
  *            the boss is a fight at all: he must pay a good deal more than the
  *            reader. Less than that, and the boss is too weak.
  *
+ * Hearts are counted gross: the hero is refilled after every blow, so what a
+ * relic like the Blutdurst would have healed back in the meantime does not
+ * show. Both heroes carry the same relics, so the comparison holds.
+ *
  * Usage:
  *   node tools/verify-balance.mjs                  every boss, three fights each
  *   node tools/verify-balance.mjs --boss wyrm      one boss (comma list for more)
@@ -141,7 +145,7 @@ for (const row of rows) {
         (mash >= band.masher || mashFell * 2 < row.masher.length) && mashRate >= readRate * 2,
       ]);
     }
-  } else {
+  } else if (STYLE !== 'masher') {
     checks.push([`${row.name}: has a reader`, false]);
   }
 }

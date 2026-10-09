@@ -617,16 +617,39 @@ results.rule = await page.evaluate(() => {
   let frames = 0;
   let attacked = false;
   let half = null;
+  // The rings the call breaks out in, and how long each one was told for.
+  const seen = new Set(boss.rings);
+  let rings = 0;
+  let toldAt = null;
+  const leads = [];
+  // The call's own time: frames held by a hit stop - a ring landing on the
+  // hero standing there - do not count towards it.
+  let held = 0;
   while (boss.revive && frames < 60 * 10) {
+    if (g.hitStopTimer > 0) held++;
     h.tick();
     h.watchHp();
     frames++;
     if (ATTACK.includes(boss.luna.state) || ATTACK.includes(boss.sol.state)) attacked = true;
     if (frames === 210) half = +boss.barPips().urgency[0].toFixed(2);
+    if (boss.revive?.told && toldAt === null) toldAt = frames;
+    let fresh = 0;
+    for (const ring of boss.rings) {
+      if (seen.has(ring)) continue;
+      seen.add(ring);
+      fresh++;
+    }
+    if (fresh > 0) {
+      rings++;
+      leads.push(toldAt === null ? 0 : +((frames - toldAt) / 60).toFixed(2));
+      toldAt = null;
+    }
   }
   out.call = {
-    seconds: +(frames / 60).toFixed(2),
+    seconds: +((frames - held) / 60).toFixed(2),
     attacked,
+    rings,
+    leads,
     hits: h.hits,
     halfway: half,
     solHp: boss.sol.hp,
@@ -804,9 +827,9 @@ const checks = [
   [
     // Seven seconds of the fight's own time; the hit stop of the fall itself
     // holds everything for a few frames on top.
-    'The call takes seven seconds, attacks nobody, and the fallen one rises with half its health',
-    r.call?.seconds >= 7 && r.call.seconds <= 7.3 && !r.call.attacked && r.call.hits === 0 && r.call.halfway > 0.4 && r.call.halfway < 0.6 &&
-      r.call.solUp && r.call.solHp === Math.ceil(r.call.solMax / 2) && r.call.phase === 2,
+    `The call takes seven seconds, makes no move but breaks out in ${r.call?.rings} rings along the floor, each told ahead (${r.call?.leads?.join(' / ')} s) - a hero who stands there takes them (${r.call?.hits}) - and the fallen one rises with half its health`,
+    r.call?.seconds >= 7 && r.call.seconds <= 7.3 && !r.call.attacked && r.call.rings === 3 && r.call.leads.every((l) => l >= 0.45) && r.call.hits >= 1 &&
+      r.call.halfway > 0.4 && r.call.halfway < 0.6 && r.call.solUp && r.call.solHp === Math.ceil(r.call.solMax / 2) && r.call.phase === 2,
   ],
   ['Felling the one who calls, during the call, ends the fight', r.second?.solCalls && r.second.stillCalling && r.second.over],
   ['A crescent batted back flies at Luna and hurts her', a.batted?.batted && a.batted.took >= 2],
