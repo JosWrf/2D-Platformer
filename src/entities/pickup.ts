@@ -164,7 +164,7 @@ export class Pickup {
       if (glint < 0.16) {
         const k = Math.min(3, Math.floor((glint / 0.16) * 4));
         const s = GLINT_SHEET.sprite(`s${k}`);
-        GLINT_SHEET.draw(ctx, `s${k}`, cx - 4, cy - 6, s.w >> 1, s.h >> 1);
+        GLINT_SHEET.draw(ctx, `s${k}`, cx - 8, cy - 8, s.w >> 1, s.h >> 1);
       }
     } else {
       const beat = this.anim % 1.1 < 0.1;
