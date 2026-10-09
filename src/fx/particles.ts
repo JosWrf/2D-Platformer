@@ -1,4 +1,9 @@
 import { rand } from '../core/math';
+import { UI, paletteColor } from '../ui/kit';
+import { capHeight, drawText } from '../ui/pixelfont';
+
+/** From a word's top to where it stands: (x, y) is its foot, as it always was. */
+const TEXT_RISE = capHeight();
 
 export interface Particle {
   x: number;
@@ -126,18 +131,17 @@ export class Particles {
     ctx.globalAlpha = 1;
   }
 
+  /**
+   * The words that pop out of a fight - "BENOMMEN!", "PARIERT!", "+1500" - in
+   * the pixel font, outlined in ink, standing on (x, y) as they always did.
+   * In their last moments they blink out instead of fading: a fade would come
+   * out of the palette as a dither crawling over the letters.
+   */
   drawTexts(ctx: CanvasRenderingContext2D): void {
-    ctx.textAlign = 'center';
-    ctx.font = '700 14px ui-monospace, monospace';
     for (const t of this.texts) {
-      ctx.globalAlpha = Math.min(1, t.life / 0.5);
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillText(t.text, t.x + 1, t.y + 1);
-      ctx.fillStyle = t.color;
-      ctx.fillText(t.text, t.x, t.y);
+      if (t.life < 0.3 && Math.floor(t.life * 20) % 2 === 0) continue;
+      drawText(ctx, t.text, t.x, t.y - TEXT_RISE, { color: paletteColor(t.color), outline: UI.ink, align: 'center' });
     }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = 'left';
   }
 
   clear(): void {

@@ -17,8 +17,13 @@ import { ART, makeCanvas, snap } from '../render/pixel';
  * box: in body, rows 0-6 hold the capitals and ascenders, 2-6 the lower case
  * and 7-8 the descenders; in small, rows 1-5 hold the letters and row 0 the
  * dots of an umlaut. Each colour, scale and outline is drawn into an atlas
- * once, the first time it is asked for, and a word is then one drawImage a
- * letter.
+ * once, the first time it is asked for; a line of text is set from the atlas
+ * into a canvas of its own the first time it is drawn, and from then on it
+ * is one drawImage, however many letters it has.
+ *
+ * The game sets text in three sizes and no more: small, body, and body at
+ * twice the size for the big words - which can be two-tone, light over dark
+ * (`lower`), the way the titles of the cartridge era were banded.
  */
 
 export type FontName = 'body' | 'small';
@@ -34,6 +39,11 @@ export interface TextStyle {
   outline?: string | null;
   /** A shadow one font pixel down and to the right, in this colour. */
   shadow?: string | null;
+  /**
+   * The lower part of every letter in this colour: a two-tone face, light
+   * over dark, the way a sixteen-bit title is banded. For the big words.
+   */
+  lower?: string | null;
 }
 
 interface FontDef {
@@ -155,6 +165,7 @@ const BODY_GLYPHS: Record<string, string> = {
   '×': '.....|.....|#...#|.#.#.|..#..|.#.#.|#...#',
   '◀': '...#|..##|.###|####|.###|..##|...#',
   '▶': '#...|##..|###.|####|###.|##..|#...',
+  '▼': '.......|.......|#######|.#####.|..###..|...#...',
   '←': '.....|.....|..#..|.#...|#####|.#...|..#..',
   '→': '.....|.....|..#..|...#.|#####|...#.|..#..',
   '↓': '..#..|..#..|..#..|..#..|#.#.#|.###.|..#..',
@@ -191,8 +202,10 @@ const SMALL_GLYPHS: Record<string, string> = {
   X: '...|#.#|#.#|.#.|#.#|#.#',
   Y: '...|#.#|#.#|.#.|.#.|.#.',
   Z: '...|###|..#|.#.|#..|###',
-  Ä: '#.#|.#.|#.#|###|#.#|#.#',
-  Ö: '#.#|.#.|#.#|#.#|#.#|.#.',
+  // The dots on the top row, a row of air, and the letter one row shorter:
+  // with the dots touching its top an A or an O reads as an X.
+  Ä: '#.#|...|.#.|#.#|###|#.#',
+  Ö: '#.#|...|.#.|#.#|#.#|.#.',
   Ü: '#.#|...|#.#|#.#|#.#|###',
   0: '...|###|#.#|#.#|#.#|###',
   1: '...|.#.|##.|.#.|.#.|###',
@@ -207,11 +220,14 @@ const SMALL_GLYPHS: Record<string, string> = {
   '.': '.|.|.|.|.|#',
   ',': '..|..|..|..|..|.#|#.',
   ':': '.|.|#|.|#|.',
+  ';': '..|..|.#|..|.#|#.',
   '!': '.|#|#|#|.|#',
   '?': '...|##.|..#|.#.|...|.#.',
   "'": '.|#|#',
+  '"': '...|#.#|#.#',
   '-': '..|..|..|##',
   '+': '...|...|.#.|###|.#.',
+  '=': '...|...|###|...|###',
   '/': '...|..#|..#|.#.|#..|#..',
   '(': '..|.#|#.|#.|#.|.#',
   ')': '..|#.|.#|.#|.#|#.',
@@ -221,8 +237,12 @@ const SMALL_GLYPHS: Record<string, string> = {
   '×': '...|...|#.#|.#.|#.#',
   '◀': '...|..#|.##|###|.##|..#',
   '▶': '...|#..|##.|###|##.|#..',
-  '←': '...|...|.#.|###|.#.',
-  '→': '...|...|.#.|###|.#.',
+  '▼': '.....|.....|#####|.###.|..#..',
+  // Arrows as wide as an M: at three pixels an arrow is a plus sign.
+  '←': '.....|..#..|.#...|#####|.#...|..#..',
+  '→': '.....|..#..|...#.|#####|...#.|..#..',
+  '↑': '.....|..#..|.###.|#.#.#|..#..|..#..',
+  '↓': '.....|..#..|..#..|#.#.#|.###.|..#..',
   '♥': '.....|.#.#.|#####|.###.|..#..',
 };
 
@@ -378,8 +398,18 @@ export function capHeight(style: TextStyle = {}): number {
   return (name === 'body' ? 7 : 5) * scaleOf(style) * ART;
 }
 
-/** The text broken into lines no wider than maxWidth (logical pixels), at the spaces. */
-export function wrapText(text: string, maxWidth: number, style: TextStyle = {}): string[] {
+/** Texts already broken into lines, by font, width and text. */
+const wrapped = new Map<string, readonly string[]>();
+
+/**
+ * The text broken into lines no wider than maxWidth (logical pixels), at the
+ * spaces. The answer is kept: a dialogue or a list breaks the same sentences
+ * every frame it is open.
+ */
+export function wrapText(text: string, maxWidth: number, style: TextStyle = {}): readonly string[] {
+  const key = `${style.font ?? 'body'}|${scaleOf(style)}|${maxWidth}|${text}`;
+  const hit = wrapped.get(key);
+  if (hit) return hit;
   const lines: string[] = [];
   for (const para of text.split('\n')) {
     let line = '';
@@ -394,6 +424,8 @@ export function wrapText(text: string, maxWidth: number, style: TextStyle = {}):
     }
     lines.push(line);
   }
+  wrapped.set(key, lines);
+  if (wrapped.size > 256) wrapped.delete(wrapped.keys().next().value as string);
   return lines;
 }
 
@@ -405,17 +437,10 @@ export function fitText(text: string, maxWidth: number, style: TextStyle = {}): 
   return `${t.trimEnd()}…`;
 }
 
-/* ------------------------------------------------------------- draw */
+/* ------------------------------------------------------------- lines */
 
-function drawRun(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  name: FontName,
-  scale: number,
-  atlas: Atlas,
-  x: number,
-  y: number,
-): void {
+/** Glyphs of a line, side by side from the atlas, into a canvas at art resolution. */
+function drawRun(ctx: CanvasRenderingContext2D, text: string, name: FontName, scale: number, atlas: Atlas, x: number, y: number): void {
   const glyphs = glyphsOf(name);
   const gap = FONTS[name].gap;
   const rows = FONTS[name].rows;
@@ -426,10 +451,83 @@ function drawRun(
     const sx = atlas.at.get(ch) as number;
     const sw = g.w * scale + pad * 2;
     const sh = rows * scale + pad * 2;
-    ctx.drawImage(atlas.canvas, sx, 0, sw, sh, cx - pad * ART, y - pad * ART, sw * ART, sh * ART);
-    cx += (g.w + gap) * scale * ART;
+    ctx.drawImage(atlas.canvas, sx, 0, sw, sh, cx - pad, y - pad, sw, sh);
+    cx += (g.w + gap) * scale;
   }
 }
+
+interface Line {
+  canvas: HTMLCanvasElement;
+  /** Art pixels the canvas reaches beyond the line box on the left and at the top. */
+  pad: number;
+  /** The text's own width, without outline or shadow, in art pixels. */
+  width: number;
+}
+
+/** Lines already set, most recently used last. */
+const lines = new Map<string, Line>();
+/** Enough for every word on the busiest screen (the pause lists) several times over. */
+const LINE_CACHE = 640;
+
+/**
+ * A line of text set once - outline, shadow and letters - into a canvas of
+ * its own, so that drawing it is a single drawImage however long it is. The
+ * HUD draws the same few dozen words every frame; set letter by letter they
+ * would be a thousand draws a frame. The line is found again by the text as
+ * it was asked for, so a frame that draws it again neither folds nor
+ * measures it a second time.
+ *
+ * With an outline and a shadow both, the outline goes round the letters and
+ * their shadow together, so the shadow reads as part of the letter's
+ * silhouette rather than as a second, unoutlined one behind it.
+ */
+function lineOf(text: string, style: TextStyle): Line {
+  const name = style.font ?? 'body';
+  const scale = scaleOf(style);
+  const color = style.color ?? '#f9e6cf';
+  const outline = style.outline ?? '';
+  const shadow = style.shadow ?? '';
+  const lower = style.lower ?? '';
+  const key = `${name}|${scale}|${color}|${outline}|${shadow}|${lower}|${text}`;
+  const hit = lines.get(key);
+  if (hit) {
+    lines.delete(key);
+    lines.set(key, hit);
+    return hit;
+  }
+  const set = setText(text, name);
+  const width = artWidth(set, name, scale);
+  const pad = 1;
+  const drop = shadow ? scale : 0;
+  const w = width + pad * 2 + drop;
+  const h = FONTS[name].rows * scale + pad * 2 + drop;
+  const { canvas, ctx } = makeCanvas(Math.max(1, w), h);
+  if (outline) {
+    const atlas = atlasOf(name, scale, outline, true);
+    drawRun(ctx, set, name, scale, atlas, pad, pad);
+    if (drop) drawRun(ctx, set, name, scale, atlas, pad + drop, pad + drop);
+  }
+  if (shadow) drawRun(ctx, set, name, scale, atlasOf(name, scale, shadow, false), pad + drop, pad + drop);
+  drawRun(ctx, set, name, scale, atlasOf(name, scale, color, false), pad, pad);
+  if (lower) {
+    // The letters again in the lower colour, cut off above the split: under
+    // the fourth of a capital's seven rows in body text, under the second of
+    // its five in small.
+    const split = (name === 'body' ? 4 : 3) * scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, pad + split, w, h);
+    ctx.clip();
+    drawRun(ctx, set, name, scale, atlasOf(name, scale, lower, false), pad, pad);
+    ctx.restore();
+  }
+  const line = { canvas, pad, width };
+  lines.set(key, line);
+  if (lines.size > LINE_CACHE) lines.delete(lines.keys().next().value as string);
+  return line;
+}
+
+/* ------------------------------------------------------------- draw */
 
 /**
  * Draws a line of text with the top of its line box at y (logical pixels) -
@@ -438,20 +536,14 @@ function drawRun(
  * width in logical pixels.
  */
 export function drawText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, style: TextStyle = {}): number {
-  const name = style.font ?? 'body';
-  const scale = scaleOf(style);
-  const set = setText(text, name);
-  const width = artWidth(set, name, scale) * ART;
+  const line = lineOf(text, style);
+  const width = line.width * ART;
   const align = style.align ?? 'left';
   const left = snap(align === 'center' ? x - width / 2 : align === 'right' ? x - width : x);
   const top = snap(y);
   const smoothing = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
-  if (style.outline) drawRun(ctx, set, name, scale, atlasOf(name, scale, style.outline, true), left, top);
-  if (style.shadow) {
-    drawRun(ctx, set, name, scale, atlasOf(name, scale, style.shadow, false), left + scale * ART, top + scale * ART);
-  }
-  drawRun(ctx, set, name, scale, atlasOf(name, scale, style.color ?? '#f9e6cf', false), left, top);
+  ctx.drawImage(line.canvas, left - line.pad * ART, top - line.pad * ART, line.canvas.width * ART, line.canvas.height * ART);
   ctx.imageSmoothingEnabled = smoothing;
   return width;
 }

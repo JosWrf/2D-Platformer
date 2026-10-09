@@ -1,603 +1,230 @@
 import { clamp } from '../core/math';
-import { PALETTE } from '../render/palette';
-import { fillRoundRect, glow } from '../render/sprites';
+import { ART_W } from '../render/pixel';
+import {
+  BADGE,
+  HEART_W,
+  KEY_H,
+  PIP,
+  bossMedallion,
+  gemIcon,
+  heartIcon,
+  keyCap,
+  pipIcon,
+  relicBadge,
+  skillBadge,
+  studIcon,
+} from './icons';
+import { UI, blit, box, drawFrame, paletteColor, text, textWidth } from './kit';
 
-export const FONT_STACK = 'ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace';
+/**
+ * The HUD in play: hearts, gems and score, the road so far, the relics and
+ * the picked boss attack, the zone's name when it changes, and a boss's bar.
+ *
+ * Everything is placed in art pixels on the 480×270 grid and drawn from
+ * cached pieces - icons, frames, lines of text - so a frame of HUD is a few
+ * dozen drawImage calls, and every one of them lands on whole pixels in
+ * colours of the palette.
+ */
 
-export function font(size: number, weight = 700): string {
-  return `${weight} ${size}px ${FONT_STACK}`;
-}
+/** Text over the world: an ink line round it, so it reads on any ground. */
+const OVER = { outline: UI.ink } as const;
 
-export function drawHeart(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  scale: number,
-  filled: boolean,
-): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  ctx.beginPath();
-  ctx.moveTo(0, 7);
-  ctx.bezierCurveTo(-11, -2, -6, -10, 0, -4);
-  ctx.bezierCurveTo(6, -10, 11, -2, 0, 7);
-  ctx.closePath();
-  if (filled) {
-    ctx.fillStyle = PALETTE.hearts;
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.beginPath();
-    ctx.ellipse(-3.2, -3, 1.8, 1.2, -0.5, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    ctx.fillStyle = 'rgba(20,16,26,0.65)';
-    ctx.fill();
-    ctx.strokeStyle = PALETTE.heartsDark;
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
-  }
-  ctx.restore();
-}
+/** The left edge everything in the corner hangs from. */
+const LEFT = 6;
 
-export function drawPanel(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  alpha = 0.72,
-): void {
-  ctx.globalAlpha = alpha;
-  fillRoundRect(ctx, x, y, w, h, 10, '#0a0c16');
-  ctx.globalAlpha = Math.min(1, alpha + 0.2);
-  ctx.strokeStyle = 'rgba(150,170,225,0.25)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  ctx.globalAlpha = 1;
-}
+/* ------------------------------------------------------------- status */
 
-export function drawTextCentered(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  size: number,
-  color: string,
-  weight = 700,
-  shadowColor = 'rgba(0,0,0,0.75)',
-): void {
-  ctx.font = font(size, weight);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = shadowColor;
-  ctx.fillText(text, x + 2, y + 2);
-  ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
-  ctx.textAlign = 'left';
+/** The hearts, one per point of health: full in red, empty in old wine. */
+export function drawHearts(ctx: CanvasRenderingContext2D, hp: number, maxHp: number): void {
+  for (let i = 0; i < maxHp; i++) blit(ctx, heartIcon(i < hp), LEFT + i * (HEART_W + 1), 5);
 }
 
 /**
- * One relic, as a small round badge: a dark disc, its sign in its colour, and
- * - for the ones that fill up or wear off - a ring round it showing how far.
- * `lit` dims the sign while the relic is spent (a torn shield, a used second
- * breath), so what is ready and what is not reads at a glance.
+ * Under the hearts: the gems found of all there are, beside a gem; and in the
+ * small hand under that, the score and the deaths.
  */
+export function drawCounters(ctx: CanvasRenderingContext2D, score: number, gems: number, totalGems: number, deaths: number): void {
+  blit(ctx, gemIcon(), LEFT, 15);
+  text(ctx, `${gems}/${totalGems}`, LEFT + 9, 15, { color: UI.cream, ...OVER });
+  let x = LEFT;
+  x += text(ctx, 'PUNKTE ', x, 26, { font: 'small', color: UI.mist, ...OVER });
+  x += text(ctx, `${score}`, x, 26, { font: 'small', color: UI.gold, ...OVER });
+  x += text(ctx, '  TODE ', x, 26, { font: 'small', color: UI.mist, ...OVER });
+  text(ctx, `${deaths}`, x, 26, { font: 'small', color: UI.cream, ...OVER });
+}
+
+/** Where the relic badges start, and how far apart they sit. */
+export const RELIC_ROW = { x: LEFT, y: 35, step: BADGE + 1, perRow: 6 } as const;
+
 export function drawRelicBadge(
   ctx: CanvasRenderingContext2D,
   id: string,
-  x: number,
-  y: number,
+  ax: number,
+  ay: number,
   color: string,
   lit: boolean,
   fill: number | null,
 ): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.fillStyle = 'rgba(8,10,20,0.78)';
-  ctx.beginPath();
-  ctx.arc(0, 0, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(160,175,220,0.28)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  if (fill !== null) {
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, 10, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(fill, 0, 1));
-    ctx.stroke();
-  }
-  ctx.globalAlpha = lit ? 1 : 0.32;
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6;
-  ctx.lineCap = 'round';
-  switch (id) {
-    case 'herzkern':
-      ctx.beginPath();
-      ctx.moveTo(0, 5);
-      ctx.bezierCurveTo(-7, -1, -4, -6, 0, -2.5);
-      ctx.bezierCurveTo(4, -6, 7, -1, 0, 5);
-      ctx.fill();
-      ctx.fillStyle = '#fff2f4';
-      ctx.fillRect(-1, -1, 2, 2);
-      break;
-    case 'keilerhaut':
-      // A tusk, curving up.
-      ctx.beginPath();
-      ctx.moveTo(-5, 5);
-      ctx.quadraticCurveTo(-4, -2, 4, -6);
-      ctx.quadraticCurveTo(0, 0, -1, 6);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'zwillingsstern':
-      // A sun and a moon, side by side.
-      ctx.beginPath();
-      ctx.arc(-3, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(3.5, 0, 3.4, Math.PI * 0.35, Math.PI * 1.65);
-      ctx.arc(5, 0, 2.6, Math.PI * 1.4, Math.PI * 0.6, true);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'taktgeber':
-      // A gear.
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2;
-        ctx.fillRect(Math.cos(a) * 5 - 1.2, Math.sin(a) * 5 - 1.2, 2.4, 2.4);
-      }
-      ctx.beginPath();
-      ctx.arc(0, 0, 4.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(8,10,20,0.9)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 'goldzahn':
-      ctx.beginPath();
-      ctx.moveTo(-4.5, -5);
-      ctx.lineTo(4.5, -5);
-      ctx.quadraticCurveTo(5, 0, 2, 2);
-      ctx.lineTo(0.8, 6);
-      ctx.lineTo(0, 2.5);
-      ctx.lineTo(-0.8, 6);
-      ctx.lineTo(-2, 2);
-      ctx.quadraticCurveTo(-5, 0, -4.5, -5);
-      ctx.fill();
-      break;
-    case 'bebenfaust':
-      ctx.beginPath();
-      ctx.moveTo(-6, 5);
-      ctx.lineTo(-2, -1);
-      ctx.lineTo(1, 2);
-      ctx.lineTo(3, -5);
-      ctx.lineTo(6, 5);
-      ctx.closePath();
-      ctx.fill();
-      break;
-    case 'seidenmantel':
-      for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI;
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(a) * -6, Math.sin(a) * -6);
-        ctx.lineTo(Math.cos(a) * 6, Math.sin(a) * 6);
-        ctx.stroke();
-      }
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(0, 0, 3.4, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    case 'glutklinge':
-      ctx.beginPath();
-      ctx.moveTo(0, -6.5);
-      ctx.quadraticCurveTo(5.5, -1, 3.5, 4);
-      ctx.quadraticCurveTo(0, 7, -3.5, 4);
-      ctx.quadraticCurveTo(-5.5, -1, 0, -6.5);
-      ctx.fill();
-      ctx.fillStyle = '#ffe9b8';
-      ctx.beginPath();
-      ctx.ellipse(0, 2.5, 1.6, 2.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 'flutklinge':
-    case 'gauklerschritt':
-      // The jester's cap: three points, a bell on each.
-      ctx.beginPath();
-      ctx.moveTo(-5, 4);
-      ctx.lineTo(-7, -4);
-      ctx.lineTo(-2, 0);
-      ctx.lineTo(0, -6);
-      ctx.lineTo(2, 0);
-      ctx.lineTo(7, -4);
-      ctx.lineTo(5, 4);
-      ctx.closePath();
-      ctx.fill();
-      for (const [bx, by] of [
-        [-7, -5],
-        [0, -7],
-        [7, -5],
-      ]) {
-        ctx.beginPath();
-        ctx.arc(bx, by, 1.4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      break;
-    case 'lichtkern':
-      // A heart made of light, with its rays.
-      ctx.beginPath();
-      ctx.moveTo(0, 5);
-      ctx.bezierCurveTo(-7, -1, -4, -7, 0, -3);
-      ctx.bezierCurveTo(4, -7, 7, -1, 0, 5);
-      ctx.fill();
-      for (let i = 0; i < 4; i++) {
-        const a = -Math.PI / 2 + (i - 1.5) * 0.7;
-        ctx.fillRect(Math.cos(a) * 7.5 - 0.6, Math.sin(a) * 7.5 - 0.6, 1.2, 1.2);
-      }
-      break;
-    case 'steinblick':
-      // An eye cut in stone.
-      ctx.beginPath();
-      ctx.moveTo(-7, 0);
-      ctx.quadraticCurveTo(0, -6.5, 7, 0);
-      ctx.quadraticCurveTo(0, 6.5, -7, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(8,10,20,0.9)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 'klingenwelle':
-      ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.quadraticCurveTo(1, -6, -6, -4);
-      ctx.quadraticCurveTo(0, 0, -6, 4);
-      ctx.quadraticCurveTo(1, 6, 6, 0);
-      ctx.fill();
-      break;
-    case 'blutdurst':
-      ctx.beginPath();
-      ctx.moveTo(0, -6.5);
-      ctx.quadraticCurveTo(5, 0, 4, 3);
-      ctx.arc(0, 2.5, 4, 0.1, Math.PI - 0.1);
-      ctx.quadraticCurveTo(-5, 0, 0, -6.5);
-      ctx.fill();
-      break;
-    case 'schattenschritt':
-      for (const dx of [-3, 2]) {
-        ctx.beginPath();
-        ctx.moveTo(dx - 2, -5);
-        ctx.lineTo(dx + 2.5, 0);
-        ctx.lineTo(dx - 2, 5);
-        ctx.stroke();
-      }
-      break;
-    case 'zweiteratem':
-      ctx.beginPath();
-      ctx.arc(0, 1, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.ellipse(0, -4.5, 5, 1.8, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    case 'splitterparade':
-      ctx.beginPath();
-      ctx.moveTo(0, -7);
-      ctx.lineTo(3.5, 0);
-      ctx.lineTo(0, 7);
-      ctx.lineTo(-3.5, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillRect(-0.6, -4, 1.2, 6);
-      break;
-    case 'hydrablut':
-      // A leaf growing from a stem: what is cut, grows back.
-      ctx.beginPath();
-      ctx.moveTo(-4, 6);
-      ctx.quadraticCurveTo(-5, -2, 4, -6);
-      ctx.quadraticCurveTo(4, 3, -4, 6);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(20,40,16,0.8)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-3, 5);
-      ctx.lineTo(3, -4.5);
-      ctx.stroke();
-      break;
-    default:
-      ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
-      ctx.fill();
-  }
-  ctx.restore();
+  blit(ctx, relicBadge(id, color, lit, fill), ax, ay);
 }
 
-/**
- * One boss attack, as a badge: square where the relics are round, so the two
- * rows never read as one. `scale` 1 matches a relic badge; the HUD's picked
- * attack is drawn larger. `fill`, while it cools down, is how far it is back.
- */
 export function drawSkillBadge(
   ctx: CanvasRenderingContext2D,
   id: string,
-  x: number,
-  y: number,
-  scale: number,
+  ax: number,
+  ay: number,
   color: string,
   ready: boolean,
   fill: number | null,
 ): void {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
-  ctx.fillStyle = 'rgba(8,10,20,0.82)';
-  ctx.beginPath();
-  ctx.roundRect(-10, -10, 20, 20, 4);
-  ctx.fill();
-  ctx.strokeStyle = ready ? color : 'rgba(160,175,220,0.28)';
-  ctx.globalAlpha = ready ? 0.8 : 1;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-  if (fill !== null) {
-    // Cooling down: the badge fills from the bottom as it comes back.
-    const f = clamp(fill, 0, 1);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.22;
-    ctx.fillRect(-9, 9 - 18 * f, 18, 18 * f);
-    ctx.globalAlpha = 1;
-  }
-  ctx.globalAlpha = ready ? 1 : 0.4;
-  ctx.fillStyle = color;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.6;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  drawSkillSign(ctx, id);
-  ctx.restore();
+  blit(ctx, skillBadge(id, color, ready, fill), ax, ay);
 }
 
-/** The sign inside a skill badge, in a 14 px box around the origin. */
-function drawSkillSign(ctx: CanvasRenderingContext2D, id: string): void {
-  switch (id) {
-    case 'klatschsprung':
-      // A blob in the air over the ring it is about to make.
-      ctx.beginPath();
-      ctx.ellipse(0, -2.5, 4.2, 3.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.ellipse(0, 5, 6.5, 1.8, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    case 'felswurf':
-      ctx.beginPath();
-      ctx.moveTo(-5, 2);
-      ctx.lineTo(-2, -4);
-      ctx.lineTo(4, -4);
-      ctx.lineTo(6, 2);
-      ctx.lineTo(2, 6);
-      ctx.lineTo(-4, 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-7, -2);
-      ctx.quadraticCurveTo(-6, -7, -1, -7);
-      ctx.stroke();
-      break;
-    case 'mondsichel':
-      ctx.beginPath();
-      ctx.arc(0, 0, 6, -1.3, 1.3);
-      ctx.arc(2.5, 0, 4.6, 1.1, -1.1, true);
-      ctx.closePath();
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(-1, 0, 7.5, 2.2, 4.1);
-      ctx.stroke();
-      break;
-    case 'pendelschlag':
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(-3, -7);
-      ctx.lineTo(2, 3);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(2.5, 4, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(-3, -7, 9, 0.5, 2.0);
-      ctx.stroke();
-      break;
-    case 'goldregen':
-      for (const [dx, dy] of [
-        [-4, 3],
-        [0, -1],
-        [4, -5],
-      ]) {
-        ctx.beginPath();
-        ctx.arc(dx, dy, 2.6, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      break;
-    case 'sonnenblick':
-      ctx.beginPath();
-      ctx.arc(0, -4.5, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillRect(-1.2, -2, 2.4, 7);
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.ellipse(0, 5.5, 5, 1.4, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      break;
-    case 'netzschuss':
-      ctx.beginPath();
-      ctx.arc(2.5, -1, 3.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 1;
-      for (const dy of [-3.5, 0, 3.5]) {
-        ctx.beginPath();
-        ctx.moveTo(-0.5, -1 + dy * 0.4);
-        ctx.lineTo(-6.5, dy);
-        ctx.stroke();
-      }
-      break;
-    case 'feuerwelle':
-      for (const [dx, h] of [
-        [-4.5, 5],
-        [0, 8],
-        [4.5, 11],
-      ]) {
-        ctx.beginPath();
-        ctx.moveTo(dx - 2, 6);
-        ctx.quadraticCurveTo(dx - 2, 6 - h * 0.6, dx, 6 - h);
-        ctx.quadraticCurveTo(dx + 2, 6 - h * 0.6, dx + 2, 6);
-        ctx.closePath();
-        ctx.fill();
-      }
-      break;
-    case 'springflut':
-      ctx.beginPath();
-      ctx.moveTo(-2.5, 6);
-      ctx.lineTo(-2, -3);
-      ctx.quadraticCurveTo(0, -7, 2, -3);
-      ctx.lineTo(2.5, 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(-7, 6);
-      ctx.quadraticCurveTo(-5, 4, -3.5, 6);
-      ctx.moveTo(3.5, 6);
-      ctx.quadraticCurveTo(5, 4, 7, 6);
-      ctx.stroke();
-      break;
-    case 'blutsicheln':
-      for (const dx of [-3, 2.5]) {
-        ctx.beginPath();
-        ctx.moveTo(dx, -6);
-        ctx.quadraticCurveTo(dx + 6, 0, dx, 6);
-        ctx.quadraticCurveTo(dx + 3, 0, dx, -6);
-        ctx.fill();
-      }
-      break;
-    case 'schattenwelle':
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(-7, 5.5);
-      ctx.lineTo(7, 5.5);
-      ctx.stroke();
-      for (const d of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(d * 1.5, 5);
-        ctx.quadraticCurveTo(d * 3, 0, d * 6, -4);
-        ctx.quadraticCurveTo(d * 5, 1, d * 7, 5);
-        ctx.closePath();
-        ctx.fill();
-      }
-      break;
-    case 'schattensprung':
-      ctx.beginPath();
-      ctx.ellipse(-3, 5, 3.6, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(4, 5, 3.6, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.lineWidth = 1.3;
-      ctx.beginPath();
-      ctx.moveTo(-3, 3);
-      ctx.quadraticCurveTo(0, -9, 4, 2);
-      ctx.stroke();
-      break;
-    case 'splitteransturm':
-      ctx.beginPath();
-      ctx.moveTo(6, 0);
-      ctx.lineTo(1, -4.5);
-      ctx.lineTo(-2, 0);
-      ctx.lineTo(1, 4.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.lineWidth = 1.1;
-      for (const dy of [-3, 0, 3]) {
-        ctx.beginPath();
-        ctx.moveTo(-7, dy);
-        ctx.lineTo(-3.5, dy);
-        ctx.stroke();
-      }
-      break;
-    case 'kronenfeuer': {
-      const heads = ['#9fe07a', '#ff9a4a', '#d9c39a', '#9cc8ff', '#ffd866'];
-      heads.forEach((c, i) => {
-        const a = Math.PI + (i / 4) * Math.PI;
-        ctx.fillStyle = c;
-        ctx.beginPath();
-        ctx.arc(Math.cos(a) * 5.5, 2 + Math.sin(a) * 5.5, 1.9, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      break;
-    }
-    case 'trugbild':
-      // Two figures, one stepping out of the other.
-      ctx.globalAlpha = 0.45;
-      ctx.fillRect(-6, -2, 4, 7);
-      ctx.beginPath();
-      ctx.arc(-4, -5, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillRect(1, -2, 4, 7);
-      ctx.beginPath();
-      ctx.arc(3, -5, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      break;
-    case 'irrlichter':
-      // Three lights on a ring.
-      for (let i = 0; i < 3; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI * 2) / 3;
-        ctx.beginPath();
-        ctx.arc(Math.cos(a) * 4.5, Math.sin(a) * 4.5, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      break;
-    case 'steinsturz':
-      // A block coming down onto a line of floor.
-      ctx.fillRect(-4, -6, 8, 7);
-      ctx.fillRect(-7, 5, 14, 1.5);
-      ctx.fillRect(-0.7, 2, 1.4, 2);
-      break;
-    case 'splitterregen':
-      for (const [dx, dy] of [
-        [-4, -3],
-        [0.5, 1],
-        [4.5, -2],
-      ]) {
-        ctx.beginPath();
-        ctx.moveTo(dx, dy + 4.5);
-        ctx.lineTo(dx + 1.8, dy);
-        ctx.lineTo(dx, dy - 4.5);
-        ctx.lineTo(dx - 1.8, dy);
-        ctx.closePath();
-        ctx.fill();
-      }
-      break;
-    default:
-      ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
-      ctx.fill();
+/* ------------------------------------------------------------- the road */
+
+const TRACK_W = 130;
+
+/**
+ * How far along the whole road he is, top right: a recessed track that fills
+ * in steel, a gold pin where he stands, and the name of the zone under it.
+ */
+export function drawProgress(ctx: CanvasRenderingContext2D, progress: number, zone: string): void {
+  const x = ART_W - LEFT - TRACK_W;
+  const y = 6;
+  const f = Math.round((TRACK_W - 2) * clamp(progress, 0, 1));
+  box(ctx, x, y, TRACK_W, 6, UI.ink);
+  box(ctx, x + 1, y + 1, TRACK_W - 2, 4, UI.night);
+  box(ctx, x + 1, y + 4, TRACK_W - 2, 1, UI.dusk);
+  if (f > 0) {
+    box(ctx, x + 1, y + 1, f, 1, UI.frost);
+    box(ctx, x + 1, y + 2, f, 2, UI.mist);
+    box(ctx, x + 1, y + 4, f, 1, UI.slate);
+  }
+  blit(ctx, studIcon(), x + 1 + f - 3, y - 1);
+  // (The small font sets every letter as a capital by itself.)
+  text(ctx, zone, ART_W - LEFT, y + 9, { font: 'small', color: UI.mist, align: 'right', ...OVER });
+}
+
+/* ------------------------------------------------------------- banner */
+
+/** A banner's letters as it comes and goes: four steps up the slate ramp to white. */
+const FADE = [UI.steel, UI.slate, UI.mist, UI.white] as const;
+/** And the lower half of the letters, a step under. */
+const FADE_LOWER = [UI.dusk, UI.steel, UI.slate, UI.frost] as const;
+
+/**
+ * The banner across the top: big letters, a rule with a stud under them, and
+ * an optional second line in gold. `level` 0..1 is how far in it is; it comes
+ * up through four colours rather than through transparency, the way a
+ * palette fade does, and never as a dither crawling over the letters.
+ */
+export function drawBanner(ctx: CanvasRenderingContext2D, title: string, sub: string | undefined, level: number): void {
+  if (level <= 0.12) return;
+  const step = Math.min(FADE.length - 1, Math.floor(level * FADE.length));
+  const big = { scale: 2, color: FADE[step], lower: FADE_LOWER[step], ...OVER, shadow: UI.night };
+  const lines = bannerLines(title);
+  let y = 46 - (lines.length - 1) * 11;
+  let widest = 0;
+  for (const line of lines) {
+    widest = Math.max(widest, text(ctx, line, ART_W / 2, y, { ...big, align: 'center' }));
+    y += 22;
+  }
+  // The rule: as wide as the words, with a stud in the middle.
+  const ruleW = Math.min(ART_W - 40, Math.max(60, widest + 12));
+  const ruleY = y - 4;
+  const rule = step >= 2 ? UI.slate : UI.steel;
+  box(ctx, ART_W / 2 - ruleW / 2, ruleY, ruleW, 1, rule);
+  box(ctx, ART_W / 2 - ruleW / 2 + 1, ruleY + 1, ruleW - 2, 1, UI.ink);
+  if (step >= 1) blit(ctx, studIcon(), ART_W / 2 - 3, ruleY - 3);
+  if (sub && step >= 1) {
+    text(ctx, sub, ART_W / 2, ruleY + 7, { font: 'small', color: step >= 3 ? UI.gold : UI.goldDark, align: 'center', ...OVER });
   }
 }
+
+const bannerSplits = new Map<string, readonly string[]>();
+
+/**
+ * A banner's title as it is set: one line, or - too wide for the screen at
+ * twice the size, as the longest hints are at fifty letters - two, broken at
+ * the space nearest its middle. Worked out once a title.
+ */
+function bannerLines(title: string): readonly string[] {
+  const hit = bannerSplits.get(title);
+  if (hit) return hit;
+  const style = { scale: 2 };
+  let best: string[] = [title];
+  if (textWidth(title, style) > ART_W - 24) {
+    const words = title.split(' ');
+    let bestW = Infinity;
+    for (let i = 1; i < words.length; i++) {
+      const a = words.slice(0, i).join(' ');
+      const b = words.slice(i).join(' ');
+      const w = Math.max(textWidth(a, style), textWidth(b, style));
+      if (w < bestW) {
+        bestW = w;
+        best = [a, b];
+      }
+    }
+  }
+  bannerSplits.set(title, best);
+  if (bannerSplits.size > 64) bannerSplits.delete(bannerSplits.keys().next().value as string);
+  return best;
+}
+
+/* ------------------------------------------------------------- skill */
+
+export interface SkillPanelInfo {
+  id: string;
+  name: string;
+  color: string;
+  /** Seconds until it can be used again; 0 when it is ready. */
+  left: number;
+  cooldown: number;
+  /** Every attack learned, in order, and which one is picked. */
+  owned: { id: string; color: string }[];
+}
+
+/**
+ * The boss attack he has picked, in the bottom left corner where nothing else
+ * is: its name, its badge filling as it cools down, F with whether it is
+ * ready, and Q with a mark for every other attack he could pick instead.
+ */
+export function drawSkillPanel(ctx: CanvasRenderingContext2D, info: SkillPanelInfo): void {
+  const ready = info.left <= 0;
+  const x = LEFT;
+  const y = 226;
+  // Narrow enough to stay clear of the boss bar, which starts at x 84.
+  drawFrame(ctx, 'plate', x, y, 70, 36);
+  text(ctx, info.name, x + 4, y + 3, { font: 'small', color: ready ? paletteColor(info.color) : UI.slate });
+  drawSkillBadge(ctx, info.id, x + 4, y + 12, info.color, ready, ready ? null : 1 - info.left / info.cooldown);
+  blit(ctx, keyCap('F'), x + 22, y + 11);
+  const status = ready ? 'BEREIT' : `${info.left.toFixed(1).replace('.', ',')} S`;
+  text(ctx, status, x + 33, y + 13, { font: 'small', color: ready ? UI.green : UI.mist });
+  if (info.owned.length > 1) {
+    blit(ctx, keyCap('Q'), x + 22, y + 12 + KEY_H);
+    // A mark a pixel wide for each, two apart - all eighteen fit - and the
+    // picked one standing taller, in its colour.
+    const top = y + 15 + KEY_H;
+    info.owned.forEach((k, i) => {
+      const px = x + 33 + i * 2;
+      if (k.id === info.id) {
+        box(ctx, px, top - 1, 1, 5, paletteColor(k.color));
+      } else {
+        box(ctx, px, top, 1, 3, UI.steel);
+      }
+    });
+  }
+}
+
+/* ------------------------------------------------------------- boss bar */
 
 export interface BossBarInfo {
+  /** The name ("ANKHOR"), which also picks the medallion's sign. */
   name: string;
+  /** What it is called after the name ("DER TEMPELKOLOSS"), set smaller. */
+  title?: string;
+  /** Right above the bar's end: "PHASE 2", or what the hydra's necks are doing. */
+  status?: string;
   hp: number;
   maxHp: number;
   ghost: number;
@@ -608,16 +235,87 @@ export interface BossBarInfo {
    * finished - the hydra's whole state in five symbols.
    */
   pips?: ('head' | 'stump' | 'sealed')[];
-  /** Seconds left on the shortest open stump, 0..1 of its full time. */
+  /** Seconds left on each open stump, 0..1 of its full time. */
   pipUrgency?: number[];
   /** The colour of each mark while it stands; the hydra's green if not given. */
   pipColors?: string[];
 }
 
 /**
- * The hydra's five necks under her bar: a head still to cut, an open stump with
- * the seconds it has left drawn round it, or a burned-out ring. A player has to
- * be able to see at a glance which of his cuts are about to come undone.
+ * A bar name as the bosses give it - "ANKHOR   ·   DER TEMPELKOLOSS" - as
+ * the name and what it is called, which the bar sets in two sizes.
+ */
+export function splitBarName(full: string): { name: string; title?: string } {
+  const [name = '', ...rest] = full
+    .split('·')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return rest.length ? { name, title: rest.join(' · ') } : { name };
+}
+
+/** The bar's five rows of fill, light on top: life, what was just lost, and nothing. */
+const LIFE = [UI.roseLight, UI.rose, UI.rose, UI.roseDark, UI.roseDark] as const;
+const LOST = [UI.cream, '#f6ca9f', '#f6ca9f', '#e69c69', '#e69c69'] as const;
+const NONE = [UI.ink, '#1c121c', '#1c121c', '#1c121c', UI.wine] as const;
+
+const PANEL_X = 84;
+const PANEL_W = 312;
+const BAR_X = 110;
+const BAR_W = 278;
+
+/**
+ * A boss's bar, across the bottom where it always was: a panel in old blood
+ * and bronze, the boss's medallion at its left, its name (and what it is
+ * called) over a recessed bar capped with bronze studs, the phase over the
+ * bar's end, and the notches the phases change at. A boss that is more than
+ * one bar gets its marks under it instead of the notches.
+ *
+ * `intro` (the knight's three seconds) fills the bar up from empty in the
+ * first of them, the way a boss's life has always come in.
+ */
+export function drawBossBar(ctx: CanvasRenderingContext2D, info: BossBarInfo, intro: number): void {
+  const pips = info.pips && info.pips.length ? info.pips : null;
+  const panelH = pips ? 41 : 29;
+  const panelY = 262 - panelH;
+  drawFrame(ctx, 'boss', PANEL_X, panelY, PANEL_W, panelH);
+  blit(ctx, bossMedallion(info.name), PANEL_X + 5, panelY + Math.floor((panelH - BADGE) / 2));
+
+  const textY = panelY + 6;
+  const nameW = text(ctx, info.name, BAR_X, textY, { color: UI.cream });
+  if (info.title) text(ctx, info.title, BAR_X + nameW + 5, textY + 1, { font: 'small', color: '#e69c69' });
+  if (info.status) text(ctx, info.status, BAR_X + BAR_W, textY + 1, { font: 'small', color: UI.gold, align: 'right' });
+
+  const barY = textY + 10;
+  const shown = intro > 2 ? clamp(3 - intro, 0, 1) : 1;
+  const life = Math.round((BAR_W - 2) * clamp(info.hp / info.maxHp, 0, 1) * shown);
+  const lost = Math.max(life, Math.round((BAR_W - 2) * clamp(info.ghost / info.maxHp, 0, 1) * shown));
+  box(ctx, BAR_X, barY, BAR_W, 7, UI.ink);
+  for (let r = 0; r < 5; r++) {
+    box(ctx, BAR_X + 1, barY + 1 + r, BAR_W - 2, 1, NONE[r]);
+    box(ctx, BAR_X + 1 + life, barY + 1 + r, lost - life, 1, LOST[r]);
+    box(ctx, BAR_X + 1, barY + 1 + r, life, 1, LIFE[r]);
+  }
+  // A bronze stud capping each end.
+  blit(ctx, studIcon(), BAR_X - 3, barY);
+  blit(ctx, studIcon(), BAR_X + BAR_W - 4, barY);
+
+  if (pips) {
+    drawPips(ctx, BAR_X + BAR_W / 2, barY + 10, pips, info.pipUrgency ?? [], info.pipColors);
+  } else {
+    // The notches the phases turn at, cut through the bar and marked over it.
+    for (const p of [0.3, 0.62]) {
+      const nx = BAR_X + 1 + Math.round((BAR_W - 2) * p);
+      box(ctx, nx, barY + 1, 1, 5, UI.ink);
+      box(ctx, nx, barY - 1, 1, 1, '#bf6f4a');
+    }
+  }
+}
+
+/**
+ * The hydra's five necks (or the twins' two stars) under the bar: a head
+ * still to cut, an open stump with its seconds as a ring running out, or a
+ * burned-out ring. A player has to see at a glance which of his cuts are
+ * about to come undone.
  */
 function drawPips(
   ctx: CanvasRenderingContext2D,
@@ -627,92 +325,9 @@ function drawPips(
   urgency: number[],
   colors: string[] = [],
 ): void {
-  const gap = 34;
-  const first = cx - ((pips.length - 1) * gap) / 2;
-  for (const [i, pip] of pips.entries()) {
-    const px = first + i * gap;
-    ctx.save();
-    ctx.translate(px, y);
-    if (pip === 'head') {
-      ctx.fillStyle = colors[i] ?? '#8fd45c';
-      ctx.beginPath();
-      ctx.arc(0, 0, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(24,44,20,0.9)';
-      ctx.beginPath();
-      ctx.arc(1.5, -1.5, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (pip === 'stump') {
-      const left = clamp(urgency[i] ?? 1, 0, 1);
-      ctx.fillStyle = 'rgba(190,255,150,0.9)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = left < 0.34 ? '#ff9a78' : '#c8ffa0';
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.arc(0, 0, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = 'rgba(150,150,150,0.55)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 7, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,150,70,0.5)';
-      ctx.beginPath();
-      ctx.moveTo(-4.5, -4.5);
-      ctx.lineTo(4.5, 4.5);
-      ctx.moveTo(4.5, -4.5);
-      ctx.lineTo(-4.5, 4.5);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-}
-
-export function drawBossBar(
-  ctx: CanvasRenderingContext2D,
-  viewW: number,
-  viewH: number,
-  info: BossBarInfo,
-  intro: number,
-): void {
-  const w = Math.min(620, viewW - 120);
-  const x = (viewW - w) / 2;
-  const y = viewH - 54;
-  const ratio = clamp(info.hp / info.maxHp, 0, 1);
-  const ghostRatio = clamp(info.ghost / info.maxHp, 0, 1);
-
-  drawPanel(ctx, x - 8, y - 22, w + 16, 44, 0.66);
-  drawTextCentered(ctx, info.name, viewW / 2, y - 6, 13, '#ffd9d0');
-
-  ctx.fillStyle = '#1d1420';
-  ctx.fillRect(x, y, w, 12);
-  ctx.fillStyle = 'rgba(255,120,90,0.45)';
-  ctx.fillRect(x, y, w * ghostRatio, 12);
-  const g = ctx.createLinearGradient(x, y, x, y + 12);
-  g.addColorStop(0, '#ff7a5c');
-  g.addColorStop(1, '#b3211f');
-  ctx.fillStyle = g;
-  ctx.fillRect(x, y, w * ratio, 12);
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.fillRect(x, y, w * ratio, 3);
-  ctx.strokeStyle = 'rgba(255,190,170,0.5)';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 11);
-
-  if (info.pips && info.pips.length) {
-    drawPips(ctx, viewW / 2, y + 24, info.pips, info.pipUrgency ?? [], info.pipColors);
-  } else {
-    // Phase notches.
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    for (const p of [0.3, 0.62]) ctx.fillRect(x + w * p, y, 2, 12);
-  }
-
-  if (intro > 0) {
-    ctx.globalAlpha = clamp(intro, 0, 1);
-    glow(ctx, viewW / 2, y + 6, 220, 'rgba(255,60,50,0.25)');
-    ctx.globalAlpha = 1;
-  }
+  const gap = 17;
+  const first = Math.round(cx - ((pips.length - 1) * gap) / 2 - PIP / 2);
+  pips.forEach((pip, i) => {
+    blit(ctx, pipIcon(pip, colors[i] ?? '#8fd45c', urgency[i] ?? 1), first + i * gap, y);
+  });
 }

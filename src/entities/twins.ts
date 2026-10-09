@@ -2,6 +2,7 @@ import { audio } from '../core/audio';
 import { Rect, approach, clamp, damp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
 import { glow, shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
+import { capHeight, drawText } from '../ui/pixelfont';
 import { TILE } from '../world/tiles';
 import { Enemy, type GlowLight } from './enemy';
 
@@ -2362,15 +2363,12 @@ export class Twins extends Enemy {
     if (r) {
       const c = r.channeler;
       const text = c.who === 'luna' ? 'SIE RUFT IHN ZURÜCK!' : 'ER RUFT SIE ZURÜCK!';
-      ctx.save();
-      ctx.font = '700 12px ui-monospace, monospace';
-      ctx.textAlign = 'center';
-      ctx.globalAlpha = 0.8 + 0.2 * Math.sin(this.anim * 6);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillText(text, c.x + 1, c.y - BODY_H - 25);
-      ctx.fillStyle = c.who === 'luna' ? '#d6e4ff' : '#ffe0a0';
-      ctx.fillText(text, c.x, c.y - BODY_H - 26);
-      ctx.restore();
+      // In the pixel font, on the actors' layer, which outlines it like the
+      // twins themselves; it pulses between two colours of the caller's
+      // light instead of in and out of transparency.
+      const bright = Math.sin(this.anim * 6) > 0;
+      const color = c.who === 'luna' ? (bright ? '#ffffff' : '#c7cfdd') : bright ? '#ffeb57' : '#ffc825';
+      drawText(ctx, text, c.x, c.y - BODY_H - 26 - capHeight(), { color, align: 'center' });
     }
   }
 }

@@ -30,9 +30,21 @@ import { drawEdgeLight } from './render/rims';
 import { ART, ART_H, ART_W, PaletteMapper, abgrOf, makeCanvas, settleActors } from './render/pixel';
 import { Scatter } from './render/scatter';
 import { ART_PALETTE, PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
-import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
-import { drawBossBar, drawHeart, drawPanel, drawRelicBadge, drawSkillBadge, drawTextCentered, font } from './ui/hud';
+import {
+  RELIC_ROW,
+  drawBanner,
+  drawBossBar,
+  drawCounters,
+  drawHearts,
+  drawProgress,
+  drawRelicBadge,
+  drawSkillPanel as drawSkillCard,
+  splitBarName,
+} from './ui/hud';
+import { UI, screen, veil } from './ui/kit';
+import * as screens from './ui/screens';
+import type { PauseEntry } from './ui/screens';
 import type { World } from './world/context';
 import { Arena, Level } from './world/level';
 import { TILE, Tile } from './world/tiles';
@@ -1721,56 +1733,31 @@ export class Game implements World {
     // (The soft vignette that used to darken the corners is gone: a smooth
     // radial haze is the one thing a palette of a few colours cannot draw.)
 
-    // Low-health pulse.
+    // Low health: the edges of the screen beat red, in hard bands, with the
+    // heart - a frame of blood that thickens on the beat, where a full-screen
+    // tint would only have washed every colour into a shimmer of dither.
     if (this.state === 'playing' && this.player.hp <= 2 && !this.player.dead) {
-      const pulse = 0.16 + Math.sin(this.time * 6) * 0.08;
-      ctx.fillStyle = `rgba(180,20,40,${Math.max(0, pulse).toFixed(3)})`;
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      const beat = Math.sin(this.time * 6);
+      const bands = beat > 0.45 ? 3 : beat > -0.35 ? 2 : 1;
+      for (let i = 0; i < bands; i++) {
+        const density = (bands - i) as 1 | 2 | 3;
+        const d = i * 3;
+        screen(ctx, UI.blood, density, d, d, ART_W - d * 2, 3);
+        screen(ctx, UI.blood, density, d, ART_H - d - 3, ART_W - d * 2, 3);
+        screen(ctx, UI.blood, density, d, d + 3, 3, ART_H - d * 2 - 6);
+        screen(ctx, UI.blood, density, ART_W - d - 3, d + 3, 3, ART_H - d * 2 - 6);
+      }
     }
 
-    if (this.flashWhite > 0) {
-      ctx.fillStyle = `rgba(255,245,225,${(this.flashWhite * 0.8).toFixed(3)})`;
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    }
+    // The white flash of a boss falling or a relic taken: the picture fades
+    // up the palette towards white and back, through the palette's own dither
+    // - the way a sixteen-bit screen flashes, by its palette.
+    if (this.flashWhite > 0) veil(ctx, '#fff5e1', this.flashWhite * 0.8);
   }
 
   private drawHud(ctx: CanvasRenderingContext2D): void {
-    // Hearts.
-    const hp = this.player.hp;
-    for (let i = 0; i < this.player.maxHp; i++) {
-      drawHeart(ctx, 34 + i * 26, 36, 1.15, i < hp);
-    }
-
-    // Score + gems.
-    // Gem icon + score.
-    ctx.save();
-    ctx.translate(31, 67);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.beginPath();
-    ctx.moveTo(0, -8);
-    ctx.lineTo(6, -1);
-    ctx.lineTo(0, 8);
-    ctx.lineTo(-6, -1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#fff0b8';
-    ctx.beginPath();
-    ctx.moveTo(0, -8);
-    ctx.lineTo(3, -1);
-    ctx.lineTo(0, 2);
-    ctx.lineTo(-3, -1);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    ctx.font = font(16);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillText(`${this.score}`, 45, 74);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.fillText(`${this.score}`, 44, 73);
-    ctx.font = font(12, 600);
-    ctx.fillStyle = '#8b95bd';
-    ctx.fillText(`EDELSTEINE ${this.gems}/${this.totalGems}   TODE ${this.deaths}`, 24, 92);
+    drawHearts(ctx, this.player.hp, this.player.maxHp);
+    drawCounters(ctx, this.score, this.gems, this.totalGems, this.deaths);
 
     // What the bosses have left him, one badge each, in the order the road
     // hands them out. A power the player cannot see he has is a power he does
@@ -1778,48 +1765,22 @@ export class Game implements World {
     this.drawRelicRow(ctx);
     this.drawSkillPanel(ctx);
 
-    // Progress bar of the whole level.
-    const barW = 260;
-    const barX = VIEW_W - barW - 24;
-    const progress = clamp(this.player.cx / (this.level.pixelWidth - 200), 0, 1);
-    ctx.fillStyle = 'rgba(10,12,22,0.7)';
-    ctx.fillRect(barX, 28, barW, 8);
-    ctx.fillStyle = 'rgba(140,170,230,0.85)';
-    ctx.fillRect(barX, 28, barW * progress, 8);
-    ctx.strokeStyle = 'rgba(150,170,225,0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(barX + 0.5, 28.5, barW - 1, 7);
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillRect(barX + barW * progress - 1, 25, 3, 14);
-    ctx.font = font(11, 600);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#8b95bd';
-    ctx.fillText(this.currentZone.toUpperCase(), VIEW_W - 24, 54);
-    ctx.textAlign = 'left';
+    // Progress along the whole level, and the zone it is in.
+    drawProgress(ctx, clamp(this.player.cx / (this.level.pixelWidth - 200), 0, 1), this.currentZone);
 
     // Zone banner.
     if (this.zoneBanner.timer > 0) {
-      const a = clamp(this.zoneBanner.timer > 2.6 ? (3.2 - this.zoneBanner.timer) / 0.6 : this.zoneBanner.timer / 1.2, 0, 1);
-      ctx.globalAlpha = a;
-      drawTextCentered(ctx, this.zoneBanner.text, VIEW_W / 2, 130, 26, '#f4f7ff');
-      ctx.globalAlpha = a * 0.7;
-      ctx.fillStyle = 'rgba(200,215,255,0.6)';
-      ctx.fillRect(VIEW_W / 2 - 90, 142, 180, 1);
-      if (this.zoneBanner.sub) {
-        ctx.globalAlpha = a;
-        drawTextCentered(ctx, this.zoneBanner.sub, VIEW_W / 2, 164, 14, '#ffd98a', 700);
-      }
-      ctx.globalAlpha = 1;
+      const t = this.zoneBanner.timer;
+      drawBanner(ctx, this.zoneBanner.text, this.zoneBanner.sub, clamp(t > 2.6 ? (3.2 - t) / 0.6 : t / 1.2, 0, 1));
     }
 
     // Boss bar.
     if (this.boss && this.boss.engaged && !this.boss.dead) {
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `${this.boss.name}   ·   PHASE ${this.boss.phase}`,
+          name: this.boss.name,
+          status: `PHASE ${this.boss.phase}`,
           hp: this.boss.hp,
           maxHp: this.boss.maxHp,
           ghost: this.bossGhostHp,
@@ -1835,10 +1796,9 @@ export class Game implements World {
       const marks = named.barPips();
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `${named.barName()}   ·   PHASE ${named.barPhase()}`,
+          ...splitBarName(named.barName() ?? ''),
+          status: `PHASE ${named.barPhase()}`,
           hp: Math.max(0, named.hp),
           maxHp: named.maxHp,
           ghost: Math.max(0, named.hp),
@@ -1852,16 +1812,14 @@ export class Game implements World {
       return;
     }
 
-    // The warden gets the same bar, half the width: it is a mini-boss, and a
-    // fight with a health bar is a fight the player knows to take seriously.
     const prism = this.enemies.find((e): e is Prismarch => e instanceof Prismarch && e.engaged && !e.dead);
     if (prism) {
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `PRISMARCH   ·   HERZ DES KRISTALLS   ·   PHASE ${prism.phase}`,
+          name: 'PRISMARCH',
+          title: 'HERZ DES KRISTALLS',
+          status: `PHASE ${prism.phase}`,
           hp: prism.hp,
           maxHp: prism.maxHp,
           ghost: prism.hp,
@@ -1875,13 +1833,12 @@ export class Game implements World {
     const hydra = this.enemies.find((e): e is Hydra => e instanceof Hydra && e.engaged && !e.dead);
     if (hydra) {
       const open = hydra.openStumps.length;
-      const label = open > 0 ? `${open} HALS${open > 1 ? 'E' : ''} OFFEN` : `${hydra.sealed} VON 4 AUSGEBRANNT`;
+      const label = open > 0 ? `${open} ${open > 1 ? 'HÄLSE' : 'HALS'} OFFEN` : `${hydra.sealed} VON 4 AUSGEBRANNT`;
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `DIE FÜNFKRONIGE   ·   ${label}`,
+          name: 'DIE FÜNFKRONIGE',
+          status: label,
           hp: hydra.hp,
           maxHp: hydra.maxHp,
           ghost: hydra.hp,
@@ -1898,10 +1855,10 @@ export class Game implements World {
     if (mire) {
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `GALLERT   ·   DER AUFGEQUOLLENE   ·   PHASE ${mire.phase}`,
+          name: 'GALLERT',
+          title: 'DER AUFGEQUOLLENE',
+          status: `PHASE ${mire.phase}`,
           hp: mire.hp,
           maxHp: mire.maxHp,
           ghost: mire.hp,
@@ -1916,10 +1873,10 @@ export class Game implements World {
     if (drowned) {
       drawBossBar(
         ctx,
-        VIEW_W,
-        VIEW_H,
         {
-          name: `THALASSA   ·   DIE ERTRUNKENE KRONE   ·   PHASE ${drowned.phase}`,
+          name: 'THALASSA',
+          title: 'DIE ERTRUNKENE KRONE',
+          status: `PHASE ${drowned.phase}`,
           hp: drowned.hp,
           maxHp: drowned.maxHp,
           ghost: drowned.hp,
@@ -1930,20 +1887,16 @@ export class Game implements World {
       return;
     }
 
+    // The warden gets the same bar: it is a mini-boss, and a fight with a
+    // health bar is a fight the player knows to take seriously.
     const warden = this.enemies.find((e): e is Warden => e instanceof Warden && e.engaged && !e.dead);
     if (warden && !(this.boss && this.boss.engaged && !this.boss.dead)) {
-      drawBossBar(
-        ctx,
-        VIEW_W,
-        VIEW_H,
-        { name: 'SPLITTERWÄCHTER', hp: warden.hp, maxHp: warden.maxHp, ghost: warden.hp, phase: 1 },
-        0,
-      );
+      drawBossBar(ctx, { name: 'SPLITTERWÄCHTER', hp: warden.hp, maxHp: warden.maxHp, ghost: warden.hp, phase: 1 }, 0);
     }
   }
 
   /**
-   * The badges under the score, six to a row. See drawRelicBadge. In a single
+   * The badges under the counters, six to a row. See relicBadge. In a single
    * row eleven of them ran out to the middle of the screen, under the banner
    * a boss's fall puts up - the very moment the newest one arrives.
    */
@@ -1979,130 +1932,50 @@ export class Game implements World {
           fill = p.tumble > 0 ? p.tumble / TUMBLE_TIME : null;
           break;
       }
-      drawRelicBadge(ctx, r.id, 34 + (n % 6) * 25, 114 + Math.floor(n / 6) * 24, r.color, lit, fill);
+      const x = RELIC_ROW.x + (n % RELIC_ROW.perRow) * RELIC_ROW.step;
+      const y = RELIC_ROW.y + Math.floor(n / RELIC_ROW.perRow) * RELIC_ROW.step;
+      drawRelicBadge(ctx, r.id, x, y, r.color, lit, fill);
       n++;
     }
   }
 
   /**
    * The boss attack he has picked, in the bottom left corner where nothing
-   * else is: its sign, a ring that fills while it cools down, its name, and a
-   * pip for every other one he could pick instead.
+   * else is: its badge filling while it cools down, its name, whether it is
+   * ready, and a mark for every other one he could pick instead.
    */
   private drawSkillPanel(ctx: CanvasRenderingContext2D): void {
     const p = this.player;
     if (!p.skill) return;
     const info = skillInfo(p.skill);
-    const owned = SKILLS.filter((k) => p.skills.has(k.id));
-    const left = p.cooldownLeft(info.id);
-    // Narrow enough to stay clear of the boss bar, which starts at x 162.
-    const x = 24;
-    const y = VIEW_H - 66;
-    const w = 134;
-    drawPanel(ctx, x, y, w, 50, 0.62);
-    drawSkillBadge(ctx, info.id, x + 24, y + 25, 1.4, info.color, left <= 0, left > 0 ? 1 - left / info.cooldown : null);
-    ctx.textAlign = 'left';
-    ctx.font = font(info.name.length > 12 ? 10 : 11, 700);
-    ctx.fillStyle = left > 0 ? '#7d86a8' : info.color;
-    ctx.fillText(info.name.toUpperCase(), x + 46, y + 17, w - 52);
-    ctx.font = font(10, 600);
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillText('F', x + 46, y + 31);
-    ctx.fillStyle = left > 0 ? '#8b95bd' : '#c9f0c4';
-    ctx.fillText(left > 0 ? `${left.toFixed(1).replace('.', ',')} s` : 'bereit', x + 58, y + 31);
-    if (owned.length > 1) {
-      // Q and a pip for every attack learned, the picked one lit.
-      ctx.fillStyle = '#f2c14e';
-      ctx.fillText('Q', x + 46, y + 43);
-      // Inside the panel's right edge, however many there are.
-      const gap = Math.min(6, 66 / Math.max(1, owned.length - 1));
-      owned.forEach((k, i) => {
-        ctx.fillStyle = k.id === info.id ? k.color : 'rgba(150,165,210,0.35)';
-        ctx.beginPath();
-        ctx.arc(x + 60 + i * gap, y + 40, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    }
+    drawSkillCard(ctx, {
+      id: info.id,
+      name: info.name,
+      color: info.color,
+      left: p.cooldownLeft(info.id),
+      cooldown: info.cooldown,
+      owned: SKILLS.filter((k) => p.skills.has(k.id)).map((k) => ({ id: k.id, color: k.color })),
+    });
   }
 
   /**
-   * The boss attacks, by name and by what they do, for the pause screen's
-   * second page. The picked one is marked.
+   * The relics or the boss attacks, by name, by whose they were and by what
+   * they do, for the pause screen - the HUD can only show a badge, and a badge
+   * does not say what it is for. The picked attack is marked.
    */
-  private drawSkillList(ctx: CanvasRenderingContext2D, top: number): void {
+  private pauseEntries(): PauseEntry[] {
     const p = this.player;
-    const owned = SKILLS.filter((k) => p.skills.has(k.id));
-    if (owned.length === 0) {
-      drawTextCentered(ctx, 'Noch keine Angriffe — jeder Boss bringt dir einen seiner bei.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
-      return;
+    if (this.pausePage === 'relics') {
+      return RELICS.filter((r) => p.has(r.id)).map((r) => ({ id: r.id, name: r.name, text: r.text, from: r.from, color: r.color }));
     }
-    // Fifteen rows at 24 ran off the bottom of the screen, eighteen at 20 too.
-    const rowH = owned.length > 15 ? 18 : owned.length > 12 ? 20 : 24;
-    const h = owned.length * rowH + 24;
-    const w = 860;
-    const left = VIEW_W / 2 - w / 2;
-    drawPanel(ctx, left, top, w, h, 0.7);
-    ctx.font = font(12, 600);
-    const fromRight = left + w - 18;
-    const fromW = Math.max(...owned.map((k) => ctx.measureText(k.from).width));
-    const textX = left + 178;
-    const textW = fromRight - fromW - 20 - textX;
-    owned.forEach((k, i) => {
-      const y = top + 22 + i * rowH;
-      drawSkillBadge(ctx, k.id, left + 26, y - 4, 1, k.color, true, null);
-      ctx.font = font(13, 700);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = k.color;
-      ctx.fillText(k.id === p.skill ? `${k.name}  ◀` : k.name, left + 44, y);
-      ctx.font = font(12, 600);
-      ctx.fillStyle = '#aeb8dc';
-      ctx.fillText(k.text, textX, y, textW);
-      ctx.fillStyle = '#5f6a92';
-      ctx.textAlign = 'right';
-      ctx.fillText(k.from, fromRight, y);
-      ctx.textAlign = 'left';
-    });
-  }
-
-  /**
-   * The relics, by name and by what they do, for the pause screen - the HUD
-   * can only show a badge, and a badge does not say what it is for.
-   */
-  private drawRelicList(ctx: CanvasRenderingContext2D, top: number): void {
-    const owned = RELICS.filter((r) => this.player.has(r.id));
-    if (owned.length === 0) {
-      drawTextCentered(ctx, 'Noch keine Relikte — jeder Boss hinterlässt eines.', VIEW_W / 2, top + 20, 13, '#6f7ba3', 600);
-      return;
-    }
-    // Fifteen rows at 24 ran off the bottom of the screen, eighteen at 20 too.
-    const rowH = owned.length > 15 ? 18 : owned.length > 12 ? 20 : 24;
-    const h = owned.length * rowH + 24;
-    // Wide enough for the longest line, and the line held to its column all
-    // the same: it ran on under the boss's name once, measured in the
-    // screenshots, and a list nobody can read is not a list.
-    const w = 860;
-    const left = VIEW_W / 2 - w / 2;
-    drawPanel(ctx, left, top, w, h, 0.7);
-    ctx.font = font(12, 600);
-    const fromRight = left + w - 18;
-    const fromW = Math.max(...owned.map((r) => ctx.measureText(r.from).width));
-    const textX = left + 178;
-    const textW = fromRight - fromW - 20 - textX;
-    owned.forEach((r, i) => {
-      const y = top + 22 + i * rowH;
-      drawRelicBadge(ctx, r.id, left + 26, y - 4, r.color, true, null);
-      ctx.font = font(13, 700);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = r.color;
-      ctx.fillText(r.name, left + 44, y);
-      ctx.font = font(12, 600);
-      ctx.fillStyle = '#aeb8dc';
-      ctx.fillText(r.text, textX, y, textW);
-      ctx.fillStyle = '#5f6a92';
-      ctx.textAlign = 'right';
-      ctx.fillText(r.from, fromRight, y);
-      ctx.textAlign = 'left';
-    });
+    return SKILLS.filter((k) => p.skills.has(k.id)).map((k) => ({
+      id: k.id,
+      name: k.name,
+      text: k.text,
+      from: k.from,
+      color: k.color,
+      picked: k.id === p.skill,
+    }));
   }
 
   /**
@@ -2113,42 +1986,7 @@ export class Game implements World {
   private drawDialogue(ctx: CanvasRenderingContext2D): void {
     const d = this.dialogue;
     if (!d) return;
-    ctx.fillStyle = 'rgba(4,8,18,0.62)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-
-    const w = 620;
-    const h = 132;
-    const x = (VIEW_W - w) / 2;
-    const y = VIEW_H - h - 74;
-    glow(ctx, VIEW_W / 2, y + h / 2, 300, 'rgba(140,230,255,0.12)');
-    drawPanel(ctx, x, y, w, h, 0.86);
-
-    drawTextCentered(ctx, d.speaker, VIEW_W / 2, y + 32, 13, '#8fe8ff', 700);
-    ctx.fillStyle = 'rgba(143,232,255,0.28)';
-    ctx.fillRect(x + 40, y + 44, w - 80, 1);
-
-    // The line being read, with the one before it still faintly there, so the
-    // sentence keeps its shape while it is spoken.
-    const prev = d.lines[d.index - 1];
-    if (prev) {
-      ctx.globalAlpha = 0.35;
-      drawTextCentered(ctx, prev, VIEW_W / 2, y + 74, 15, '#aeb8dc', 600);
-      ctx.globalAlpha = 1;
-    }
-    drawTextCentered(ctx, d.lines[d.index] ?? '', VIEW_W / 2, y + 100, 17, '#f4f7ff', 600);
-
-    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
-    ctx.globalAlpha = 0.35 + blink * 0.55;
-    drawTextCentered(
-      ctx,
-      `LEERTASTE — weiter   (${d.index + 1}/${d.lines.length})`,
-      VIEW_W / 2,
-      y + h + 26,
-      13,
-      '#ffffff',
-      600,
-    );
-    ctx.globalAlpha = 1;
+    screens.drawDialogue(ctx, d, this.titlePulse);
   }
 
   private drawOverlays(ctx: CanvasRenderingContext2D): void {
@@ -2161,44 +1999,21 @@ export class Game implements World {
         this.drawTitle(ctx);
         break;
       case 'paused':
-        ctx.fillStyle = 'rgba(4,6,12,0.78)';
-        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-        drawTextCentered(ctx, 'PAUSE', VIEW_W / 2, 92, 46, '#f4f7ff');
-        drawTextCentered(ctx, 'P oder LEERTASTE zum Fortsetzen  ·  R für Neustart', VIEW_W / 2, 124, 14, '#94a0c8', 600);
-        drawTextCentered(
+        screens.drawPause(
           ctx,
-          `M  Musik ${audio.musicOff ? 'aus' : 'an'}   ·   N  Ton ${audio.muted ? 'aus' : 'an'}   ·   B  Bildwackeln ${this.camera.motion > 0 ? 'an' : 'aus'}`,
-          VIEW_W / 2,
-          146,
-          12,
-          '#6f7ba3',
-          600,
-        );
-        if (this.pausePage === 'relics') this.drawRelicList(ctx, 182);
-        else this.drawSkillList(ctx, 182);
-        drawTextCentered(
-          ctx,
-          this.pausePage === 'relics' ? '◀ ▶   RELIKTE   ·   angriffe' : '◀ ▶   relikte   ·   ANGRIFFE',
-          VIEW_W / 2,
-          172,
-          12,
-          '#8fe8ff',
-          700,
+          {
+            page: this.pausePage,
+            entries: this.pauseEntries(),
+            music: !audio.musicOff,
+            sound: !audio.muted,
+            motion: this.camera.motion > 0,
+          },
+          this.titlePulse,
         );
         break;
-      case 'dead': {
-        const a = clamp(1.1 - this.deathTimer, 0, 1) * 0.78;
-        ctx.fillStyle = `rgba(40,4,10,${a.toFixed(3)})`;
-        ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-        drawTextCentered(ctx, 'GEFALLEN', VIEW_W / 2, VIEW_H / 2 - 4, 52, '#ff6b78');
-        if (this.deathTimer <= 0) {
-          const blink = 0.55 + Math.sin(this.time * 5) * 0.45;
-          ctx.globalAlpha = blink;
-          drawTextCentered(ctx, 'LEERTASTE — zurück zum letzten Kontrollpunkt', VIEW_W / 2, VIEW_H / 2 + 34, 15, '#e8d7d7', 600);
-          ctx.globalAlpha = 1;
-        }
+      case 'dead':
+        screens.drawFallen(ctx, clamp(1.1 - this.deathTimer, 0, 1), this.deathTimer <= 0, this.time);
         break;
-      }
       case 'victory':
         this.drawVictory(ctx);
         break;
@@ -2208,120 +2023,24 @@ export class Game implements World {
   }
 
   private drawTitle(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = 'rgba(4,6,14,0.68)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    glow(ctx, VIEW_W / 2, 170, 260, 'rgba(90,140,255,0.16)');
-
-    drawTextCentered(ctx, 'SHADOWBLADE', VIEW_W / 2, 178, 68, '#f4f7ff');
-    ctx.globalAlpha = 0.9;
-    drawTextCentered(ctx, 'Die Klinge von Nachtfall', VIEW_W / 2, 212, 18, '#8fb4ff', 600);
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = 'rgba(150,170,225,0.35)';
-    ctx.fillRect(VIEW_W / 2 - 170, 232, 340, 1);
-
     // Which build this is. One cached index.html looks exactly like the new
     // one, and then a missing feature is indistinguishable from a bug.
-    ctx.globalAlpha = 0.5;
-    drawTextCentered(ctx, `Stand ${__BUILD__}`, VIEW_W / 2, VIEW_H - 12, 11, '#6f7ba0', 600);
-    ctx.globalAlpha = 1;
-
-    const rows: [string, string][] = [
-      ['← →  /  A D', 'Laufen'],
-      ['LEERTASTE / W', 'Springen · Doppelsprung'],
-      ['J  /  K', 'Schwert (3er-Kombo)'],
-      ['SHIFT  /  L', 'Ausweichrolle (unverwundbar)'],
-      ['F  /  Q', 'Boss-Angriff  ·  wechseln'],
-      ['↓ + Sprung', 'Durch Plattform fallen'],
-      ['P  /  R', 'Pause  ·  Neustart'],
-      ['M  /  N', 'Musik  ·  Ton an/aus'],
-    ];
-    drawPanel(ctx, VIEW_W / 2 - 220, 248, 440, 202, 0.6);
-    ctx.font = font(13, 600);
-    rows.forEach(([key, desc], i) => {
-      const y = 272 + i * 23;
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#f2c14e';
-      ctx.fillText(key, VIEW_W / 2 - 20, y);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#b9c3e4';
-      ctx.fillText(desc, VIEW_W / 2 + 4, y);
-    });
-    ctx.textAlign = 'left';
-
-    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
-    ctx.globalAlpha = 0.35 + blink * 0.65;
-    drawTextCentered(ctx, 'LEERTASTE ZUM STARTEN', VIEW_W / 2, 474, 20, '#ffffff');
-    ctx.globalAlpha = 1;
-    drawTextCentered(
-      ctx,
-      'Vierzehn Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.',
-      VIEW_W / 2,
-      502,
-      12,
-      '#6f7ba3',
-      600,
-    );
+    screens.drawTitle(ctx, { build: __BUILD__ }, this.titlePulse);
   }
 
   private drawVictory(ctx: CanvasRenderingContext2D): void {
-    ctx.fillStyle = 'rgba(6,8,16,0.78)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    if (this.trueEnding) {
-      glow(ctx, VIEW_W / 2, 150, 300, 'rgba(140,230,255,0.2)');
-      drawTextCentered(ctx, 'DAS WAHRE ENDE', VIEW_W / 2, 168, 60, '#8fe8ff');
-      drawTextCentered(
-        ctx,
-        'Morvain gefallen, das Herz des Kristalls zersprungen.',
-        VIEW_W / 2,
-        208,
-        17,
-        '#e7ecff',
-        600,
-      );
-    } else {
-      glow(ctx, VIEW_W / 2, 150, 300, 'rgba(255,200,90,0.18)');
-      drawTextCentered(ctx, 'SIEG!', VIEW_W / 2, 168, 74, '#ffd166');
-      drawTextCentered(ctx, 'Morvain ist gefallen — Nachtfall ist frei.', VIEW_W / 2, 208, 17, '#e7ecff', 600);
-    }
-
-    const minutes = Math.floor(this.playTime / 60);
-    const seconds = Math.floor(this.playTime % 60);
-    const rows: [string, string][] = [
-      ['Punkte', `${this.score}`],
-      ['Edelsteine', `${this.gems} / ${this.totalGems}`],
-      ['Zeit', `${minutes}:${seconds.toString().padStart(2, '0')}`],
-      ['Tode', `${this.deaths}`],
-    ];
-    drawPanel(ctx, VIEW_W / 2 - 180, 236, 360, 150, 0.66);
-    ctx.font = font(15, 600);
-    rows.forEach(([label, value], i) => {
-      const y = 268 + i * 32;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#939ec4';
-      ctx.fillText(label, VIEW_W / 2 - 150, y);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#f4f7ff';
-      ctx.fillText(value, VIEW_W / 2 + 150, y);
-    });
-    ctx.textAlign = 'left';
-    if (this.trueEnding) {
-      drawTextCentered(ctx, 'Klingenwelle erworben.', VIEW_W / 2, 408, 14, '#8fe8ff', 600);
-    } else {
-      drawTextCentered(
-        ctx,
-        'Alle Edelsteine — und hinter der Welt wartet noch etwas.',
-        VIEW_W / 2,
-        408,
-        14,
-        '#7f8cb4',
-        600,
-      );
-    }
-    const blink = 0.5 + Math.sin(this.titlePulse * 3.4) * 0.5;
-    ctx.globalAlpha = 0.4 + blink * 0.6;
-    drawTextCentered(ctx, 'R — noch einmal', VIEW_W / 2, 440, 18, '#ffffff');
-    ctx.globalAlpha = 1;
+    screens.drawVictory(
+      ctx,
+      {
+        trueEnding: this.trueEnding,
+        score: this.score,
+        gems: this.gems,
+        totalGems: this.totalGems,
+        time: this.playTime,
+        deaths: this.deaths,
+      },
+      this.titlePulse,
+    );
   }
 
   /* ------------------------------------------------------------ debug aid */
