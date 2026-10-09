@@ -1,6 +1,8 @@
 /**
  * Drives the built game in a real browser and captures screenshots.
- * Usage: node tools/screenshots.mjs [outDir]
+ * Usage: node tools/screenshots.mjs [outDir] [--only 40,41]
+ *   --only   write only the shots whose names start with one of these (the
+ *            run still plays through every scene before them)
  */
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
@@ -10,7 +12,11 @@ import path from 'node:path';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const DIST = path.join(ROOT, 'dist');
-const OUT = path.resolve(process.argv[2] ?? path.join(ROOT, 'screenshots'));
+const args = process.argv.slice(2);
+const onlyAt = args.indexOf('--only');
+const ONLY = onlyAt >= 0 ? (args[onlyAt + 1] ?? '').split(',').filter(Boolean) : null;
+const outArg = args.find((a, i) => !a.startsWith('--') && i !== onlyAt + 1);
+const OUT = path.resolve(outArg ?? path.join(ROOT, 'screenshots'));
 mkdirSync(OUT, { recursive: true });
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
@@ -47,6 +53,7 @@ const release = (...actions) =>
   page.evaluate((list) => list.forEach((a) => window.input.forceDown(a, false)), actions);
 
 async function shot(name) {
+  if (ONLY && !ONLY.some((o) => name.startsWith(o))) return;
   await page.locator('#frame').screenshot({ path: path.join(OUT, `${name}.png`) });
   console.log('shot', `${name}.png`);
 }
@@ -178,6 +185,9 @@ const marken = await page.evaluate(() => {
     boar: at('boar'),
     twins: at('twins'),
     clock: at('clock'),
+    jester: at('jester'),
+    gloom: at('gloom'),
+    gargoyle: at('gargoyle'),
     ruins: zone('Versunkene Ruinen'),
     caverns: zone('Kristallhöhlen'),
     // The drowned hall and the castle, by their first chunk: the twins' and
@@ -551,9 +561,9 @@ results.finalState = await page.evaluate(() => window.game.state);
  * worth a picture has come. The hero is kept on his feet - the pictures are of
  * the boss.
  */
-async function arenaMoment(kind, when, maxFrames = 60 * 40) {
+async function arenaMoment(kind, when, maxFrames = 60 * 40, swing = true) {
   return page.evaluate(
-    ({ kind, when, maxFrames }) => {
+    ({ kind, when, maxFrames, swing }) => {
       const g = window.game;
       const input = window.input;
       const ctx = document.querySelector('canvas').getContext('2d');
@@ -565,7 +575,7 @@ async function arenaMoment(kind, when, maxFrames = 60 * 40) {
         const dx = boss.cx - p.cx;
         input.forceDown('right', dx > 120);
         input.forceDown('left', dx < -260);
-        input.forceDown('attack', i % 20 < 3);
+        input.forceDown('attack', swing && i % 20 < 3);
         input.forceDown('jump', false);
         g.update(1 / 60, input);
         if (p.hp <= 2) p.hp = p.maxHp;
@@ -574,7 +584,7 @@ async function arenaMoment(kind, when, maxFrames = 60 * 40) {
       ['left', 'right', 'attack', 'jump'].forEach((a) => input.forceDown(a, false));
       g.render(ctx);
     },
-    { kind, when, maxFrames },
+    { kind, when, maxFrames, swing },
   );
 }
 
@@ -743,6 +753,29 @@ await shot('38-sternzwillinge');
 await open(`?x=${marken.clock - 11}`);
 await arenaMoment('clock', "boss.pendMode === 'sweep' && boss.inState >= 1 && g.zoneBanner.timer <= 0", 60 * 40);
 await shot('39-tickmar');
+
+/* 40-42 — the jester's trick, the light-eater at his meal, the stone gargoyle */
+
+// Maskarill's trick: three of him in a line and one shadow on the wall, the
+// moment before the guess. The hero holds his blade, or the line is over.
+await open(`?x=${marken.jester - 11}`);
+await arenaMoment('jester', "boss.state === 'guess' && g.zoneBanner.timer <= 0", 60 * 60, false);
+await shot('40-maskarill');
+
+// Nyktos come down onto a crystal the blade has lit, eating - flesh in its
+// light, and in reach.
+await open(`?x=${marken.gloom - 11}`);
+await arenaMoment('gloom', "boss.state === 'eat' && g.zoneBanner.timer <= 0", 60 * 40);
+await shot('41-nyktos');
+
+// Grauwacht looked at: stone, and the blade ringing off him.
+await open(`?x=${marken.gargoyle - 11}`);
+await arenaMoment(
+  'gargoyle',
+  "boss.state === 'stone' && g.zoneBanner.timer <= 0 && Math.abs(boss.cx - g.player.cx) < 70 && g.player.attackTimer > 0.1",
+  60 * 30,
+);
+await shot('42-grauwacht');
 
 console.log(JSON.stringify(results, null, 2));
 await browser.close();

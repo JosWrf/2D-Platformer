@@ -374,6 +374,101 @@ Relikt hergibt und dass es einen Tod übersteht und einen Neustart nicht; und da
 jedes Relikt genau das tut, was es sagt — am Helden gemessen, nicht an einem
 Schalter abgelesen.
 
+## Herausfordernd, aber keine Wand
+
+Achtzehn Bosse, und jeder war bis hierher mit seinem eigenen Werkzeug gemessen —
+mit eigenen Bots, eigenen Maßstäben, oft ohne die Relikte, die ein Held auf dem
+Weg zu ihm schon trägt. Ob einer zu stark war, ließ sich so nicht vergleichen.
+`verify:balance` misst jetzt **alle gleich**: jeden Boss mit genau den Relikten,
+die ihm der Weg bis dorthin in die Hand gibt, und jeweils von zwei Helden, die
+am Leben gehalten werden, während jedes verlorene Herz gezählt wird:
+
+* **Der Leser** sieht den Kampf **0,3 Sekunden zu spät**, wie ein Mensch eben,
+  schlägt nur vom Boden aus zu, springt nur, um auszuweichen, und pariert nur,
+  was er mindestens 0,15 s vorher kommen sah — mit einem Fehler von bis zu
+  0,07 s in beide Richtungen. Er kennt den Kampf, aber nicht die Zukunft: Er
+  liest Ankündigungen, Rhythmus und Flugbahnen, nie die nächste Zufallswahl.
+  Für jeden Boss gibt es einen eigenen in `tools/balance/readers/`.
+* **Der Draufhauer** läuft hin und schlägt zu. Er liest nichts.
+
+Was als *herausfordernd, aber keine Wand* gilt, hängt davon ab, wo auf dem Weg
+der Boss steht:
+
+| | Leser höchstens | Leser verliert höchstens | Draufhauer nimmt mindestens |
+| --- | --- | --- | --- |
+| Anfang (Gallert bis Maskarill) | 60 s | 2 Herzen | 3 Treffer |
+| Mitte (Ankhor bis Thalassa, Splitterwächter) | 75 s | 3 Herzen | 5 Treffer |
+| Spät (Grauwacht bis Prismarch) | 90 s | 4 Herzen | 7 Treffer |
+
+Der Draufhauer muss außerdem mindestens doppelt so oft getroffen werden wie der
+Leser, gerechnet pro Sekunde — sonst lohnt sich das Lesen nicht —, oder den Boss
+gar nicht erst umlegen. Was der Seidenmantel abfängt, zählt als Treffer: Gegen
+einen langsamen Boss wächst er zwischen fast je zwei Schlägen nach, und das ist
+das Verdienst des Relikts, nicht die Gnade des Bosses. Gezählt wird brutto — der
+Held wird nach jedem Schlag aufgefüllt, was der Blutdurst zurückgegeben hätte,
+fehlt also in beiden Spalten gleichermaßen. Und ein Bot verliert nie ein Herz an
+eine Ankündigung, die er gesehen hat: Was der Leser verliert, ist der Boden
+dessen, was ein Mensch verliert, nicht der Durchschnitt.
+
+Gemessen mit derselben Bank vor den Änderungen und danach, je drei Kämpfe pro
+Held, Mediane (Leben = mit den Relikten bis dorthin; *—* = fällt nicht in zwei
+Minuten):
+
+| Boss | vorher: Leben | Leser | Draufhauer | jetzt: Leben | Leser | Draufhauer |
+| --- | --- | --- | --- | --- | --- | --- |
+| Gallert | 22 | 8 s, 0 ♥ | 7 s, 3 Treffer | 34 | 12 s, 0 ♥ | 11 s, 5 Treffer |
+| Grimmzahn | 62 | 34 s, 0 ♥ | 21 s, 5 | 62 | 32 s, 0 ♥ | 20 s, 5 |
+| Gierschlund | 32 | 18 s, 0 ♥ | 20 s, 6 | 40 | 27 s, 0 ♥ | 23 s, 7 |
+| **Maskarill** | — | — | — | 90 | 43 s, 2 ♥ | 59 s, 11 |
+| Ankhor | 55 | 30 s, 0 ♥ | 75 s, 32 | 58 | 39 s, 0 ♥ | 60 s, 24 |
+| **Nyktos** | — | — | — | 66 | 47 s, 1 ♥ | 61 s, 15 |
+| Arachna | 52 | 22 s, 2 ♥ | 48 s, 20 | 56 | 29 s, 0 ♥ | 58 s, 22 |
+| Ignivor | 49 | 39 s, 0 ♥ | 24 s, 6 | 52 | 36 s, 0 ♥ | 37 s, 10 |
+| Sol und Luna | 82 | 47 s, 1 ♥ | 19 s, **3** | 87 | 57 s, 1 ♥ | 30 s, 7 |
+| Thalassa | 82 | 26 s, 0 ♥ | 19 s, **4** | 104 | 34 s, 0 ♥ | 24 s, 7 |
+| **Grauwacht** | — | — | — | 133 | 45 s, 0 ♥ | —, 28 |
+| Tickmar | 303 | 53 s, 0 ♥ | 39 s, **4** | 386 | 65 s, 0 ♥ | 48 s, 8 |
+| Vesperon | 89 | 50 s, 3 ♥ | 37 s, **5** | 94 | 65 s, 3 ♥ | 59 s, 13 |
+| Morvain | 111 | 28 s, 0 ♥ | 21 s, 12 | 117 | 31 s, 2 ♥ | 24 s, 13 |
+| Umbra | 58 | 45 s, **6 ♥** | 16 s, 9 | 61 | 43 s, 1 ♥ | 19 s, 13 |
+| Splitterwächter | 27 | 12 s, 0 ♥ | 5 s, **0** | 99 | 39 s, 0 ♥ | 18 s, 5 |
+| Die Fünfkronige | 87 | 47 s, 0 ♥ | —, 76 | 91 | 51 s, 0 ♥ | —, 71 |
+| Prismarch | 124 | 45 s, 0 ♥ | 19 s, **1** | 130 | 48 s, 0 ♥ | 22 s, 7 |
+
+Fett, was die Messlatte verfehlte: Vorher fielen sieben von 46 Prüfungen durch,
+und fast alle in dieselbe Richtung — zu **schwach** gegen einen, der nicht liest.
+Der Prismarch und der Splitterwächter ließen sich in Dauertaumel prügeln, bei
+Sol und Luna, Thalassa und Tickmar zahlte der Draufhauer kaum mehr als der Leser,
+und bei Vesperon lohnte sich das Lesen nicht, weil seine Fledermäuse beide
+gleichermaßen trafen. Zu **stark** war einer: Umbra, dessen Ladeschlag mit einem
+Hieb samt Sichel aus dem Nichts begann. Dazu kamen Stellen, die nicht in der
+Tabelle stehen, weil sie unfair waren, ohne die Summe zu sprengen: Ignivors Biss
+traf den, der genau das richtige tat, Ankhors Faust hielt kürzer still, als ein
+Auge braucht, Gierschlunds weite Münzwürfe ließen keinen sicheren Fleck,
+Arachna hatte gegen einen Helden auf ihrer Höhe gar keine Antwort, und die
+Fünfkronige ließ ihren Atem liegen und warf Gift neben die Pfützen.
+
+Was sich geändert hat, steht bei jedem Boss selbst; in Kürze:
+
+* **Zu schwach gegen Draufhauen:** Sol und Lunas Ruf bricht in angesagten Ringen
+  aus; Thalassas Sog zieht wirklich, ihre Kugeln sind nicht mehr blind
+  wegzuschlagen; Tickmars Zahnräder fallen auf den, der unter ihm steht, und sein
+  Pendel kostet zwei; der Prismarch und der Splitterwächter taumeln nicht mehr
+  doppelt, und der Splitterwächter ist *gereizt* wie der Ritter.
+* **Zu stark, weil nicht zu lesen:** Umbra holt vor dem Ladeschlag 0,5 s aus;
+  jede Fledermaus zieht vor dem Sturz hoch, und Vesperons stoßen eine nach der
+  anderen herab, nie während er selbst stürzt.
+* **Zu kurz:** Gallert, Gierschlund, Thalassa, Tickmar und der Splitterwächter
+  haben mehr Leben — jeweils so viel, dass der Kampf seine Züge zeigen kann,
+  bevor er vorbei ist.
+* **Fehler:** Ignivor beißt nur noch im Steigen, Ankhors Faust hält eine
+  Drittelsekunde still, Arachna hat die Beinpeitsche, und die Fünfkronige
+  beendet ihren Atem beim Taumeln, trifft mit ihrem Gift die eigenen Pfützen und
+  brennt mit ihrer Glut erst im Fallen.
+
+Die drei neuen Bosse sind gleich gegen dieselbe Latte gebaut worden: Ihre
+Trefferpunkte aus dem Entwurf (44, 46, 52) waren gemessen alle zu wenig.
+
 ## Der Boss: Schattenritter Morvain
 
 68 Trefferpunkte, drei Phasen mit eigener Bewegungs- und Angriffsauswahl:
