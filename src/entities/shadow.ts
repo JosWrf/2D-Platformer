@@ -822,8 +822,9 @@ export class Shadow extends Enemy {
     ctx.globalAlpha = 1;
     ctx.drawImage(this.layer, x, y);
     // Eyes: two points of white where his are - burning up before it commits.
-    const ex = b.cx + b.facing * 2.5;
-    const ey = b.bottom - 25.5;
+    const eye = b.eye;
+    const ex = eye.x;
+    const ey = eye.y - 1;
     ctx.fillStyle = '#f4eeff';
     ctx.fillRect(ex - 1.5, ey, 3, 2);
     ctx.globalCompositeOperation = 'lighter';

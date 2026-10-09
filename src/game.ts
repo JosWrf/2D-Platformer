@@ -1717,7 +1717,8 @@ export class Game implements World {
     for (const p of this.projectiles) {
       if (this.isVisible(p.x, p.y, 120)) p.draw(c);
     }
-    if (!this.player.dead || this.state === 'victory') this.player.draw(c, this);
+    // Fallen, he stays where he fell under the death screen.
+    if (!this.player.dead || this.state === 'victory' || this.state === 'dead') this.player.draw(c, this);
 
     c.setTransform(1, 0, 0, 1, 0, 0);
     const image = c.getImageData(0, 0, ART_W, ART_H);
