@@ -9,6 +9,7 @@ import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Body } from './entity';
+import { gallertPart } from './gallert-art';
 import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
 import { clusterPart, heartAt, heartPart, shardPart } from './prism-art';
 import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
@@ -1958,86 +1959,34 @@ export class Gallert extends Enemy {
     super.touchPlayer(world);
   }
 
+  /** His core lights the bog round him, and fills before every move. */
+  override lights(): GlowLight[] {
+    if (this.dead || !this.engaged) return [];
+    return [{ x: this.cx, y: this.bottom - 30, radius: 70 + this.core * 50, rgb: '226,255,150', strength: 0.3 + this.core * 0.45, tint: 0.3 }];
+  }
+
+  /*
+   * Drawn for the grid (gallert-art.ts): one of five drawn shapes for his
+   * squash - flattened as he winds up the leap, stretched in the air - with a
+   * four-frame jiggle at rest; his eyes squint before the leap and his mouth
+   * gapes before the spit, and the core in him fills before every move. The
+   * shadow stays on the floor and shrinks while he is up there, which is what
+   * says how high he is. A struck Gallert is white for two frames.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      // The shadow belongs to the floor, not to him: while he is up there it
-      // stays down and shrinks, which is what says how high he is.
-      const rise = clamp((this.groundY - this.bottom) / 150, 0, 1);
-      shadow(ctx, 0, this.groundY - this.bottom, this.w * 0.55 * (1 - rise * 0.45), 0.32 * (1 - rise * 0.5));
-      // The squash: flattened when he is about to go up or has just come down,
-      // stretched while he is in the air. One slow wobble on top of it, so he
-      // is never quite still without ever flickering.
-      const wob = Math.sin(this.anim * 2.2) * 0.04;
-      const sx = 1 - this.squash * 0.18 + wob;
-      const sy = 1 + this.squash * 0.22 - wob;
-      ctx.scale(sx, sy);
-
-      const w = this.w / 2;
-      const h = this.h;
-      const body = ctx.createLinearGradient(0, -h, 0, 0);
-      body.addColorStop(0, 'rgba(178,236,126,0.92)');
-      body.addColorStop(0.55, 'rgba(120,196,80,0.92)');
-      body.addColorStop(1, 'rgba(58,120,52,0.95)');
-      ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(-w, 0);
-      ctx.quadraticCurveTo(-w * 0.96, -h * 0.92, 0, -h);
-      ctx.quadraticCurveTo(w * 0.96, -h * 0.92, w, 0);
-      ctx.closePath();
-      ctx.fill();
-
-      // Skin: a bright rim along the top, and a wet highlight.
-      ctx.strokeStyle = 'rgba(214,255,168,0.55)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-w * 0.9, -h * 0.2);
-      ctx.quadraticCurveTo(-w * 0.85, -h * 0.9, 0, -h + 1);
-      ctx.quadraticCurveTo(w * 0.85, -h * 0.9, w * 0.9, -h * 0.2);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(235,255,210,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(-w * 0.34, -h * 0.66, w * 0.22, h * 0.14, -0.4, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Swallowed things, because a bog slime is made of what it ate.
-      ctx.fillStyle = 'rgba(48,92,54,0.7)';
-      for (let i = -2; i <= 2; i++) {
-        const bx = i * w * 0.3;
-        const by = -h * 0.28 - Math.abs(i) * 3;
-        ctx.fillRect(bx - 3, by, 6, 4);
-      }
-
-      // The core: the tell. It fills before every move and it is the only
-      // thing on him that changes brightness.
-      const heat = 0.3 + this.core * 0.7;
-      const cy = -h * 0.42;
-      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 30 * heat);
-      halo.addColorStop(0, `rgba(226,255,150,${(0.6 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(226,255,150,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-30, cy - 30, 60, 60);
-      ctx.fillStyle = `rgba(238,255,180,${(0.5 + heat * 0.5).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.arc(0, cy, 7 + this.core * 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Eyes, floating a little apart from each other.
-      ctx.fillStyle = 'rgba(24,40,26,0.85)';
-      for (const ex of [-11, 11]) {
-        ctx.beginPath();
-        ctx.ellipse(ex, -h * 0.66, 4.2, 5.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.fillStyle = 'rgba(240,255,230,0.9)';
-      for (const ex of [-11, 11]) {
-        ctx.beginPath();
-        ctx.arc(ex + this.facing * 1.4, -h * 0.7, 1.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    });
+    const rise = clamp((this.groundY - this.bottom) / 150, 0, 1);
+    shadow(ctx, this.cx, this.groundY, this.w * 0.55 * (1 - rise * 0.45), 0.32 * (1 - rise * 0.5));
+    const s = this.squash;
+    const shape = s < -0.6 ? 0 : s < -0.2 ? 1 : s < 0.2 ? 2 : s < 0.6 ? 3 : 4;
+    const jiggle = shape === 2 ? Math.floor(this.anim * 5) & 3 : 0;
+    const mouth = this.state === 'spitWind' ? 'open' : this.state === 'hopWind' ? 'squint' : 'grin';
+    const heat: 0 | 1 | 2 = this.core > 0.7 ? 2 : this.core > 0.3 ? 1 : 0;
+    withHitFlash(
+      ctx,
+      solidFlash(this.flash),
+      (c) => blit(c, gallertPart(shape, jiggle, mouth, heat), this.cx, this.bottom, this.facing < 0),
+      { x: this.cx - 70, y: this.bottom - 110, w: 140, h: 116 },
+    );
   }
 }
 
