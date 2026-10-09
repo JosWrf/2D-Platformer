@@ -1,4 +1,4 @@
-import { PALETTE } from '../render/palette';
+import { ART, PixelSprite, snap } from '../render/pixel';
 import { TILE } from '../world/tiles';
 import type { Player } from './player';
 
@@ -73,40 +73,52 @@ export class MovingPlatform {
     player.onGround = true;
   }
 
+  /**
+   * An iron-framed slab with a stone inlay and two brass rivets, lit along its
+   * top, with the teeth of its runner underneath: a sprite, drawn on whole art
+   * pixels however its sine carries it. Its path is a row of single pixels
+   * with a bracket at either end, faint enough to sit behind everything.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
-    const { x, y, w, h } = this;
-    ctx.fillStyle = '#1b1f2f';
-    ctx.fillRect(x, y + 2, w, h);
-    ctx.fillStyle = PALETTE.stoneLight;
-    ctx.fillRect(x, y, w, h - 3);
-    ctx.fillStyle = PALETTE.stoneEdge;
-    ctx.fillRect(x, y, w, 3);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.fillRect(x + 4, y + 5, 4, 4);
-    ctx.fillRect(x + w - 8, y + 5, 4, 4);
-    // Faint track showing the platform's path, with anchors at both ends.
+    const { w, h } = this;
     ctx.save();
-    ctx.strokeStyle = 'rgba(150,170,210,0.16)';
-    ctx.setLineDash([4, 6]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
+    ctx.globalAlpha = 0.45;
+    ctx.fillStyle = TRACK;
     if (this.axis === 'v') {
-      ctx.moveTo(x + w / 2, this.originY - this.range);
-      ctx.lineTo(x + w / 2, this.originY + this.range + h);
+      const tx = snap(this.x + w / 2 - 1);
+      const top = snap(this.originY - this.range);
+      const bottom = snap(this.originY + this.range + h);
+      for (let ty = top + 8; ty < bottom - 4; ty += 8) ctx.fillRect(tx, ty, ART, ART);
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(tx - 2 * ART, top, 5 * ART, ART);
+      ctx.fillRect(tx - 2 * ART, bottom, 5 * ART, ART);
     } else {
-      ctx.moveTo(this.originX - this.range + w / 2, y + h / 2);
-      ctx.lineTo(this.originX + this.range + w / 2, y + h / 2);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(120,140,180,0.35)';
-    if (this.axis === 'v') {
-      ctx.fillRect(x + w / 2 - 5, this.originY - this.range - 3, 10, 3);
-      ctx.fillRect(x + w / 2 - 5, this.originY + this.range + h, 10, 3);
-    } else {
-      ctx.fillRect(this.originX - this.range + w / 2 - 3, y + h / 2 - 5, 3, 10);
-      ctx.fillRect(this.originX + this.range + w / 2, y + h / 2 - 5, 3, 10);
+      const ty = snap(this.y + h / 2 - 1);
+      const left = snap(this.originX - this.range + w / 2);
+      const right = snap(this.originX + this.range + w / 2);
+      for (let tx = left + 8; tx < right - 4; tx += 8) ctx.fillRect(tx, ty, ART, ART);
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(left, ty - 2 * ART, ART, 5 * ART);
+      ctx.fillRect(right, ty - 2 * ART, ART, 5 * ART);
     }
     ctx.restore();
+    SLAB.draw(ctx, this.x, this.y);
   }
 }
+
+/** The track's dots and brackets. */
+const TRACK = '#424c6e';
+
+/** The platform, 40×7 art pixels: frame, inlay, rivets, and its runner's teeth below. */
+const SLAB = new PixelSprite(
+  [
+    '.LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL.',
+    'LMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMD',
+    'MgSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSgD',
+    'MbSsSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSsSbD',
+    'MSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSD',
+    'DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
+    '..D...D...D...D...DKKD...D...D...D...D..',
+  ],
+  { L: '#657392', M: '#424c6e', S: '#2a2f4e', s: '#1a1932', D: '#1a1932', K: '#0e071b', g: '#edab50', b: '#8a4836' },
+);

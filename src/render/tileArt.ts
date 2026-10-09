@@ -185,6 +185,12 @@ interface MaterialDef {
   plank: 'wood' | 'stone' | 'iron' | 'glass';
   /** A tide mark across every face, where the water stood for a long time. */
   tide?: boolean;
+  /**
+   * The colour light catches the top edge in (render/rims.ts): the material's
+   * own highlight, so a lit edge of grass stays green instead of going grey
+   * under a light of another colour.
+   */
+  rim: string;
 }
 
 /*
@@ -198,7 +204,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Nebelwald: warm earth under a lip of grass, cooling to violet with depth.
   earth: {
     ramp: ['#1a1932', '#3b1443', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.2, 2.8, 2.45],
+    bands: [3.05, 2.75, 2.45],
     grain: 0.6,
     pattern: 'soil',
     top: 'grass',
@@ -207,11 +213,12 @@ const DEFS: Record<string, MaterialDef> = {
     accent: ['#3d3d3d', '#5d5d5d'],
     cover: 1,
     plank: 'wood',
+    rim: '#1e6f50',
   },
   // Grimmzahn's den: the same earth, trampled bare in patches, bones in it.
   den: {
     ramp: ['#1a1932', '#3b1443', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.2, 2.8, 2.45],
+    bands: [3.05, 2.75, 2.45],
     grain: 0.6,
     pattern: 'soil',
     top: 'grass',
@@ -220,50 +227,54 @@ const DEFS: Record<string, MaterialDef> = {
     accent: ['#5d5d5d', '#858585'],
     cover: 0.55,
     plank: 'wood',
+    rim: '#1e6f50',
   },
   // The ruins: weathered limestone blocks, moss in the joints at the top.
   ruins: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.95, 3.55, 3.2],
+    bands: [3.75, 3.45, 3.15],
     grain: 0.45,
     pattern: 'blocks',
     top: 'moss',
-    topColors: ['#5d5d5d', '#3d3d3d', '#1e6f50', '#134c4c'],
+    topColors: ['#424c6e', '#272727', '#1e6f50', '#134c4c'],
     features: ['crack', 'moss', 'pebble'],
     accent: ['#134c4c', '#1e6f50'],
     cover: 0.45,
     plank: 'wood',
+    rim: '#657392',
   },
   // The ruins' standing stones: the same limestone, cut square.
   ashlar: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [4.0, 3.6, 3.25],
+    bands: [3.8, 3.5, 3.2],
     grain: 0.35,
     pattern: 'ashlar',
     top: 'moss',
-    topColors: ['#5d5d5d', '#3d3d3d', '#1e6f50', '#134c4c'],
+    topColors: ['#424c6e', '#272727', '#1e6f50', '#134c4c'],
     features: ['crack', 'moss', 'crack'],
     accent: ['#134c4c', '#1e6f50'],
     cover: 0.3,
     plank: 'wood',
+    rim: '#657392',
   },
   // The treasury: the ruins with what the chest has not eaten caught in the cracks.
   vault: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.95, 3.55, 3.2],
+    bands: [3.75, 3.45, 3.15],
     grain: 0.45,
     pattern: 'blocks',
     top: 'moss',
-    topColors: ['#5d5d5d', '#3d3d3d', '#1e6f50', '#134c4c'],
+    topColors: ['#424c6e', '#272727', '#1e6f50', '#134c4c'],
     features: ['crack', 'gold', 'gold'],
     accent: ['#8a4836', '#edab50', '#e07438'],
     cover: 0.2,
     plank: 'wood',
+    rim: '#657392',
   },
   // The theatre: the ruins' stone under a stage of boards.
   theater: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.85, 3.45, 3.1],
+    bands: [3.65, 3.35, 3.05],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'boards',
@@ -272,216 +283,233 @@ const DEFS: Record<string, MaterialDef> = {
     accent: [],
     cover: 1,
     plank: 'wood',
+    rim: '#5d2c28',
   },
   // Ankhor's court: the ruins with his sun cut into the blocks.
   temple: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.95, 3.55, 3.2],
+    bands: [3.75, 3.45, 3.15],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'moss',
-    topColors: ['#5d5d5d', '#3d3d3d', '#1e6f50', '#134c4c'],
+    topColors: ['#424c6e', '#272727', '#1e6f50', '#134c4c'],
     features: ['crack', 'glyph', 'moss'],
     accent: ['#5d2c28', '#8a4836'],
     cover: 0.3,
     plank: 'wood',
+    rim: '#657392',
   },
   // The caves: rough plates of slate, split by veins of crystal.
   cave: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.45, 3.15, 2.85],
+    bands: [3.5, 3.2, 2.95],
     grain: 0.5,
     pattern: 'rock',
     top: 'lip',
-    topColors: ['#657392', '#424c6e'],
+    topColors: ['#424c6e', '#2a2f4e'],
     features: ['vein', 'crack', 'crystal'],
     accent: ['#0069aa', '#0098dc', '#00cdf9'],
     cover: 0,
     plank: 'wood',
+    rim: '#657392',
   },
   // The grotto: the same rock with every light eaten out of its veins.
   grotto: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.3, 3.0, 2.7],
+    bands: [3.35, 3.05, 2.8],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
-    topColors: ['#657392', '#424c6e'],
+    topColors: ['#2a2f4e', '#1a1932'],
     features: ['vein', 'crack', 'pebble'],
     accent: ['#1a1932', '#2a2f4e', '#424c6e'],
     cover: 0,
     plank: 'wood',
+    rim: '#424c6e',
   },
   // Arachna's chamber: cold rock with silk across it.
   web: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.45, 3.15, 2.85],
+    bands: [3.5, 3.2, 2.95],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
-    topColors: ['#657392', '#424c6e'],
+    topColors: ['#424c6e', '#2a2f4e'],
     features: ['silk', 'vein', 'crack'],
     accent: ['#424c6e', '#657392', '#92a1b9'],
     cover: 0,
     plank: 'wood',
+    rim: '#657392',
   },
   // Ignivor's chamber: the rock with embers where the crystal was.
   forge: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.4, 3.1, 2.8],
+    bands: [3.45, 3.15, 2.9],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
-    topColors: ['#657392', '#424c6e'],
+    topColors: ['#424c6e', '#2a2f4e'],
     features: ['ember', 'crack', 'ember'],
     accent: ['#8e251d', '#c64524', '#e07438'],
     cover: 0,
     plank: 'wood',
+    rim: '#657392',
   },
   // The drowned hall: wet blocks, algae on top, a tide mark down every face.
   drowned: {
     ramp: ['#0e071b', '#03193f', '#0c2e44', '#134c4c', '#0069aa'],
-    bands: [3.6, 3.2, 2.9],
+    bands: [3.6, 3.3, 3.05],
     grain: 0.45,
     pattern: 'wet',
     top: 'moss',
-    topColors: ['#0069aa', '#134c4c', '#1e6f50', '#134c4c'],
+    topColors: ['#134c4c', '#0c2e44', '#1e6f50', '#134c4c'],
     features: ['drip', 'moss', 'crack'],
     accent: ['#0069aa', '#0098dc'],
     cover: 0.6,
     plank: 'iron',
     tide: true,
+    rim: '#0069aa',
   },
   // The star altar: the hall's stone with stars set into it.
   altar: {
     ramp: ['#0e071b', '#03193f', '#0c2e44', '#134c4c', '#0069aa'],
-    bands: [3.6, 3.2, 2.9],
+    bands: [3.6, 3.3, 3.05],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'moss',
-    topColors: ['#0069aa', '#134c4c', '#1e6f50', '#134c4c'],
+    topColors: ['#134c4c', '#0c2e44', '#1e6f50', '#134c4c'],
     features: ['star', 'drip', 'crack'],
     accent: ['#657392', '#92a1b9'],
     cover: 0.35,
     plank: 'iron',
     tide: true,
+    rim: '#0069aa',
   },
   // Burg Nachtfall: brick under a grey coping. Nothing grows here.
   castle: {
     ramp: ['#1c121c', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.2, 2.85, 2.5],
+    bands: [3.1, 2.8, 2.5],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
-    topColors: ['#657392', '#424c6e', '#2a2f4e', '#1a1932'],
-    features: ['crack', 'pebble', 'crack'],
-    accent: [],
+    topColors: ['#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
+    features: ['crack', 'stain', 'crack'],
+    accent: ['#391f21', '#1c121c'],
     cover: 0,
     plank: 'iron',
+    rim: '#657392',
   },
   // The battlements: grey ashlar, cold under the moon.
   battlement: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.9, 3.5, 3.15],
+    bands: [3.75, 3.45, 3.15],
     grain: 0.35,
     pattern: 'ashlar',
     top: 'coping',
-    topColors: ['#657392', '#424c6e', '#2a2f4e', '#1a1932'],
-    features: ['crack', 'crack', 'pebble'],
+    topColors: ['#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
+    features: ['crack', 'crack', 'crack'],
     accent: [],
     cover: 0,
     plank: 'iron',
+    rim: '#657392',
   },
   // The clock tower: brick, with brass plates riveted on.
   clock: {
     ramp: ['#1c121c', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.2, 2.85, 2.5],
+    bands: [3.1, 2.8, 2.5],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
-    topColors: ['#657392', '#424c6e', '#2a2f4e', '#1a1932'],
+    topColors: ['#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
     features: ['rivet', 'crack', 'rivet'],
     accent: ['#8a4836', '#bf6f4a', '#391f21'],
     cover: 0,
     plank: 'iron',
+    rim: '#657392',
   },
   // The blood tower: the brick gone dark red, and stained.
   keep: {
     ramp: ['#1c121c', '#391f21', '#571c27', '#891e2b', '#c42430'],
-    bands: [3.25, 2.9, 2.55],
+    bands: [3.15, 2.85, 2.55],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
-    topColors: ['#657392', '#424c6e', '#2a2f4e', '#1a1932'],
+    topColors: ['#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
     features: ['stain', 'crack', 'pebble'],
     accent: ['#571c27', '#891e2b'],
     cover: 0,
     plank: 'iron',
+    rim: '#657392',
   },
-  // The throne room: great slabs of dark stone with a bronze edge.
+  // The throne room: great slabs of black marble veined with red, edged in bronze.
   throne: {
-    ramp: ['#0e071b', '#1c121c', '#3b1443', '#622461', '#93388f'],
-    bands: [3.35, 3.0, 2.65],
-    grain: 0.25,
+    ramp: ['#0e071b', '#131313', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d'],
+    bands: [4.5, 4.2, 3.85],
+    grain: 0.2,
     pattern: 'slabs',
     top: 'lip',
     topColors: ['#8a4836', '#5d2c28'],
-    features: ['crack', 'crack', 'stain'],
-    accent: ['#571c27', '#891e2b'],
+    features: ['vein', 'crack', 'vein'],
+    accent: ['#391f21', '#571c27', '#891e2b'],
     cover: 0,
     plank: 'iron',
+    rim: '#8a4836',
   },
   // The rift: violet obsidian in facets, a few of the seams still glowing.
   rift: {
     ramp: ['#0e071b', '#1a1932', '#3b1443', '#622461', '#93388f'],
-    bands: [3.4, 3.05, 2.7],
+    bands: [3.6, 3.3, 3.0],
     grain: 0.25,
     pattern: 'facets',
     top: 'gloss',
-    topColors: ['#93388f', '#622461', '#ca52c9'],
-    features: ['crack', 'crack', 'pebble'],
-    accent: ['#7a09fa', '#db3ffd', '#f389f5'],
-    cover: 0,
-    plank: 'glass',
-  },
-  // The mirror ground: the rift so still the stone is polished.
-  mirror: {
-    ramp: ['#0e071b', '#1a1932', '#3b1443', '#622461', '#93388f'],
-    bands: [3.35, 3.0, 2.65],
-    grain: 0.1,
-    pattern: 'facets',
-    top: 'gloss',
-    topColors: ['#93388f', '#622461', '#ca52c9'],
+    topColors: ['#622461', '#3b1443', '#93388f'],
     features: ['crack', 'crack', 'crack'],
     accent: ['#7a09fa', '#db3ffd', '#f389f5'],
     cover: 0,
     plank: 'glass',
+    rim: '#93388f',
+  },
+  // The mirror ground: the rift so still the stone is polished.
+  mirror: {
+    ramp: ['#0e071b', '#1a1932', '#3b1443', '#622461', '#93388f'],
+    bands: [3.55, 3.25, 2.95],
+    grain: 0.1,
+    pattern: 'facets',
+    top: 'gloss',
+    topColors: ['#622461', '#3b1443', '#93388f'],
+    features: ['crack', 'crack', 'crack'],
+    accent: ['#7a09fa', '#db3ffd', '#f389f5'],
+    cover: 0,
+    plank: 'glass',
+    rim: '#93388f',
   },
   // Her lair: rift stone grown over, and bones.
   lair: {
     ramp: ['#0e071b', '#0c2e44', '#134c4c', '#1e6f50', '#33984b'],
-    bands: [3.25, 2.9, 2.55],
+    bands: [3.2, 2.9, 2.55],
     grain: 0.35,
     pattern: 'facets',
     top: 'moss',
-    topColors: ['#1e6f50', '#134c4c', '#1e6f50', '#0c2e44'],
+    topColors: ['#134c4c', '#0c2e44', '#1e6f50', '#134c4c'],
     features: ['bone', 'crack', 'moss'],
     accent: ['#134c4c', '#1e6f50', '#33984b'],
     cover: 0.7,
     plank: 'stone',
+    rim: '#1e6f50',
   },
   // The crystal hoard: blue rock grown through with prisms.
   crystal: {
     ramp: ['#0e071b', '#03193f', '#00396d', '#0069aa', '#0098dc'],
-    bands: [3.2, 2.85, 2.5],
+    bands: [2.95, 2.65, 2.35],
     grain: 0.3,
     pattern: 'prisms',
     top: 'gloss',
-    topColors: ['#0069aa', '#00396d', '#00cdf9'],
+    topColors: ['#00396d', '#03193f', '#0069aa'],
     features: ['crystal', 'crack', 'crack'],
     accent: ['#0069aa', '#0098dc', '#00cdf9'],
     cover: 0,
     plank: 'glass',
+    rim: '#0069aa',
   },
 };
 
@@ -910,6 +938,25 @@ export interface TileShape {
   hangR: number;
 }
 
+/**
+ * The colour light catches the top edge of a tile in - its material's own
+ * highlight, or a plank's - as "#rrggbb", or null for anything else.
+ */
+export function rimColorAt(level: Level, tx: number, ty: number): string | null {
+  const k = artKind(level, tx, ty);
+  const names = AREA_MATERIALS[areaAt(tx * TILE)];
+  if (k === K_PLANK) return PLANK_RIM[DEFS[names[0]].plank];
+  if (!isMass(k)) return null;
+  return DEFS[names[k === K_STONE ? 1 : 0]].rim;
+}
+
+const PLANK_RIM: Record<MaterialDef['plank'], string> = {
+  wood: '#bf6f4a',
+  iron: '#bf6f4a',
+  stone: '#33984b',
+  glass: '#ca52c9',
+};
+
 /** Reads a tile's shape into `out`; false if the tile is not terrain. */
 export function tileShape(level: Level, tx: number, ty: number, out: TileShape): boolean {
   if (!isMass(artKind(level, tx, ty))) return false;
@@ -1247,13 +1294,14 @@ export class TerrainArt {
             continue;
           }
         }
-        if (featColor[i] !== 0) {
-          out[o] = featColor[i];
-          continue;
-        }
         // The depth band, dithered where one meets the next.
         const d = dist[i] + ((BAYER[brow + (wx & 3)] - 7.5) * 0.7);
         const band = d < 22 ? 0 : d < 54 ? 1 : 2;
+        const fc = featColor[i];
+        if (fc !== 0) {
+          out[o] = isTone(fc) ? STONE_RAMP[band === 0 ? fc : fc - 1] : fc;
+          continue;
+        }
         const pi = ((wy & PM) << 8) | (wx & PM);
         const sp = m.pattern.special[pi];
         if (sp !== 0 && band < 2) {
@@ -1478,8 +1526,8 @@ function topPixel(m: Material, wx: number, wy: number, du: number, open: boolean
       if (!covered(m, wx)) return du === 1 ? m.ramp[3] : 0;
       const depth = topDepth(m, wx);
       if (du > depth) return 0;
-      if (du === 1) return (h & 7) === 0 ? t[1] : t[0];
-      if (du === 2) return (h & 1) === 0 ? t[0] : t[1];
+      if (du === 1) return (h & 1) === 0 ? t[1] : t[0];
+      if (du === 2) return (h & 7) === 0 ? t[0] : t[1];
       // The bottom pixel of a long strand is in shade.
       return du === depth && depth > 4 ? t[2] : t[1];
     }
@@ -1568,13 +1616,20 @@ interface Stamp {
 
 /** Steps along the ramp, in sixteenths, for the characters of a stamp. */
 const STEP: Record<string, number> = {
-  o: -20, // outline, in shade
-  d: -9,
-  b: 12, // body of a stone, a little lighter than the ground round it
-  h: 24, // its lit top-left
   c: -24, // a crack
   l: 10, // the lit lip of a crack
 };
+
+/**
+ * Stones lying in the ground are grey whatever the ground is, and darker the
+ * deeper they lie: a stamp marks them with a tone (outline, shade, body,
+ * light) that is looked up here, a step lower below the surface band.
+ */
+const STONE_RAMP = Uint32Array.from(['#1a1932', '#272727', '#3d3d3d', '#5d5d5d', '#858585'], abgrOf);
+const STONE_TONE: Record<string, number> = { o: 1, d: 2, b: 3, h: 4 };
+
+/** Whether a feature colour is a stone's tone rather than a colour of its own. */
+const isTone = (c: number): boolean => c > 0 && c < 8;
 
 const PEBBLES: Stamp[] = [
   { rows: ['.oo.', 'ohbo', '.oo.'] },
@@ -1618,7 +1673,9 @@ function stampFeature(
       const row = s.rows[r];
       for (let q = 0; q < row.length; q++) {
         const ch = row[q];
-        if (ch !== '.') put(ox + q, oy + r, STEP[ch] ?? 0);
+        if (ch === '.') continue;
+        if (STONE_TONE[ch]) paint(ox + q, oy + r, STONE_TONE[ch]);
+        else put(ox + q, oy + r, STEP[ch] ?? 0);
       }
     }
   };
