@@ -1,374 +1,284 @@
 import { Camera } from '../core/camera';
-import { PALETTE, mixHex, zoneAt } from './palette';
 import { Level } from '../world/level';
 import { TILE, Tile } from '../world/tiles';
-import { glow } from './sprites';
+import { zoneAt } from './palette';
+import { ART, PixelSprite, makeCanvas } from './pixel';
+import { LAVA_STATIC, TPX, TerrainArt } from './tileArt';
 
-interface ZoneTileColors {
-  body: string;
-  bodyDark: string;
-  top: string;
-  topLight: string;
-  edge: string;
-  /** Indoor zones use carved stone ledges instead of wooden planks. */
-  stoneLedges: boolean;
-  /** The stone a ledge is cut from, per zone: one grey for all of them read
-   * as the same corridor in five different places. */
-  ledge: string;
-  ledgeEdge: string;
-  /** Calm zones grow nothing that sways; the crust stands still. */
-  calm: boolean;
-}
+/**
+ * The tile map on screen.
+ *
+ * The ground itself is pixel art kept in canvases (render/tileArt.ts) and only
+ * copied here. What is drawn every frame is what moves: the surface of the
+ * lava, and the doors of the boss rooms, which open and shut. All of it on
+ * whole art pixels, in the palette's colours, with no gradient, arc or soft
+ * glow anywhere - a light here is a flat shape the palette's dither turns
+ * translucent, or a colour that steps.
+ */
 
-function colorsForZone(x: number): ZoneTileColors {
-  const calm = zoneAt(x).calm;
-  switch (zoneAt(x).name) {
-    case 'forest':
-      return {
-        body: PALETTE.dirt,
-        bodyDark: PALETTE.dirtDark,
-        top: PALETTE.grass,
-        topLight: PALETTE.grassLight,
-        edge: PALETTE.grassDark,
-        stoneLedges: false,
-        ledge: '#4b3a2a',
-        ledgeEdge: '#6d563c',
-        calm,
-      };
-    case 'ruins':
-      return {
-        body: '#3a3348',
-        bodyDark: '#241f2f',
-        top: '#5d7a52',
-        topLight: '#7d9c6c',
-        edge: '#39502f',
-        stoneLedges: false,
-        ledge: '#4a4258',
-        ledgeEdge: '#6d6482',
-        calm,
-      };
-    case 'caverns':
-      return {
-        body: '#243347',
-        bodyDark: '#151f2e',
-        top: '#2f6f86',
-        topLight: '#49a6bd',
-        edge: '#1c4a5c',
-        stoneLedges: true,
-        ledge: '#2c3e52',
-        ledgeEdge: '#4b7290',
-        calm,
-      };
-    case 'drowned':
-      return {
-        body: '#1c3a42',
-        bodyDark: '#0c1e26',
-        // Waterlogged stone with a skin of algae on every ledge.
-        top: '#2c6152',
-        topLight: '#3f8a6c',
-        edge: '#1d4438',
-        stoneLedges: true,
-        ledge: '#204450',
-        ledgeEdge: '#3f7f8c',
-        calm,
-      };
-    case 'castle':
-      return {
-        body: '#38303a',
-        bodyDark: '#231d26',
-        top: '#5a4048',
-        topLight: '#7d5a60',
-        edge: '#3a262c',
-        stoneLedges: true,
-        ledge: '#3d3440',
-        ledgeEdge: '#665a68',
-        calm,
-      };
-    case 'lair':
-      // Her room, cut out of the same rift stone but grown over: the crust is
-      // measured down the same way as everywhere else, so the floor never comes
-      // out brighter than the hero standing on it.
-      return {
-        body: '#22301f',
-        bodyDark: '#121a10',
-        top: '#33562c',
-        topLight: '#4d7a41',
-        edge: '#22401f',
-        stoneLedges: true,
-        ledge: '#2a3a24',
-        ledgeEdge: '#5c8049',
-        calm,
-      };
-    case 'rift':
-    case 'riftend':
-      return {
-        body: '#2b2140',
-        bodyDark: '#180f28',
-        // Measured down, not guessed: the crust used to come out brighter
-        // than the hero himself, and the eye went to the floor.
-        top: '#412a63',
-        topLight: '#61458f',
-        edge: '#2e1d4a',
-        stoneLedges: true,
-        ledge: '#332552',
-        ledgeEdge: '#6a4aa0',
-        calm,
-      };
-    case 'crystalworld':
-      return {
-        body: '#1b3450',
-        bodyDark: '#0c1a2c',
-        // Cyan carries far more luminance than the violet of the rift at the
-        // same nominal brightness, so these are measured down twice as far:
-        // the floor came out brighter than the hero standing on it.
-        top: '#1e5069',
-        topLight: '#2f7290',
-        edge: '#173f57',
-        stoneLedges: true,
-        ledge: '#204a68',
-        ledgeEdge: '#4d90b4',
-        calm,
-      };
-    default:
-      return {
-        body: '#3a2028',
-        bodyDark: '#22121a',
-        top: '#6a2630',
-        topLight: '#96343f',
-        edge: '#471a22',
-        stoneLedges: true,
-        ledge: PALETTE.stone,
-        ledgeEdge: PALETTE.stoneEdge,
-        calm,
-      };
+const terrains = new WeakMap<Level, TerrainArt>();
+
+/** The finished terrain of a level, made on first use. */
+export function terrainOf(level: Level): TerrainArt {
+  let art = terrains.get(level);
+  if (!art) {
+    art = new TerrainArt(level);
+    terrains.set(level, art);
   }
+  return art;
 }
 
 /** Draws every tile currently inside the camera view. */
-export function drawTilemap(
-  ctx: CanvasRenderingContext2D,
-  level: Level,
-  camera: Camera,
-  time: number,
-): void {
-  const x0 = Math.max(0, Math.floor(camera.renderX / TILE) - 1);
-  const x1 = Math.min(level.width - 1, Math.floor((camera.renderX + camera.viewW) / TILE) + 1);
-  const y0 = Math.max(0, Math.floor(camera.renderY / TILE) - 1);
-  const y1 = Math.min(level.height - 1, Math.floor((camera.renderY + camera.viewH) / TILE) + 1);
+export function drawTilemap(ctx: CanvasRenderingContext2D, level: Level, camera: Camera, time: number): void {
+  const art = terrainOf(level);
+  const vx = camera.renderX;
+  const vy = camera.renderY;
+  art.draw(ctx, vx, vy, camera.viewW, camera.viewH);
+  drawLava(ctx, art, vx, camera.viewW, time);
+  drawDoors(ctx, level, art, vx, vy, camera.viewW, camera.viewH, time);
+}
 
-  let colors = colorsForZone(x0 * TILE);
-  let colorZoneX = -1;
+/** A rectangle in art pixels, at a world position given in art pixels. */
+function px(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  ctx.fillRect(x * ART, y * ART, w * ART, h * ART);
+}
 
-  for (let ty = y0; ty <= y1; ty++) {
-    for (let tx = x0; tx <= x1; tx++) {
-      const tile = level.tileAt(tx, ty);
-      if (tile === Tile.Empty) continue;
-      const px = tx * TILE;
-      const py = ty * TILE;
-      if (tx !== colorZoneX) {
-        colors = colorsForZone(px);
-        colorZoneX = tx;
-      }
-      const noise = level.noiseAt(tx, ty);
+/* ------------------------------------------------------------- lava */
 
-      switch (tile) {
-        case Tile.Solid:
-        case Tile.Earth:
-          drawBlock(ctx, level, tx, ty, px, py, tile, colors, noise, time);
-          break;
-        case Tile.Gate:
-          if (level.gateClosed) drawGate(ctx, px, py, time, ty);
-          break;
-        case Tile.Seal:
-          if (level.exitSealed) drawSeal(ctx, px, py, time, ty);
-          break;
-        case Tile.LairGate:
-          if (level.lairClosed) drawLairGate(ctx, px, py, time, ty);
-          break;
-        case Tile.Ward:
-          drawWard(ctx, level, tx, ty, px, py, time);
-          break;
-        case Tile.Platform:
-          drawPlatform(ctx, px, py, colors, noise);
-          break;
-        case Tile.Spike:
-          drawSpikes(ctx, px, py, noise);
-          break;
-        case Tile.LavaTop:
-          drawLavaTop(ctx, px, py, time, tx);
-          break;
-        case Tile.Lava:
-          ctx.fillStyle = '#8f2a12';
-          ctx.fillRect(px, py, TILE, TILE);
-          ctx.fillStyle = 'rgba(255,120,40,0.25)';
-          ctx.fillRect(px, py, TILE, 6);
-          break;
-        default:
-          break;
-      }
+const LAVA_CREST = '#ffc825';
+const LAVA_TOP = '#ffa214';
+const LAVA_HOT = '#ed7614';
+const LAVA_BODY = '#c64524';
+
+/**
+ * The surface of every pool of lava as one sheet: two trains of waves, one
+ * long and slow running one way and one short running back, added together
+ * and cut to whole pixels. Their crests travel along the pool and through
+ * each other instead of every tile bobbing on a sine of its own, and a crest
+ * that stands higher burns brighter. Columns of the same height are drawn as
+ * one rectangle.
+ */
+function drawLava(ctx: CanvasRenderingContext2D, art: TerrainArt, viewX: number, viewW: number, time: number): void {
+  const runs = art.lavaRuns;
+  const left = viewX / TILE - 1;
+  const right = (viewX + viewW) / TILE + 1;
+  for (const run of runs) {
+    if (run.tx1 < left) continue;
+    if (run.tx0 > right) break;
+    const x0 = run.tx0 * TPX;
+    const x1 = (run.tx1 + 1) * TPX;
+    const y0 = run.ty * TPX;
+    let start = x0;
+    let level = surfaceAt(x0, time);
+    for (let x = x0 + 1; x <= x1; x++) {
+      const s = x < x1 ? surfaceAt(x, time) : -1;
+      if (s === level) continue;
+      lavaColumns(ctx, start, x - start, y0, level);
+      start = x;
+      level = s;
     }
   }
 }
 
-function drawBlock(
-  ctx: CanvasRenderingContext2D,
-  level: Level,
-  tx: number,
-  ty: number,
-  px: number,
-  py: number,
-  tile: Tile,
-  colors: ZoneTileColors,
-  noise: number,
-  time: number,
-): void {
-  const above = level.tileAt(tx, ty - 1);
-  // Spikes and lava sit on the surface, so the tile under them stays bare.
-  const openAbove = !level.solidAt(tx, ty - 1) && above !== Tile.Spike && above !== Tile.LavaTop && above !== Tile.Lava;
-  const isStone = tile === Tile.Solid;
+/** Height of the surface above the still lava, in rows from the top of the tile (1..6). */
+function surfaceAt(x: number, time: number): number {
+  const a = Math.sin(((x - time * 9) / 41) * Math.PI * 2);
+  const b = Math.sin(((x + time * 6) / 17) * Math.PI * 2);
+  return Math.max(1, Math.min(6, Math.round(3.5 - a * 1.6 - b * 0.8)));
+}
 
-  const base = isStone ? PALETTE.stone : colors.body;
-  const dark = isStone ? PALETTE.stoneDark : colors.bodyDark;
-
-  const grad = ctx.createLinearGradient(0, py, 0, py + TILE);
-  grad.addColorStop(0, mixHex(base, '#ffffff', 0.06 + noise * 0.05));
-  grad.addColorStop(1, dark);
-  ctx.fillStyle = grad;
-  ctx.fillRect(px, py, TILE, TILE);
-
-  // Blocky masonry / soil speckles.
-  ctx.fillStyle = `rgba(0,0,0,${(0.06 + noise * 0.1).toFixed(2)})`;
-  ctx.fillRect(px + 2 + noise * 6, py + 8 + noise * 12, 6 + noise * 8, 4);
-  ctx.fillStyle = 'rgba(255,255,255,0.04)';
-  ctx.fillRect(px + 18 - noise * 8, py + 18 + noise * 6, 5, 3);
-
-  // Buried tiles fade towards black so deep ground recedes.
-  let depth = 0;
-  while (depth < 5 && level.solidAt(tx, ty - depth - 1)) depth++;
-  if (depth > 0) {
-    ctx.fillStyle = `rgba(0,0,0,${Math.min(0.42, depth * 0.11).toFixed(2)})`;
-    ctx.fillRect(px, py, TILE, TILE);
-  }
-
-  if (isStone) {
-    ctx.strokeStyle = 'rgba(0,0,0,0.28)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
-    if (ty % 2 === 0) {
-      ctx.beginPath();
-      ctx.moveTo(px + TILE / 2, py);
-      ctx.lineTo(px + TILE / 2, py + TILE);
-      ctx.stroke();
-    }
-  }
-
-  if (openAbove) {
-    if (isStone) {
-      ctx.fillStyle = PALETTE.stoneEdge;
-      ctx.fillRect(px, py, TILE, 4);
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.fillRect(px, py, TILE, 1);
-    } else {
-      ctx.fillStyle = colors.top;
-      ctx.fillRect(px, py, TILE, 8);
-      ctx.fillStyle = colors.topLight;
-      ctx.fillRect(px, py, TILE, 3);
-      ctx.fillStyle = colors.edge;
-      // Little tufts hanging into the block below.
-      const tuft = Math.floor(noise * 4);
-      for (let i = 0; i < 3; i++) {
-        const bx = px + 3 + i * 10 + ((tuft + i) % 3);
-        ctx.fillRect(bx, py + 8, 3, 3 + ((tuft + i) % 3));
-      }
-      // Blades standing out of the surface. In a calm zone they hold still:
-      // a line of them swaying across the whole width of the screen is the
-      // single most restless thing in the picture.
-      ctx.fillStyle = colors.topLight;
-      for (let i = 0; i < 3; i++) {
-        const bx = px + 5 + i * 10;
-        const sway = colors.calm ? 0 : Math.sin(time * 1.6 + tx * 0.7 + i) * 1.6;
-        ctx.fillRect(bx + sway, py - 4, 2, 4);
-      }
-    }
-  }
-
-  const openLeft = !level.solidAt(tx - 1, ty);
-  const openRight = !level.solidAt(tx + 1, ty);
-  if (openLeft) {
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    ctx.fillRect(px, py, 2, TILE);
-  }
-  if (openRight) {
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.fillRect(px + TILE - 2, py, 2, TILE);
+function lavaColumns(ctx: CanvasRenderingContext2D, x: number, w: number, y0: number, s: number): void {
+  ctx.fillStyle = s <= 2 ? LAVA_CREST : LAVA_TOP;
+  px(ctx, x, y0 + s, w, 1);
+  ctx.fillStyle = LAVA_HOT;
+  px(ctx, x, y0 + s + 1, w, s <= 3 ? 2 : 1);
+  const body = s + (s <= 3 ? 3 : 2);
+  if (body < LAVA_STATIC) {
+    ctx.fillStyle = LAVA_BODY;
+    px(ctx, x, y0 + body, w, LAVA_STATIC - body);
   }
 }
 
-/** The portcullis that seals the boss arena once the fight begins. */
-/** The warded stone behind the throne: runes that hold until the knight falls. */
-function drawSeal(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
-  ctx.fillStyle = '#150c1e';
-  ctx.fillRect(px, py, TILE, TILE);
-  ctx.fillStyle = '#2a1c38';
-  ctx.fillRect(px + 2, py + 2, TILE - 4, TILE - 4);
+/* ------------------------------------------------------------- doors */
 
-  const pulse = 0.55 + Math.sin(time * 2 + ty * 0.9) * 0.45;
+/** Hard-edged discs of light, one canvas per radius: what a glow is in this game. */
+const discs = new Map<number, HTMLCanvasElement>();
+
+function disc(r: number): HTMLCanvasElement {
+  let c = discs.get(r);
+  if (!c) {
+    const size = r * 2 + 1;
+    const { canvas, ctx } = makeCanvas(size, size);
+    ctx.fillStyle = '#ffffff';
+    for (let y = 0; y < size; y++) {
+      const dy = y - r;
+      const half = Math.floor(Math.sqrt(r * r + r - dy * dy));
+      ctx.fillRect(r - half, y, half * 2 + 1, 1);
+    }
+    c = canvas;
+    discs.set(r, c);
+  }
+  return c;
+}
+
+/** Discs tinted once per colour. */
+const tinted = new Map<string, HTMLCanvasElement>();
+
+function tintedDisc(r: number, color: string): HTMLCanvasElement {
+  const key = `${r}${color}`;
+  let c = tinted.get(key);
+  if (!c) {
+    const size = r * 2 + 1;
+    const { canvas, ctx } = makeCanvas(size, size);
+    ctx.drawImage(disc(r), 0, 0);
+    ctx.globalCompositeOperation = 'source-in';
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, size, size);
+    c = canvas;
+    tinted.set(key, c);
+  }
+  return c;
+}
+
+/**
+ * A disc of light in a colour, centred on an art pixel: two hard rings
+ * instead of a radial gradient - the inner one twice as strong - laid on
+ * additively and left to the palette's dither to make translucent.
+ */
+function glowDisc(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, alpha: number): void {
+  if (alpha <= 0) return;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  ctx.strokeStyle = `rgba(190,130,255,${(0.3 + pulse * 0.45).toFixed(2)})`;
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(px + TILE / 2, py + TILE / 2, 9, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(px + 6, py + TILE / 2);
-  ctx.lineTo(px + TILE - 6, py + TILE / 2);
-  ctx.moveTo(px + TILE / 2, py + 6);
-  ctx.lineTo(px + TILE / 2, py + TILE - 6);
-  ctx.stroke();
+  for (const rr of [r, Math.max(1, Math.round(r * 0.55))]) {
+    ctx.globalAlpha = alpha * 0.5;
+    const size = (rr * 2 + 1) * ART;
+    ctx.drawImage(tintedDisc(rr, color), (cx - rr) * ART, (cy - rr) * ART, size, size);
+  }
   ctx.restore();
 }
 
-function drawGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
-  ctx.fillStyle = '#0d0a10';
-  ctx.fillRect(px, py, TILE, TILE);
-  // Vertical bars.
-  ctx.fillStyle = '#3a3040';
-  for (let i = 0; i < 3; i++) ctx.fillRect(px + 3 + i * 11, py, 6, TILE);
-  ctx.fillStyle = '#584a60';
-  for (let i = 0; i < 3; i++) ctx.fillRect(px + 3 + i * 11, py, 2, TILE);
-  // Horizontal band every other tile.
-  if (ty % 2 === 0) {
-    ctx.fillStyle = '#4a3d52';
-    ctx.fillRect(px, py + 12, TILE, 7);
-    ctx.fillStyle = '#6d5b76';
-    ctx.fillRect(px, py + 12, TILE, 2);
-    ctx.fillStyle = '#241c28';
-    ctx.fillRect(px + 5, py + 14, 3, 3);
-    ctx.fillRect(px + TILE - 8, py + 14, 3, 3);
-  }
-  // Cursed glow seeping between the bars.
-  const pulse = 0.35 + Math.sin(time * 2.2 + ty) * 0.15;
-  glow(ctx, px + TILE / 2, py + TILE / 2, 26, `rgba(200,40,40,${pulse.toFixed(2)})`);
+/** Steps a slow breath into three levels, so a light changes a few times a second at most. */
+function step3(t: number): number {
+  return Math.min(2, Math.floor((Math.sin(t) + 1) * 1.5));
 }
 
-/** The colour a ward burns in, per zone, as "r,g,b". */
-function wardRgb(x: number): string {
+const GATE_KEY = {
+  B: '#0e071b',
+  L: '#657392',
+  M: '#424c6e',
+  D: '#2a2f4e',
+  R: '#92a1b9',
+  g: '#391f21',
+};
+
+/** The knight's portcullis: four iron bars, a cross band on every other tile. */
+const GATE_BARS = new PixelSprite(new Array<string>(16).fill('BLMDgLMDgLMDgLMD'), GATE_KEY);
+
+const GATE_BAND = new PixelSprite(['LLLLLLLLLLLLLLLL', 'MRMMMRMMMRMMMRMM', 'DDDDDDDDDDDDDDDD'], GATE_KEY);
+
+/** Where the bars meet the floor they end in points. */
+const GATE_TEETH = new PixelSprite(['BLMDgLMDgLMDgLMD', '.LM..LM..LM..LM.', '.L...L...L...L..'], GATE_KEY);
+
+function drawGate(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: number, time: number): void {
+  const x = tx * TPX;
+  const y = ty * TPX;
+  // The gaps between the bars smoulder: one of two reds, stepping slowly.
+  const ember = step3(time * 2.2 + ty) > 0;
+  GATE_BARS.draw(ctx, x * ART, y * ART);
+  ctx.fillStyle = ember ? '#571c27' : '#391f21';
+  for (const gx of [4, 8, 12]) px(ctx, x + gx, y, 1, TPX);
+  if (ty % 2 === 0) GATE_BAND.draw(ctx, x * ART, (y + 6) * ART);
+  if (level.tileAt(tx, ty + 1) !== Tile.Gate) GATE_TEETH.draw(ctx, x * ART, (y + TPX - 3) * ART);
+  if (ty % 2 === 1) glowDisc(ctx, x + 8, y + 8, 12, '#891e2b', ember ? 0.18 : 0.12);
+}
+
+const SEAL_KEY = { B: '#0e071b', S: '#1a1932', s: '#2a2f4e', R: '#ffffff' };
+
+/** The warded stone behind the throne: a ring of runes and a cross, glowing in steps. */
+const SEAL_ROWS = [
+  'BBBBBBBBBBBBBBBB',
+  'BsSSSSSSSSSSSSSB',
+  'BSSSSSSRRRSSSSSB',
+  'BSSSSRRSRSRRSSSB',
+  'BSSSRSSSRSSSRSSB',
+  'BSSRSSSSRSSSSRSB',
+  'BSSRSSSSRSSSSRSB',
+  'BSRSRRRRRRRRRSRB',
+  'BSSRSSSSRSSSSRSB',
+  'BSSRSSSSRSSSSRSB',
+  'BSSSRSSSRSSSRSSB',
+  'BSSSSRRSRSRRSSSB',
+  'BSSSSSSRRRSSSSSB',
+  'BSSSSSSSSSSSSSSB',
+  'BsSSSSSSSSSSSSsB',
+  'BBBBBBBBBBBBBBBB',
+];
+const SEAL_COLORS = ['#3003d9', '#7a09fa', '#db3ffd'];
+const SEALS = SEAL_COLORS.map((c) => new PixelSprite(SEAL_ROWS, { ...SEAL_KEY, R: c }));
+
+function drawSeal(ctx: CanvasRenderingContext2D, tx: number, ty: number, time: number): void {
+  const s = step3(time * 2 + ty * 0.9);
+  SEALS[s].draw(ctx, tx * TPX * ART, ty * TPX * ART);
+  if (s === 2) glowDisc(ctx, tx * TPX + 8, ty * TPX + 8, 9, '#7a09fa', 0.16);
+}
+
+const LAIR_KEY = { B: '#0e071b', L: '#33984b', M: '#1e6f50', D: '#134c4c', K: '#0c2e44' };
+
+/** The hydra's door: ribs of grown bone, knuckled where they are lashed together. */
+const LAIR_RIBS = new PixelSprite(
+  [
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'KLMDKKLMDKKLMDKB',
+    'LLMDDLLMDDLLMDDB',
+    'LLMDDLLMDDLLMDDB',
+    'LLMDDLLMDDLLMDDB',
+    'KLMDKKLMDKKLMDKB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+    'BLMDBBLMDBBLMDBB',
+  ],
+  LAIR_KEY,
+);
+
+const LAIR_BAND = new PixelSprite(['MMMMMMMMMMMMMMMM', 'DLDDDDLDDDDLDDDD', 'KKKKKKKKKKKKKKKK'], LAIR_KEY);
+
+function drawLairGate(ctx: CanvasRenderingContext2D, tx: number, ty: number, time: number): void {
+  const x = tx * TPX;
+  const y = ty * TPX;
+  LAIR_RIBS.draw(ctx, x * ART, y * ART);
+  if (ty % 2 === 0) LAIR_BAND.draw(ctx, x * ART, (y + 12) * ART);
+  const s = step3(time * 1.8 + ty * 0.7);
+  glowDisc(ctx, x + 8, y + 8, 11, '#33984b', 0.08 + s * 0.04);
+}
+
+/** The colour a ward burns in, per zone: a colour of the palette. */
+function wardColor(x: number): string {
   switch (zoneAt(x).name) {
     case 'forest':
-      return '176,236,120';
+      return '#99e65f';
     case 'ruins':
-      return '255,196,112';
+      return '#edab50';
     case 'caverns':
-      return '255,138,70';
+      return '#e07438';
     case 'drowned':
-      return '120,232,220';
+      return '#0cf1ff';
     case 'castle':
-      return '255,86,110';
+      return '#f5555d';
     default:
-      return '196,150,255';
+      return '#db3ffd';
   }
 }
+
+/** The rune on a standing ward: a diamond with a stroke through it. */
+const RUNE_ROWS = ['...W...', '..W.W..', '.W...W.', 'W..W..W', '.W.W.W.', 'W..W..W', '.W...W.', '..W.W..', '...W...'];
+const RUNE = new PixelSprite(RUNE_ROWS, { W: '#ffffff' });
 
 /**
  * A boss arena's ward: a curtain of light hung between the floor and the sky,
@@ -376,182 +286,106 @@ function wardRgb(x: number): string {
  * way in still shows where it will come down - a faint line of runes on the
  * floor - so the moment it rises behind the hero is not a surprise but a
  * promise kept. It moves slowly on purpose: a column of flicker is the last
- * thing a fight needs next to it.
+ * thing a fight needs next to it. The light is flat bands of colour rather
+ * than a gradient, strands that climb a whole pixel at a time, and a rune
+ * that brightens in three steps.
  */
-function drawWard(
-  ctx: CanvasRenderingContext2D,
-  level: Level,
-  tx: number,
-  ty: number,
-  px: number,
-  py: number,
-  time: number,
-): void {
-  const rgb = wardRgb(px);
-  const arena = level.arenaAt(px);
+function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: number, time: number): void {
+  const wx = tx * TILE;
+  const color = wardColor(wx);
+  const arena = level.arenaAt(wx);
   const closed = level.wardClosed(tx);
   const floorBelow = level.solidAt(tx, ty + 1) && level.tileAt(tx, ty + 1) !== Tile.Ward;
+  const x = tx * TPX;
+  const y = ty * TPX;
   if (!closed) {
     if (!arena || arena.cleared || !floorBelow) return;
     // The sleeping ward: a seam of runes in the floor where it will stand.
-    const a = 0.22 + Math.sin(time * 1.4 + tx) * 0.06;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(${rgb},${a.toFixed(3)})`;
-    ctx.fillRect(px + 13, py + TILE - 4, 6, 4);
-    ctx.fillRect(px + 15, py + TILE - 12, 2, 6);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = step3(time * 1.4 + tx) === 2 ? 0.3 : 0.22;
+    px(ctx, x + 6, y + TPX - 2, 4, 2);
+    px(ctx, x + 7, y + TPX - 6, 2, 3);
     ctx.restore();
     return;
   }
 
   const topCap = !level.solidAt(tx, ty - 1) || ty === 0;
-  const breath = 0.5 + Math.sin(time * 1.6 + ty * 0.35) * 0.5;
+  const breath = step3(time * 1.6 + ty * 0.35);
   ctx.save();
   // A dark core, so the light has something to stand in front of.
-  ctx.fillStyle = 'rgba(6,4,12,0.55)';
-  ctx.fillRect(px + 6, py, TILE - 12, TILE);
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = '#0e071b';
+  px(ctx, x + 3, y, 10, TPX);
   ctx.globalCompositeOperation = 'lighter';
-  const sheet = ctx.createLinearGradient(px, 0, px + TILE, 0);
-  sheet.addColorStop(0, `rgba(${rgb},0)`);
-  sheet.addColorStop(0.5, `rgba(${rgb},${(0.2 + breath * 0.1).toFixed(3)})`);
-  sheet.addColorStop(1, `rgba(${rgb},0)`);
-  ctx.fillStyle = sheet;
-  ctx.fillRect(px - 6, py, TILE + 12, TILE);
-  // Strands of light running up the curtain, slowly.
-  ctx.fillStyle = `rgba(${rgb},0.5)`;
+  ctx.fillStyle = color;
+  // The sheet: three flat bands, strongest in the middle.
+  ctx.globalAlpha = 0.08;
+  px(ctx, x - 2, y, TPX + 4, TPX);
+  ctx.globalAlpha = 0.1 + breath * 0.03;
+  px(ctx, x + 3, y, 10, TPX);
+  ctx.globalAlpha = 0.12 + breath * 0.04;
+  px(ctx, x + 6, y, 4, TPX);
+  // Strands of light running up the curtain, a pixel at a time.
+  ctx.globalAlpha = 0.5;
   for (let i = 0; i < 3; i++) {
-    const sx = px + 9 + i * 7;
-    const run = (time * (18 + i * 5) + i * 13 + ty * 11) % TILE;
-    ctx.fillRect(sx, py + TILE - run - 10, 1.6, 10);
+    const sx = x + 4 + i * 4;
+    const run = Math.floor(time * (9 + i * 2.5) + i * 7 + ty * 5) % TPX;
+    const sy = y + TPX - run - 5;
+    const top = Math.max(y, sy);
+    const bottom = Math.min(y + TPX, sy + 5);
+    if (bottom > top) px(ctx, sx, top, 1, bottom - top);
   }
   // The edges, bright and steady.
-  ctx.fillStyle = `rgba(${rgb},0.5)`;
-  ctx.fillRect(px + 6, py, 1, TILE);
-  ctx.fillRect(px + TILE - 7, py, 1, TILE);
+  px(ctx, x + 3, y, 1, TPX);
+  px(ctx, x + 12, y, 1, TPX);
   // A rune every third tile, and a knot where it meets the floor.
   if (ty % 3 === 1 || floorBelow) {
-    const cx = px + TILE / 2;
-    const cy = py + TILE / 2;
-    ctx.strokeStyle = `rgba(255,255,255,${(0.35 + breath * 0.35).toFixed(3)})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 8);
-    ctx.lineTo(cx + 6, cy);
-    ctx.lineTo(cx, cy + 8);
-    ctx.lineTo(cx - 6, cy);
-    ctx.closePath();
-    ctx.moveTo(cx, cy - 4);
-    ctx.lineTo(cx, cy + 4);
-    ctx.stroke();
-    glow(ctx, cx, cy, 22, `rgba(${rgb},${(0.25 + breath * 0.2).toFixed(3)})`);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.45 + breath * 0.2;
+    RUNE.draw(ctx, (x + 5) * ART, (y + 4) * ART);
+    glowDisc(ctx, x + 8, y + 8, 9, color, 0.2 + breath * 0.06);
   }
-  if (topCap) glow(ctx, px + TILE / 2, py, 30, `rgba(${rgb},0.3)`);
-  if (floorBelow) glow(ctx, px + TILE / 2, py + TILE, 34, `rgba(${rgb},0.45)`);
   ctx.restore();
+  if (topCap) glowDisc(ctx, x + 8, y, 12, color, 0.24);
+  if (floorBelow) glowDisc(ctx, x + 8, y + TPX, 14, color, 0.32);
 }
 
-/**
- * The hydra's door: ribs of grown bone rather than the knight's forged iron, so
- * a player can tell at a glance which of the two shut behind them.
- */
-function drawLairGate(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, ty: number): void {
-  ctx.fillStyle = '#0a100b';
-  ctx.fillRect(px, py, TILE, TILE);
-  // Three ribs, thicker where they knot together.
-  for (let i = 0; i < 3; i++) {
-    const x = px + 4 + i * 10;
-    const swell = 1 + Math.sin(ty * 1.3 + i * 2.1) * 0.35;
-    ctx.fillStyle = '#3d4a35';
-    ctx.fillRect(x, py, 6, TILE);
-    ctx.fillStyle = '#6b7d55';
-    ctx.fillRect(x, py, 2, TILE);
-    ctx.fillStyle = '#2a331f';
-    ctx.fillRect(x - 1, py + TILE / 2 - 3 * swell, 8, 6 * swell);
-  }
-  // A knuckle every other tile, where the ribs are lashed together.
-  if (ty % 2 === 0) {
-    ctx.fillStyle = '#4e5c3d';
-    ctx.fillRect(px, py + 12, TILE, 7);
-    ctx.fillStyle = '#8ea070';
-    ctx.fillRect(px, py + 12, TILE, 2);
-    ctx.fillStyle = '#1d2415';
-    ctx.fillRect(px + 5, py + 14, 3, 3);
-    ctx.fillRect(px + TILE - 8, py + 14, 3, 3);
-  }
-  const pulse = 0.3 + Math.sin(time * 1.8 + ty * 0.7) * 0.14;
-  glow(ctx, px + TILE / 2, py + TILE / 2, 26, `rgba(130,220,90,${pulse.toFixed(2)})`);
-}
-
-function drawPlatform(
+/** The doors of the boss rooms in view: open and shut, so drawn every frame. */
+function drawDoors(
   ctx: CanvasRenderingContext2D,
-  px: number,
-  py: number,
-  colors: ZoneTileColors,
-  noise: number,
+  level: Level,
+  art: TerrainArt,
+  viewX: number,
+  viewY: number,
+  viewW: number,
+  viewH: number,
+  time: number,
 ): void {
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.fillRect(px, py + 10, TILE, 4);
-  if (colors.stoneLedges) {
-    ctx.fillStyle = colors.ledge;
-    ctx.fillRect(px, py, TILE, 12);
-    ctx.fillStyle = colors.ledgeEdge;
-    ctx.fillRect(px, py, TILE, 3);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(px + 4 + noise * 16, py + 5, 3, 6);
-    ctx.fillStyle = colors.topLight;
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(px, py, TILE, 1);
-    ctx.globalAlpha = 1;
-    return;
+  const left = Math.floor(viewX / TILE) - 1;
+  const right = Math.ceil((viewX + viewW) / TILE) + 1;
+  const top = Math.floor(viewY / TILE) - 1;
+  const bottom = Math.ceil((viewY + viewH) / TILE) + 1;
+  for (const door of art.doors) {
+    if (door.tx < left) continue;
+    if (door.tx > right) break;
+    if (door.ty < top || door.ty > bottom) continue;
+    switch (door.tile) {
+      case Tile.Gate:
+        if (level.gateClosed) drawGate(ctx, level, door.tx, door.ty, time);
+        break;
+      case Tile.Seal:
+        if (level.exitSealed) drawSeal(ctx, door.tx, door.ty, time);
+        break;
+      case Tile.LairGate:
+        if (level.lairClosed) drawLairGate(ctx, door.tx, door.ty, time);
+        break;
+      case Tile.Ward:
+        drawWard(ctx, level, door.tx, door.ty, time);
+        break;
+      default:
+        break;
+    }
   }
-  ctx.fillStyle = PALETTE.wood;
-  ctx.fillRect(px, py, TILE, 11);
-  ctx.fillStyle = PALETTE.woodLight;
-  ctx.fillRect(px, py, TILE, 3);
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.fillRect(px + 6 + noise * 14, py + 4, 2, 7);
-  ctx.fillStyle = colors.topLight;
-  ctx.globalAlpha = 0.35;
-  ctx.fillRect(px, py, TILE, 1);
-  ctx.globalAlpha = 1;
-  // Bolts.
-  ctx.fillStyle = '#c8b48a';
-  ctx.fillRect(px + 3, py + 5, 2, 2);
-  ctx.fillRect(px + TILE - 5, py + 5, 2, 2);
-}
-
-function drawSpikes(ctx: CanvasRenderingContext2D, px: number, py: number, noise: number): void {
-  ctx.fillStyle = '#191d2b';
-  ctx.fillRect(px, py + TILE - 6, TILE, 6);
-  const count = 4;
-  const w = TILE / count;
-  for (let i = 0; i < count; i++) {
-    const x = px + i * w;
-    const h = TILE - 4 - ((i + Math.floor(noise * 3)) % 2) * 3;
-    const g = ctx.createLinearGradient(0, py + TILE - h, 0, py + TILE);
-    g.addColorStop(0, '#f2f5ff');
-    g.addColorStop(1, PALETTE.spikeDark);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(x + w / 2, py + TILE - h);
-    ctx.lineTo(x + w - 0.5, py + TILE - 1);
-    ctx.lineTo(x + 0.5, py + TILE - 1);
-    ctx.closePath();
-    ctx.fill();
-  }
-}
-
-function drawLavaTop(ctx: CanvasRenderingContext2D, px: number, py: number, time: number, tx: number): void {
-  const wobble = Math.sin(time * 2.4 + tx * 0.8) * 2.5;
-  ctx.fillStyle = '#c9411a';
-  ctx.fillRect(px, py + 4, TILE, TILE - 4);
-  const g = ctx.createLinearGradient(0, py, 0, py + TILE);
-  g.addColorStop(0, '#ffd166');
-  g.addColorStop(0.35, PALETTE.lava);
-  g.addColorStop(1, '#a12d10');
-  ctx.fillStyle = g;
-  ctx.fillRect(px, py + 4 + wobble, TILE, TILE - 4 - wobble);
-  ctx.fillStyle = 'rgba(255,220,150,0.65)';
-  ctx.fillRect(px, py + 4 + wobble, TILE, 2);
-  glow(ctx, px + TILE / 2, py + 6, 34, 'rgba(255,120,40,0.20)');
 }
