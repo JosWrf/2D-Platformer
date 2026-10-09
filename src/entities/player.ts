@@ -1,10 +1,24 @@
 import { audio } from '../core/audio';
 import { Input } from '../core/input';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
-import { PALETTE } from '../render/palette';
-import { glow, shadow, slashCrescent, withHitFlash } from '../render/sprites';
-import { snap } from '../render/pixel';
-import { type HeroFrame, drawHero } from './heroArt';
+import { PALETTE, RAMP } from '../render/palette';
+import { withHitFlash } from '../render/sprites';
+import { ART, makeCanvas, snap } from '../render/pixel';
+import { type HeroFrame, drawGhost, heroSprite, throughNight } from './heroArt';
+import {
+  type DirName,
+  type Stamp,
+  type SwingArt,
+  type SwingKind,
+  SWING_ART,
+  blade,
+  keyFrame,
+  moteHeart,
+  ring,
+  silkThreads,
+  smear,
+  tipAngle,
+} from './heroSlash';
 import { TILE } from '../world/tiles';
 import type { Level } from '../world/level';
 import type { World } from '../world/context';
@@ -1284,22 +1298,18 @@ export class Player extends Body {
     return this.motes.map((m) => ({ x: m.x, y: m.y, radius: 46 + 10 * Math.min(1, m.life), rgb: '255,236,160', strength: 0.75, tint: 0.4 }));
   }
 
+  /**
+   * The hearts he lost, where they lie: a small gold heart each, bobbing a
+   * pixel once it has landed. The last second it blinks out and back, faster
+   * as it goes - there or not there, never half there. Its glow is the light
+   * pass's (moteLights), not a haze on the actors' layer.
+   */
   private drawMotes(ctx: CanvasRenderingContext2D): void {
+    const heart = moteHeart();
     for (const m of this.motes) {
-      // The last second it blinks, faster as it goes.
-      const fading = m.life < 1 ? 0.45 + 0.55 * Math.abs(Math.sin(m.life * 14)) : 1;
-      const bob = m.landed ? Math.sin(m.life * 6) * 2 : 0;
-      glow(ctx, m.x, m.y + bob, 18, `rgba(255,236,160,${(0.55 * fading).toFixed(2)})`);
-      ctx.save();
-      ctx.globalAlpha = fading;
-      ctx.translate(m.x, m.y + bob);
-      ctx.fillStyle = '#fff4c8';
-      ctx.beginPath();
-      ctx.moveTo(0, 5);
-      ctx.bezierCurveTo(-7, -1, -4, -7, 0, -3);
-      ctx.bezierCurveTo(4, -7, 7, -1, 0, 5);
-      ctx.fill();
-      ctx.restore();
+      if (m.life < 1 && Math.floor(m.life * (10 + (1 - m.life) * 14)) % 2 === 1) continue;
+      const bob = m.landed && Math.floor(m.life * 3) % 2 === 0 ? ART : 0;
+      ctx.drawImage(heart.canvas, snap(m.x) - heart.ox * ART, snap(m.y) - heart.oy * ART + bob, heart.w * ART, heart.h * ART);
     }
   }
 
@@ -1318,30 +1328,22 @@ export class Player extends Body {
   draw(ctx: CanvasRenderingContext2D, world: World): void {
     for (const e of this.skillEffects) e.draw(ctx);
     if (this.motes.length) this.drawMotes(ctx);
-    for (const t of this.trail) {
-      ctx.globalAlpha = t.life * 0.3;
-      ctx.fillStyle = '#8fc4ff';
-      ctx.fillRect(t.x + 3, t.y + 3, this.w - 6, this.h - 6);
-    }
-    ctx.globalAlpha = 1;
-
-    const groundDist = world.level.groundBelow(this.cx, this.bottom - 2, 8);
-    shadow(ctx, this.cx, this.bottom + Math.min(groundDist, 200), 26 * clamp(1 - groundDist / 260, 0.3, 1), 0.3 * clamp(1 - groundDist / 260, 0.2, 1));
-
-    const pose = this.attackTimer > 0 ? this.swingPose(ATTACK_TOTAL - this.attackTimer) : null;
+    // On the grid: the left edge of the middle column of his hitbox, and the
+    // bottom of the row he stands on.
+    const mid = snap(this.x) + 8;
+    const feet = snap(this.bottom);
+    this.drawContact(ctx, world, mid);
+    if (this.trail.length) this.drawAfterimages(ctx);
 
     // Untouchable after a blow: there one moment and gone the next, three
-    // frames each, rather than half there all the time.
+    // frames each, rather than half there all the time. Not while the blow
+    // still has him reeling - that he has to be seen taking.
     const hidden = this.invuln > 0 && this.hurtTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 1;
     if (!hidden) {
-      // On the grid: the middle column of the hitbox, and the row under his feet.
-      const mid = snap(this.x) + 8;
-      const feet = snap(this.bottom);
-      withHitFlash(ctx, this.flash, (c) => drawHero(c, this.frame(), mid, feet, this.facing));
+      const look = this.look();
+      withHitFlash(ctx, this.flash, (c) => this.drawFigure(c, look, mid, feet));
     }
-
-    if (pose) this.drawSwing(ctx, pose);
-    this.drawGuard(ctx);
+    this.drawGuard(ctx, mid, feet);
   }
 
   /** Just after a combo, while the blade goes back over his shoulder. */
@@ -1349,217 +1351,267 @@ export class Player extends Body {
     return this.sheathTimer > 0 && this.sheathPose !== null && this.sheathReach > 0;
   }
 
-  /** The frame of him that fits what he is doing. */
-  private frame(): HeroFrame {
-    if (this.sheathing && this.onGround) return 'idle0';
-    if (!this.onGround) {
-      if (this.vy < -250) return 'jump0';
-      if (this.vy < 80) return 'jump1';
-      return this.vy < 420 ? 'fall0' : 'fall1';
+  /**
+   * What to draw of him this frame: the frame, the sword in his hand if it
+   * is there - which way it points, how long it is, whether it is behind him
+   * - and the slash it leaves.
+   */
+  private look(): Look {
+    const air = !this.onGround;
+    if (this.hurtTimer > 0) {
+      // Struck, then reeling: the first frame for the first half of the stun.
+      const split = this.has('keilerhaut') ? 0.05 : 0.14;
+      return { frame: this.hurtTimer > split ? 'hurt0' : 'hurt1' };
     }
-    if (this.squash > 0.12) return 'land';
-    if (Math.abs(this.vx) > 25) return RUN_FRAMES[Math.floor(this.runCycle * RUN_PACE) % 8];
-    return IDLE_FRAMES[Math.floor(this.runCycle * IDLE_PACE) % 4];
+    if (this.dashTimer > 0) return { frame: this.rollFrame(this.sinceDash, air) };
+    if (this.attackTimer > 0) return this.swingLook(air);
+    if (this.parryTimer > 0) {
+      return { frame: air ? 'air_parry' : 'parry', blade: { dir: 'upFwdSteep', length: 10, behind: false } };
+    }
+    if (this.sheathing && this.sheathTimer > SHEATH_TIME / 2) {
+      // Back over the shoulder: from up in the air after a rising cut, from
+      // low in front after the others - either way, behind him now.
+      const length = Math.round(clamp(this.sheathReach / ART - 4, 9, 13));
+      const dir: DirName = (this.sheathPose?.angle ?? 0) < -0.5 ? 'upBackSteep' : 'upBack';
+      return { frame: air ? 'air_sheath' : 'sheath', blade: { dir, length, behind: true } };
+    }
+    const charging = this.chargeTimer > 0;
+    let frame: HeroFrame;
+    if (air) {
+      frame = this.vy < -250 ? 'jump0' : this.vy < 80 ? 'jump1' : this.vy < 420 ? 'fall0' : 'fall1';
+      if (charging) frame = (this.vy < -250 ? 'jump_c0' : this.vy < 80 ? 'jump_c1' : this.vy < 420 ? 'fall_c0' : 'fall_c1');
+    } else if (this.squash > 0.12) {
+      frame = charging ? 'idle_c0' : 'land';
+    } else if (Math.abs(this.vx) > 25) {
+      frame = (charging ? RUN_CHARGE_FRAMES : RUN_FRAMES)[Math.floor(this.runCycle * RUN_PACE) % 8];
+    } else {
+      frame = (charging ? IDLE_CHARGE_FRAMES : IDLE_FRAMES)[Math.floor(this.runCycle * IDLE_PACE) % 4];
+    }
+    if (!charging) return { frame };
+    // The heavy strike wound up: the sword out, trailing low behind him, and
+    // once it is ready, burning - flaring and settling eight times a second.
+    const hot = this.chargeReady && Math.floor(this.runCycle * 4) % 2 === 0;
+    return { frame, blade: { dir: 'backDown', length: 12, behind: true, hot } };
   }
 
   /**
-   * The two things the player has to read off the hero at a glance: how far the
-   * heavy strike is wound up, and whether the parry window is open right now.
+   * The roll: diving in, four quarter turns of the tucked ball, coming out -
+   * by the time since it began. A roll that lasts longer than his own (the
+   * warden's crystal charge) keeps turning the ball; one in the air never
+   * lands in the crouch either end.
    */
-  private drawGuard(ctx: CanvasRenderingContext2D): void {
-    const cx = this.cx;
-    const cy = this.cy - 2;
+  private rollFrame(age: number, air: boolean): HeroFrame {
+    if (age > DASH_TIME * 1.8) return ROLL_FRAMES[1 + (Math.floor(this.dashTimer * 36) % 4)];
+    const i = Math.min(5, Math.floor((age / DASH_TIME) * 6));
+    return ROLL_FRAMES[air ? 1 + (Math.min(4, Math.max(1, i)) - 1) : i];
+  }
+
+  /**
+   * A swing, by its own clock: wound up, then the strike with the crescent
+   * growing behind the blade, the whole crescent as the blade follows
+   * through, the crescent thinning away, and the recovery.
+   */
+  private swingLook(air: boolean): Look {
+    const kind: SwingKind = this.charged ? 'heavy' : SWING_KINDS[Math.max(0, this.attackCombo - 1)];
+    const art = SWING_ART[kind];
+    const e = ATTACK_TOTAL - this.attackTimer;
+    if (e < ATTACK_WINDUP) return this.keyLook(art.wind, air);
+    if (e >= ATTACK_WINDUP + ATTACK_ACTIVE) return this.keyLook(art.recover, air);
+    const t = (e - ATTACK_WINDUP) / ATTACK_ACTIVE;
+    if (t < 0.17) {
+      const look = this.keyLook(art.strike, air);
+      const hand = heroSprite(keyFrame(art.strike, false)).hand;
+      const head = hand ? tipAngle(kind, { x: hand.x, y: -hand.y }, art.strike) : art.sweep[1];
+      look.smear = { kind, frame: 1, head };
+      return look;
+    }
+    const look = this.keyLook(art.follow, air);
+    if (t < 0.85) look.smear = { kind, frame: t < 0.5 ? 2 : 3, head: art.sweep[1] };
+    return look;
+  }
+
+  private keyLook(key: SwingArt['wind'], air: boolean): Look {
+    return {
+      frame: keyFrame(key, air),
+      // A blade wound up behind his head or shoulder is behind him.
+      blade: { dir: key.dir, length: key.length, behind: key.pose === 'high' || key.pose === 'back' },
+    };
+  }
+
+  /**
+   * Him, the sword in his hand and the slash, put together in a small canvas
+   * of their own and laid down in one piece - facing right, or mirrored about
+   * the middle column of his hitbox. What lies behind him (the crescent, a
+   * blade held behind his head) is cut back a pixel all round his outline
+   * first, so the actors' outline runs between it and him and he stays one
+   * readable shape in front of his own slash.
+   */
+  private drawFigure(ctx: CanvasRenderingContext2D, look: Look, mid: number, feet: number): void {
+    const { canvas, ctx: f } = figureCanvas();
+    f.clearRect(0, 0, FIGURE_W, FIGURE_H);
+    const body = heroSprite(look.frame);
+    const bx = FIGURE_X - body.anchor;
+    const by = FIGURE_Y - body.h + 1;
+    let behind = false;
+    if (look.smear) {
+      const s = smear(look.smear.kind, look.smear.frame, look.smear.head);
+      // In the air he is drawn a pixel higher, and his slash with him.
+      f.drawImage(s.canvas, FIGURE_X - s.ox, FIGURE_Y - s.oy - (look.frame.startsWith('air') ? 1 : 0));
+      behind = true;
+    }
+    const hand = body.hand;
+    const sword = look.blade && hand ? blade(look.blade.dir, look.blade.length, look.blade.hot) : null;
+    const hx = FIGURE_X + (hand?.x ?? 0);
+    const hy = FIGURE_Y - (hand?.y ?? 0);
+    if (sword && look.blade?.behind) {
+      f.drawImage(sword.canvas, hx - sword.ox, hy - sword.oy);
+      behind = true;
+    }
+    if (behind) {
+      f.globalCompositeOperation = 'destination-out';
+      for (const [dx, dy] of MOAT) f.drawImage(body.sprite.canvas, bx + dx, by + dy);
+      f.globalCompositeOperation = 'source-over';
+    }
+    f.drawImage(body.sprite.canvas, bx, by);
+    if (sword && !look.blade?.behind) f.drawImage(sword.canvas, hx - sword.ox, hy - sword.oy);
+
+    const y = feet - (FIGURE_Y + 1) * ART;
+    if (this.facing > 0) {
+      ctx.drawImage(canvas, mid - FIGURE_X * ART, y, FIGURE_W * ART, FIGURE_H * ART);
+    } else {
+      // Mirrored about the middle column: an even flip of whole art pixels.
+      ctx.save();
+      ctx.translate(mid + (FIGURE_X + 1) * ART, y);
+      ctx.scale(-1, 1);
+      ctx.drawImage(canvas, 0, 0, FIGURE_W * ART, FIGURE_H * ART);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Where he stands: one row of the ground under his feet, darkened by half
+   * - as an even pattern once the actors' layer is settled onto the grid. In
+   * the air it waits on the ground below him, narrowing as he rises, and is
+   * gone above a few tiles.
+   */
+  private drawContact(ctx: CanvasRenderingContext2D, world: World, mid: number): void {
+    const gap = world.level.groundBelow(this.cx, this.bottom - 2, 4) - 2;
+    if (gap > 120) return;
+    const half = Math.round(5 * (1 - Math.max(0, gap) / 160));
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = CONTACT;
+    ctx.fillRect(mid - half * ART, snap(this.bottom + Math.max(0, gap)), (half * 2 + 1) * ART, ART);
+    ctx.globalAlpha = 1;
+  }
+
+  /**
+   * The roll's after-images: at most three, opaque, each his silhouette in two
+   * blues - paler the closer it is to him - where he was a moment ago.
+   */
+  private drawAfterimages(ctx: CanvasRenderingContext2D): void {
+    // Every third of the places he left, so that they stand apart.
+    let drawn = 0;
+    for (let i = this.trail.length - 3; i >= 0 && drawn < 3; i -= 3) {
+      const t = this.trail[i];
+      if (t.life < 0.25) break;
+      const age = (1 - t.life) / 3.2;
+      const frame = this.rollFrame(Math.max(0, this.sinceDash - age), false);
+      drawGhost(ctx, frame, drawn, snap(t.x) + 8, snap(t.y + this.h), t.facing > 0 ? 1 : -1);
+      drawn++;
+    }
+  }
+
+  /**
+   * The tells round him, in whole pixels: how far the heavy strike is wound
+   * up (a ring closing in on him, pale and pulsing once it is ready), whether
+   * the guard is open (a crescent on the side he faces, thinning as the
+   * window closes), a parry landing and something saving him (rings thrown
+   * out), and Arachna's silk while it holds.
+   */
+  private drawGuard(ctx: CanvasRenderingContext2D, mid: number, feet: number): void {
+    // Centred on his chest: the middle column, nine rows up.
+    const cx = mid;
+    const cy = feet - 9 * ART;
+    const at = (s: Stamp): void => ctx.drawImage(s.canvas, cx - s.ox * ART, cy - s.oy * ART, s.w * ART, s.h * ART);
 
     if (this.chargeTimer > 0) {
       const t = Math.min(1, this.chargeTimer / this.chargeTime);
-      // A ring drawing inwards while winding up, a steady halo once ready.
-      const radius = this.chargeReady ? 26 + Math.sin(this.runCycle * 8) * 2 : 46 - t * 20;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = this.chargeReady ? 'rgba(200,240,255,0.85)' : `rgba(150,205,255,${(0.2 + t * 0.4).toFixed(2)})`;
-      ctx.lineWidth = this.chargeReady ? 2 : 1.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
-      if (this.chargeReady) glow(ctx, cx, cy, 34, 'rgba(160,220,255,0.4)', 0.8);
+      if (this.chargeReady) {
+        at(ring(13 + (Math.floor(this.runCycle * 4) % 2), 1, GUARD_LIT, GUARD_LIT));
+      } else {
+        at(ring(Math.round(23 - t * 10), 1, GUARD_BODY, GUARD_BODY));
+      }
     }
 
     if (this.parryTimer > 0) {
-      // A guard arc on the side the hero is facing.
       const t = this.parryTimer / this.parryWindow;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(210,244,255,${(0.35 + t * 0.5).toFixed(2)})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, 22, this.facing > 0 ? -1.05 : Math.PI - 1.05, this.facing > 0 ? 1.05 : Math.PI + 1.05);
-      ctx.stroke();
-      ctx.restore();
+      const from = this.facing > 0 ? -60 : 120;
+      const s = ring(11, t > 0.34 ? 2 : 1, GUARD_LIT, GUARD_GLOW, from, from + 120);
+      at(s);
     }
 
     if (this.parryFlash > 0) {
-      const r = 20 + (1 - this.parryFlash) * 46;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(220,246,255,${(this.parryFlash * 0.8).toFixed(2)})`;
-      ctx.lineWidth = 3 * this.parryFlash + 0.5;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
+      const k = 1 - this.parryFlash;
+      at(ring(Math.round(10 + k * 23), this.parryFlash > 0.5 ? 2 : 1, GUARD_LIT, GUARD_GLOW));
     }
 
     if (this.shieldUp) {
-      // Arachna's silk: a few fine threads wound round him, catching the light.
-      // Thin and still on purpose - it is there to be noticed when it is gone.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(220,232,246,0.32)';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 3; i++) {
-        const tilt = -0.5 + i * 0.5;
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, 15, 22 - i * 2, tilt, 0, TAU);
-        ctx.stroke();
-      }
-      ctx.restore();
+      ctx.globalAlpha = 0.45;
+      at(silkThreads());
+      ctx.globalAlpha = 1;
     }
 
     if (this.saveFlash > 0) {
-      // Something just stood between him and the blow: a ring in its colour.
-      const r = 18 + (1 - this.saveFlash) * 60;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = this.saveFlash;
-      ctx.strokeStyle = this.saveColor;
-      ctx.lineWidth = 2 + 3 * this.saveFlash;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
+      const k = 1 - this.saveFlash;
+      const color = this.saveColor === SILK_SAVE ? GUARD_LIT : SECOND_WIND;
+      at(ring(Math.round(9 + k * 30), this.saveFlash > 0.6 ? 3 : this.saveFlash > 0.3 ? 2 : 1, color, color));
     }
-  }
-
-  /** The blade, its trail and the after-images that sell the speed. */
-  private drawSwing(ctx: CanvasRenderingContext2D, pose: SwingPose): void {
-    const dir = this.facing;
-    const combo = Math.max(1, this.attackCombo);
-    const swing = this.swingShape;
-    const elapsed = ATTACK_TOTAL - this.attackTimer;
-    const hand = this.handWorld(pose);
-
-    const reach = this.bladeReach(pose);
-
-    const drawBladeAt = (at: SwingPose, alpha: number): void => {
-      const grip = this.handWorld(at);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      ctx.translate(grip.x, grip.y);
-      ctx.scale(dir, 1);
-      ctx.rotate(at.angle);
-      this.drawBlade(ctx, this.bladeReach(at));
-      ctx.restore();
-      ctx.globalAlpha = 1;
-    };
-
-    /**
-     * The crescent is drawn in facing space and mirrored by the scale, not by
-     * negating its angles - negated angles flip it across the wrong axis and
-     * the trail ends up on the wrong side of a left-facing hero.
-     */
-    const drawTrail = (
-      from: number,
-      to: number,
-      radius: number,
-      thickness: number,
-      color: string,
-      alpha: number,
-    ): void => {
-      ctx.save();
-      ctx.translate(hand.x, hand.y);
-      ctx.scale(dir, 1);
-      slashCrescent(ctx, 0, 0, radius, from, to, thickness, color, alpha);
-      ctx.restore();
-    };
-
-    if (pose.phase === 'active') {
-      // After-images of the blade itself.
-      for (const [lag, alpha] of [
-        [0.042, 0.1],
-        [0.022, 0.18],
-      ] as const) {
-        if (elapsed - lag <= ATTACK_WINDUP) continue;
-        drawBladeAt(this.swingPose(elapsed - lag), alpha);
-      }
-    }
-
-    if (pose.phase !== 'windup') {
-      // The crescent spans from where the blade was a few frames ago to now.
-      const tail = this.swingPose(Math.max(ATTACK_WINDUP, elapsed - 0.09)).angle;
-      const fade =
-        pose.phase === 'active'
-          ? Math.min(1, 0.35 + pose.t * 3)
-          : Math.max(0, 1 - easeOut(pose.t, 1.6));
-      drawTrail(tail, pose.angle, reach * 0.98, swing.trail, PALETTE.bladeGlow, 0.9 * fade);
-
-      // A second, wider echo makes the finisher read as the heavy hit.
-      if (combo === 3) {
-        const echo = this.swingPose(Math.max(ATTACK_WINDUP, elapsed - 0.05)).angle;
-        drawTrail(echo, pose.angle, reach * 1.22, swing.trail * 0.55, '#bfe9ff', 0.5 * fade);
-      }
-    }
-
-    drawBladeAt(pose, 1);
-
-    // The tip flares as the blade reaches full speed.
-    const tip = this.bladeTip(pose);
-    if (pose.phase === 'active') {
-      const heat = Math.sin(Math.PI * Math.min(1, pose.t * 1.15));
-      glow(ctx, tip.x, tip.y, combo === 3 ? 26 : 19, 'rgba(200,244,255,0.55)', heat);
-      glow(ctx, hand.x, hand.y, 14, 'rgba(150,220,255,0.35)', heat * 0.7);
-    }
-  }
-
-  /**
-   * The sword pointing along +x from the hand: wrapped grip, round pommel,
-   * gold cross guard and a tapered blade with a fuller down the middle.
-   */
-  private drawBlade(ctx: CanvasRenderingContext2D, length: number, scale = 1): void {
-    const half = 2.2 * scale;
-    // Grip and pommel.
-    ctx.fillStyle = '#4b2f1c';
-    ctx.fillRect(-8 * scale, -1.5 * scale, 7 * scale, 3 * scale);
-    ctx.fillStyle = '#6b4326';
-    ctx.fillRect(-7 * scale, -1.5 * scale, 1.4 * scale, 3 * scale);
-    ctx.fillRect(-4.4 * scale, -1.5 * scale, 1.4 * scale, 3 * scale);
-    ctx.fillStyle = PALETTE.gold;
-    ctx.beginPath();
-    ctx.arc(-9 * scale, 0, 1.9 * scale, 0, TAU);
-    ctx.fill();
-    // Cross guard, with a lit edge on the blade side.
-    ctx.fillRect(-1.6 * scale, -4.8 * scale, 3.2 * scale, 9.6 * scale);
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.fillRect(0.4 * scale, -4.8 * scale, 1.2 * scale, 9.6 * scale);
-    // Blade.
-    const grad = ctx.createLinearGradient(0, 0, length, 0);
-    grad.addColorStop(0, '#7f97ba');
-    grad.addColorStop(0.4, PALETTE.blade);
-    grad.addColorStop(0.88, '#ffffff');
-    grad.addColorStop(1, '#e8f8ff');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(1.6 * scale, -half);
-    ctx.lineTo(length - 9 * scale, -half * 0.8);
-    ctx.lineTo(length, 0);
-    ctx.lineTo(length - 9 * scale, half * 0.8);
-    ctx.lineTo(1.6 * scale, half);
-    ctx.closePath();
-    ctx.fill();
-    // Fuller and the highlight along the upper edge.
-    ctx.fillStyle = 'rgba(56,96,150,0.55)';
-    ctx.fillRect(3 * scale, -0.5 * scale, length - 12 * scale, 1 * scale);
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.fillRect(3 * scale, -half + 0.3 * scale, length - 11 * scale, 0.9 * scale);
   }
 }
+
+/** What to draw of him: see Player.look. */
+interface Look {
+  frame: HeroFrame;
+  blade?: { dir: DirName; length: number; behind: boolean; hot?: boolean };
+  smear?: { kind: SwingKind; frame: 1 | 2 | 3; head: number };
+}
+
+/** The swings of the combo, in order; the heavy strike stands apart. */
+const SWING_KINDS: readonly SwingKind[] = ['cut', 'rise', 'wide'];
+
+/** The roll: in, four quarter turns, out. */
+const ROLL_FRAMES: readonly HeroFrame[] = ['roll0', 'roll1', 'roll2', 'roll3', 'roll4', 'roll5'];
+const RUN_CHARGE_FRAMES: readonly HeroFrame[] = ['run_c0', 'run_c1', 'run_c2', 'run_c3', 'run_c4', 'run_c5', 'run_c6', 'run_c7'];
+const IDLE_CHARGE_FRAMES: readonly HeroFrame[] = ['idle_c0', 'idle_c1', 'idle_c2', 'idle_c3'];
+
+/**
+ * The canvas he is put together in, in art pixels: big enough for the heavy
+ * strike's crescent either side of him. (FIGURE_X, FIGURE_Y) is where the
+ * middle column of his hitbox meets the row he stands on.
+ */
+const FIGURE_W = 96;
+const FIGURE_H = 64;
+const FIGURE_X = 40;
+const FIGURE_Y = 44;
+let figure: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
+function figureCanvas(): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  figure ??= makeCanvas(FIGURE_W, FIGURE_H);
+  return figure;
+}
+
+/** His outline and a pixel round it, as offsets of his silhouette. */
+const MOAT: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+const CONTACT = RAMP.slate[0];
+const GUARD_LIT = throughNight(RAMP.slate[6]);
+const GUARD_GLOW = throughNight(RAMP.blue[4]);
+const GUARD_BODY = throughNight(RAMP.blue[3]);
+const SECOND_WIND = throughNight(RAMP.violet[4]);
+/** The colour the silk's rescue is flagged with (see hurt()). */
+const SILK_SAVE = '#e6eef8';
