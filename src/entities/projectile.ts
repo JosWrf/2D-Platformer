@@ -1,9 +1,29 @@
-import { Rect, rand, rectsOverlap } from '../core/math';
+import { Rect, clamp, rand, rectsOverlap } from '../core/math';
 import { PALETTE } from '../render/palette';
+import { dirIndex } from '../render/sheet';
 import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { TILE } from '../world/tiles';
 import { Body } from './entity';
+import {
+  BEAM,
+  BLOB,
+  BLOOD,
+  BONE,
+  COIN,
+  type CrestFrame,
+  EMBER,
+  FIRE_CREST,
+  KNIFE,
+  MAGMA,
+  ORB,
+  QUAKE,
+  ROCK,
+  SHARD,
+  SPOUT,
+  WATER_CREST,
+  WEB,
+} from './projectile-art';
 
 export type ProjectileKind =
   | 'orb'
@@ -472,72 +492,39 @@ export class Projectile extends Body {
     }
   }
 
+  /**
+   * Every kind as frames of art pixels (see projectile-art.ts): what turns over
+   * in the air turns over in drawn frames, what points the way it flies has a
+   * frame for each of the eight ways, and the crescents that thin out at the
+   * end of their flight do it in smaller frames, not in alpha. A glow goes
+   * round what burns or shines; on the actor layer it comes out as a thin
+   * pattern of pixels, never as a halo with a dark rim.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     const cx = this.cx;
     const cy = this.cy;
+    const dir: 1 | -1 = this.vx < 0 ? -1 : 1;
+    const turn = (rate: number, frames: number): number =>
+      ((Math.floor((this.spin * rate * frames) / (Math.PI * 2)) % frames) + frames) % frames;
     switch (this.kind) {
       case 'beam': {
         // A crescent of light, leaning the way it flies, with the tips drawn
-        // back: it has to read as thrown off a blade, not as a bullet.
-        const dir = Math.sign(this.vx) || 1;
-        const fade = Math.max(0, Math.min(1, this.life / 0.4));
-        // The first tier of the blade throws water rather than light, and a
+        // back: it has to read as thrown off a blade, not as a bullet. The
+        // first tier of the blade throws water rather than light, and a
         // smaller crescent: the eye should be able to tell them apart.
-        const size = this.water ? 0.8 : 1;
-        glow(
-          ctx,
-          cx,
-          cy,
-          26 * fade * size,
-          this.dark
-            ? `rgba(150,80,255,${(0.45 * fade).toFixed(2)})`
-            : this.water
-              ? `rgba(140,235,220,${(0.35 * fade).toFixed(2)})`
-              : `rgba(150,230,255,${(0.4 * fade).toFixed(2)})`,
-        );
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(dir * size, size);
-        // The shadow's crescent is a cut of darkness with a violet edge: drawn
-        // over, not added on, or it would come out as light.
-        ctx.globalCompositeOperation = this.dark ? 'source-over' : 'lighter';
-        const [edge, core] = this.dark ? ['#8a4cff', '#14061f'] : this.water ? ['#3fc8b8', '#dcfaf2'] : ['#5ec8ff', '#e8fbff'];
-        for (const [w, alpha, color] of [
-          [1, 0.5 * fade, edge],
-          [0.62, 0.85 * fade, core],
-        ] as const) {
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.moveTo(13 * w, 0);
-          ctx.quadraticCurveTo(2 * w, -11 * w, -13 * w, -8 * w);
-          ctx.quadraticCurveTo(-1 * w, 0, -13 * w, 8 * w);
-          ctx.quadraticCurveTo(2 * w, 11 * w, 13 * w, 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
+        const fade = clamp(this.life / 0.4, 0, 1);
+        const frame = this.water ? (fade > 0.5 ? 'mid' : 'small') : fade > 0.66 ? 'big' : fade > 0.33 ? 'mid' : 'small';
+        const glowColor = this.dark ? '#db3ffd' : this.water ? '#94fdff' : '#0cf1ff';
+        glow(ctx, cx, cy, (this.water ? 18 : 22) * (0.5 + fade * 0.5), glowColor, 0.45 * fade);
+        BEAM.draw(ctx, frame, cx, cy, 7, 5, dir, this.dark ? 'dark' : this.water ? 'water' : '');
         break;
       }
       case 'blob': {
-        // A wobbling drop of slime, squashed along the way it is flying, with a
-        // brighter skin on top so it reads as wet rather than as a rock.
-        const wob = Math.sin(this.spin * 1.6) * 0.14;
-        glow(ctx, cx, cy, 16, 'rgba(150,225,110,0.4)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(Math.atan2(this.vy, this.vx) * 0.35);
-        ctx.scale(1.15 + wob, 0.85 - wob);
-        ctx.fillStyle = this.friendly ? '#bdf0a0' : '#77c246';
-        ctx.beginPath();
-        ctx.arc(0, 0, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(220,255,190,0.75)';
-        ctx.beginPath();
-        ctx.ellipse(-2, -2.5, 3.4, 2.2, -0.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        // A drop of slime, drawn stretched along the way it is going.
+        const ax = Math.abs(this.vx);
+        const ay = Math.abs(this.vy);
+        const frame = ax > ay * 1.6 ? 'wide' : ay > ax * 1.6 ? 'tall' : 'round';
+        BLOB.draw(ctx, frame, cx, cy, 4, 4, dir, this.friendly ? 'friendly' : '');
         break;
       }
       case 'ember': {
@@ -548,301 +535,90 @@ export class Projectile extends Body {
          * threat or already a tool.
          */
         const hot = this.friendly;
-        glow(ctx, cx, cy, hot ? 26 : 20, hot ? 'rgba(255,220,140,0.6)' : 'rgba(255,130,50,0.5)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(Math.atan2(this.vy, this.vx));
-        const len = hot ? 20 : 11;
-        const tail = ctx.createLinearGradient(-len, 0, len * 0.5, 0);
-        tail.addColorStop(0, 'rgba(255,120,40,0)');
-        tail.addColorStop(1, hot ? 'rgba(255,238,190,0.95)' : 'rgba(255,168,70,0.9)');
-        ctx.fillStyle = tail;
-        ctx.beginPath();
-        ctx.moveTo(-len, 0);
-        ctx.lineTo(0, -7);
-        ctx.lineTo(len * 0.5, 0);
-        ctx.lineTo(0, 7);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = hot ? '#fffbe8' : '#ffd28a';
-        ctx.beginPath();
-        ctx.arc(0, 0, hot ? 5 : 4.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        glow(ctx, cx, cy, hot ? 24 : 18, hot ? '#ffeb57' : '#ffa214', 0.55);
+        const w = hot ? 13 : 11;
+        EMBER.draw(ctx, `${hot ? 'f' : 'h'}${dirIndex(this.vx, this.vy)}`, cx, cy, w >> 1, w >> 1, 1);
         break;
       }
       case 'magma': {
-        // A clot of rock with fire showing through its cracks.
+        // A clot of rock with fire showing through its cracks, turning over.
         const hot = this.friendly;
-        glow(ctx, cx, cy, 22, hot ? 'rgba(255,230,160,0.55)' : 'rgba(255,110,40,0.5)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(this.spin * 0.6);
-        ctx.fillStyle = hot ? '#ffe7a8' : '#3a2320';
-        ctx.beginPath();
-        ctx.moveTo(-8, -3);
-        ctx.lineTo(-3, -8);
-        ctx.lineTo(6, -6);
-        ctx.lineTo(9, 2);
-        ctx.lineTo(3, 8);
-        ctx.lineTo(-6, 6);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = hot ? '#fffbe8' : '#ff9a3a';
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(-5, -1);
-        ctx.lineTo(0, 1);
-        ctx.lineTo(4, -3);
-        ctx.moveTo(0, 1);
-        ctx.lineTo(1, 6);
-        ctx.stroke();
-        ctx.restore();
+        glow(ctx, cx, cy, 18, hot ? '#ffeb57' : '#ed7614', 0.45);
+        MAGMA.draw(ctx, `m${turn(0.6, 8)}`, cx, cy, 4, 4, 1, hot ? 'friendly' : '');
         break;
       }
       case 'blood': {
         // A crescent of blood, the tips swept back the way it came from.
-        const dir = Math.sign(this.vx) || 1;
-        const fade = Math.max(0, Math.min(1, this.life / 0.4));
-        const hot = this.friendly;
-        glow(ctx, cx, cy, 24 * fade, hot ? 'rgba(255,200,215,0.45)' : 'rgba(220,30,60,0.45)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(dir, 1);
-        for (const [w, color] of [
-          [1, hot ? '#ff9fb4' : '#8a0a22'],
-          [0.6, hot ? '#fff0f3' : '#ff4a68'],
-        ] as const) {
-          ctx.globalAlpha = fade;
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.moveTo(13 * w, 0);
-          ctx.quadraticCurveTo(2 * w, -11 * w, -13 * w, -9 * w);
-          ctx.quadraticCurveTo(-2 * w, 0, -13 * w, 9 * w);
-          ctx.quadraticCurveTo(2 * w, 11 * w, 13 * w, 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        ctx.restore();
+        const fade = clamp(this.life / 0.4, 0, 1);
+        glow(ctx, cx, cy, 20 * (0.5 + fade * 0.5), this.friendly ? '#fdd2ed' : '#ea323c', 0.45 * fade);
+        BLOOD.draw(ctx, fade > 0.66 ? 'big' : fade > 0.33 ? 'mid' : 'small', cx, cy, 7, 5, dir, this.friendly ? 'friendly' : '');
         break;
       }
       case 'orb': {
-        const color = this.friendly ? '#8fe6ff' : '#d46bf0';
-        glow(ctx, cx, cy, 18, this.friendly ? 'rgba(140,230,255,0.55)' : 'rgba(210,90,240,0.5)');
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(cx - 1.5, cy - 1.5, 2.4, 0, Math.PI * 2);
-        ctx.fill();
+        glow(ctx, cx, cy, 18, this.friendly ? '#94fdff' : '#db3ffd', 0.55);
+        ORB.draw(ctx, `o${turn(1.4, 4)}` as 'o0', cx, cy, 3, 3, 1, this.friendly ? 'friendly' : '');
         break;
       }
       case 'bone': {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(this.spin);
-        ctx.fillStyle = PALETTE.skeleton;
-        ctx.fillRect(-6, -2, 12, 4);
-        ctx.fillRect(-7, -4, 3, 8);
-        ctx.fillRect(4, -4, 3, 8);
-        ctx.restore();
+        BONE.draw(ctx, `b${turn(2, 4)}` as 'b0', cx, cy, 3, 3, 1);
         break;
       }
       case 'rock': {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(this.spin * 0.5);
-        ctx.fillStyle = '#6b5747';
-        ctx.beginPath();
-        ctx.moveTo(-10, -4);
-        ctx.lineTo(-3, -10);
-        ctx.lineTo(8, -6);
-        ctx.lineTo(10, 4);
-        ctx.lineTo(1, 10);
-        ctx.lineTo(-8, 6);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#8a7460';
-        ctx.fillRect(-4, -4, 5, 4);
-        ctx.restore();
+        ROCK.draw(ctx, `r${turn(0.5, 8)}`, cx, cy, 6, 6, 1);
         break;
       }
       case 'quake': {
         // Stone thrown up off the floor in a running crest, golden with the
         // light that is still in it - his fist, not the knight's fire.
         const a = Math.min(1, this.life / 0.35);
-        const dir = Math.sign(this.vx) || 1;
         const base = this.y + this.h;
-        glow(ctx, cx, base - 6, 30, this.dark ? 'rgba(150,90,255,0.4)' : 'rgba(255,214,140,0.4)', a);
-        ctx.save();
-        ctx.globalAlpha = a;
-        ctx.translate(cx, base);
-        ctx.scale(dir, 1);
-        ctx.fillStyle = this.dark ? '#24123a' : '#6e5a44';
-        ctx.beginPath();
-        ctx.moveTo(-14, 0);
-        ctx.lineTo(-6, -12 - Math.sin(this.spin * 2) * 2);
-        ctx.lineTo(2, -20);
-        ctx.lineTo(9, -10);
-        ctx.lineTo(14, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = this.dark ? '#9a6aff' : '#e8c98e';
-        ctx.beginPath();
-        ctx.moveTo(-4, 0);
-        ctx.lineTo(2, -13);
-        ctx.lineTo(8, 0);
-        ctx.closePath();
-        ctx.fill();
-        // Chips flying off the crest.
-        ctx.fillStyle = '#b89a6a';
-        for (let i = 0; i < 3; i++) {
-          const t = (this.spin * 0.7 + i * 0.33) % 1;
-          ctx.fillRect(-8 - t * 10, -14 - t * 10 + t * t * 18, 3, 3);
-        }
-        ctx.restore();
+        glow(ctx, cx, base - 8, 26, this.dark ? '#db3ffd' : '#ffc825', 0.45 * a);
+        const frame = a > 0.66 ? (['q0', 'q1', 'q2'] as const)[turn(1.5, 3)] : a > 0.33 ? 's0' : 's1';
+        QUAKE.draw(ctx, frame, cx, base, 6, 12, dir, this.dark ? 'dark' : '');
         break;
       }
       case 'shard': {
         // A violet splinter, pointing the way it flies.
-        glow(ctx, cx, cy, 14, 'rgba(200,160,255,0.45)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(Math.atan2(this.vy, this.vx));
-        ctx.fillStyle = '#c79bff';
-        ctx.beginPath();
-        ctx.moveTo(8, 0);
-        ctx.lineTo(-2, -4);
-        ctx.lineTo(-8, 0);
-        ctx.lineTo(-2, 4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#f3eaff';
-        ctx.fillRect(-2, -1, 7, 2);
-        ctx.restore();
+        glow(ctx, cx, cy, 12, '#f389f5', 0.45);
+        SHARD.draw(ctx, `d${dirIndex(this.vx, this.vy)}`, cx, cy, 3, 3, 1);
         break;
       }
       case 'coin': {
-        // A gold coin turning over in the air: a disc that narrows and widens.
-        // One lying on the floor lies flat, and winks.
-        const turn = this.resting ? 1 : Math.abs(Math.cos(this.spin * 1.4));
+        // A gold coin turning over in the air, face, edge and face; one lying
+        // on the floor lies flat, and now and then a glint goes over it.
         if (this.resting) {
-          const wink = Math.max(0, Math.sin(this.spin * 0.9));
-          glow(ctx, cx, cy, 12 + wink * 6, `rgba(255,214,110,${(0.3 + wink * 0.35).toFixed(2)})`);
-          ctx.save();
-          ctx.translate(cx, cy + 3);
-          ctx.fillStyle = '#d9a028';
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 6.5, 2.6, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = '#ffe08a';
-          ctx.beginPath();
-          ctx.ellipse(-1, -0.8, 4, 1.3, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+          const wink = Math.sin(this.spin * 0.9) > 0.55;
+          if (wink) glow(ctx, cx, cy, 12, '#ffeb57', 0.5);
+          COIN.draw(ctx, wink ? 'wink' : 'flat', cx, this.y + this.h, 3, 6, 1);
           break;
         }
-        glow(ctx, cx, cy, 14, this.friendly ? 'rgba(255,250,220,0.45)' : 'rgba(255,200,90,0.4)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.fillStyle = this.friendly ? '#fff3c4' : '#d9a028';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 1.5 + 5 * turn, 6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = this.friendly ? '#ffffff' : '#ffe08a';
-        ctx.beginPath();
-        ctx.ellipse(-0.8 * turn, -1, 0.8 + 2.6 * turn, 3.6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        COIN.draw(ctx, `c${turn(1.4 * 2, 4)}`, cx, cy, 3, 3, 1, this.friendly ? 'friendly' : '');
         break;
       }
       case 'web': {
-        // A clot of silk: a pale knot with loose threads trailing off it.
-        glow(ctx, cx, cy, 16, 'rgba(220,232,246,0.3)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(this.spin * 0.4);
-        ctx.strokeStyle = this.friendly ? 'rgba(255,255,255,0.9)' : 'rgba(226,234,244,0.85)';
-        ctx.lineWidth = 1.2;
-        for (let i = 0; i < 4; i++) {
-          const a = (i / 4) * Math.PI;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(a) * -9, Math.sin(a) * -9);
-          ctx.lineTo(Math.cos(a) * 9, Math.sin(a) * 9);
-          ctx.stroke();
-        }
-        ctx.fillStyle = 'rgba(236,242,250,0.85)';
-        ctx.beginPath();
-        ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        // A clot of silk: a pale knot with loose threads, turning as it goes.
+        WEB.draw(ctx, turn(0.4 * 4, 2) === 0 ? 'w0' : 'w1', cx, cy, 5, 5, 1, this.friendly ? 'friendly' : '');
         break;
       }
       case 'knife': {
-        // A dagger turning end over end: a silver blade, a gold guard.
-        glow(ctx, cx, cy, 12, this.friendly ? 'rgba(255,250,230,0.4)' : 'rgba(220,200,255,0.3)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(this.friendly ? Math.atan2(this.vy, this.vx) : this.spin * 1.6);
-        ctx.fillStyle = this.friendly ? '#fffbe8' : '#dfe4ee';
-        ctx.beginPath();
-        ctx.moveTo(9, 0);
-        ctx.lineTo(0, -2.4);
-        ctx.lineTo(0, 2.4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#e8b84a';
-        ctx.fillRect(-1.5, -3.5, 2, 7);
-        ctx.fillStyle = '#7a3a8a';
-        ctx.fillRect(-7, -1.2, 5.5, 2.4);
-        ctx.restore();
+        // A dagger turning end over end; sent back, it flies flat, point first.
+        const d = this.friendly ? dirIndex(this.vx, this.vy) : turn(1.6, 8);
+        KNIFE.draw(ctx, `k${d}`, cx, cy, 4, 3, 1);
         break;
       }
       case 'spout': {
         // A gout of rainwater, stretched along the way it falls.
-        const len = Math.min(10, Math.hypot(this.vx, this.vy) / 60);
-        const ang = Math.atan2(this.vy, this.vx);
-        glow(ctx, cx, cy, 14, 'rgba(150,200,230,0.35)');
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(ang);
-        ctx.fillStyle = 'rgba(120,180,214,0.9)';
-        ctx.beginPath();
-        ctx.ellipse(-len * 0.3, 0, 6 + len * 0.6, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(226,244,252,0.85)';
-        ctx.beginPath();
-        ctx.ellipse(1, -1.5, 3, 1.6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        SPOUT.draw(ctx, `s${dirIndex(this.vx, this.vy)}`, cx, cy, 5, 5, 1);
         break;
       }
       case 'shockwave': {
         const a = Math.min(1, this.life / 1.5);
-        const [halo, body, crest] = this.water
-          ? ['rgba(110,225,215,0.4)', '#2f93a0', '#d8faf4']
-          : ['rgba(255,120,60,0.45)', '#ff8a45', '#ffd08a'];
-        glow(ctx, cx, this.y + this.h, 34, halo, a);
-        ctx.globalAlpha = a;
-        ctx.fillStyle = body;
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y + this.h);
-        ctx.lineTo(this.x + this.w * 0.5, this.y + Math.sin(this.spin * 3) * 3);
-        ctx.lineTo(this.x + this.w, this.y + this.h);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = crest;
-        ctx.beginPath();
-        ctx.moveTo(this.x + this.w * 0.28, this.y + this.h);
-        ctx.lineTo(this.x + this.w * 0.5, this.y + this.h * 0.35);
-        ctx.lineTo(this.x + this.w * 0.72, this.y + this.h);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        const base = this.y + this.h;
+        glow(ctx, cx, base - 6, 28, this.water ? '#94fdff' : '#ffa214', 0.45 * a);
+        const sheet = this.water ? WATER_CREST : FIRE_CREST;
+        const k = turn(1.5, 4);
+        const frame: CrestFrame = a > 0.6 ? (['f0', 'f1', 'f2', 'f3'] as const)[k] : a > 0.3 ? (k % 2 === 0 ? 'm0' : 'm1') : k % 2 === 0 ? 'l0' : 'l1';
+        sheet.draw(ctx, frame, cx, base, 6, 15, dir);
         break;
       }
     }

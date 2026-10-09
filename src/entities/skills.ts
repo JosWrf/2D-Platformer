@@ -23,11 +23,29 @@
  */
 import { audio } from '../core/audio';
 import { type Rect, TAU, clamp, rand, sign } from '../core/math';
+import { line as pixelLine, rect as pixelRect, ring as pixelRing } from '../render/pen';
+import { ART } from '../render/pixel';
+import { dirIndex } from '../render/sheet';
 import { glow } from '../render/sprites';
 import type { World } from '../world/context';
 import { TILE } from '../world/tiles';
 import { BOSS_KINDS, type EnemyKind, type GlowLight } from './enemy';
+import { BLOOD, COIN, ROCK, SHARD, WEB } from './projectile-art';
 import type { RelicId } from './relics';
+import {
+  CROWN_FIRE,
+  CROWN_SHOT,
+  CRYSTAL,
+  FIRE_PILLAR,
+  PENDULUM,
+  PHANTOM,
+  PILLAR_STEPS,
+  SHADOW_CREST,
+  SICKLE,
+  STATUE,
+  WATER_PILLAR,
+  WISP,
+} from './skill-art';
 
 export type SkillId =
   | 'klatschsprung'
@@ -385,6 +403,63 @@ function floorAt(world: World, x: number, y: number): boolean {
   return world.level.solidAt(tx, ty) || world.level.platformAt(tx, ty);
 }
 
+/* ------------------------------------------------------------- drawing */
+
+/*
+ * Every cast is drawn on the actor layer with the hero, in hard shapes on
+ * whole art pixels: what is meant to read as solid - a pillar of fire, a
+ * ring of force, a brass bob - is drawn opaque and gets the outline; what is
+ * light or fading is drawn translucent and comes out as an ordered pattern of
+ * pixels (see settleActors), thinning as it fades.
+ */
+
+/**
+ * A ring on the floor seen from the side: the band between an ellipse of
+ * radii rx × ry round (cx, cy) and one `thick` art pixels smaller, on whole
+ * art pixels - one run either side of the hole per row.
+ */
+function floorRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, color: string, thick = 1): void {
+  const ax = cx / ART;
+  const ay = cy / ART;
+  const ox = rx / ART;
+  const oy = Math.max(0.5, ry / ART);
+  const ix = ox - thick;
+  const iy = oy - thick;
+  ctx.fillStyle = color;
+  for (let row = Math.floor(ay - oy); row <= Math.ceil(ay + oy); row++) {
+    const v = row + 0.5 - ay;
+    if (Math.abs(v) > oy) continue;
+    const outer = ox * Math.sqrt(1 - (v / oy) ** 2);
+    const l = Math.ceil(ax - outer - 0.5);
+    const r = Math.floor(ax + outer - 0.5);
+    if (r < l) continue;
+    const inner = iy > 0 && ix > 0 && Math.abs(v) < iy ? ix * Math.sqrt(1 - (v / iy) ** 2) : 0;
+    if (inner < 0.5) {
+      ctx.fillRect(l * ART, row * ART, (r - l + 1) * ART, ART);
+      continue;
+    }
+    const il = Math.ceil(ax - inner - 0.5);
+    const ir = Math.floor(ax + inner - 0.5);
+    if (il > l) ctx.fillRect(l * ART, row * ART, (il - l) * ART, ART);
+    if (r > ir) ctx.fillRect((ir + 1) * ART, row * ART, (r - ir) * ART, ART);
+  }
+}
+
+/** Draws with a fade: opaque is body, below about 0.6 it is the settle pass's thinning pattern. */
+function faded(ctx: CanvasRenderingContext2D, alpha: number, draw: () => void): void {
+  if (alpha <= 0.02) return;
+  ctx.globalAlpha = Math.min(1, alpha);
+  draw();
+  ctx.globalAlpha = 1;
+}
+
+/** The tallest drawn pillar no taller than h art pixels. */
+function pillarStep(h: number): number {
+  let best: number = PILLAR_STEPS[0];
+  for (const s of PILLAR_STEPS) if (s <= h + 1) best = s;
+  return best;
+}
+
 /* ------------------------------------------------------------- effects */
 
 /** A cast in flight: what it draws, what it lights, what it strikes. */
@@ -448,19 +523,18 @@ class SlamHop extends SkillEffect {
     world.particles.burst(p.cx, p.bottom - 4, 26, 'rgba(143,224,138,0.9)', { speed: 260, gravity: 520, angle: -Math.PI / 2, spread: 2.6 });
   }
 
+  /**
+   * A ring of slime-green force opening out over the floor where he lands:
+   * two art pixels thick and pale while fresh, one and darker as it spreads,
+   * and a thinning pattern as it goes.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.ring < 0) return;
     const k = clamp(this.ring / 0.4, 0, 1);
-    ctx.save();
-    ctx.globalAlpha = 1 - k;
-    ctx.strokeStyle = '#b6f2ac';
-    ctx.lineWidth = 1 + 4 * (1 - k);
-    ctx.beginPath();
-    ctx.ellipse(this.ringX, this.ringY - 2, 20 + 62 * k, 5 + 9 * k, 0, 0, TAU);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(143,224,138,0.25)';
-    ctx.fill();
-    ctx.restore();
+    const color = k < 0.35 ? '#d3fc7e' : k < 0.7 ? '#99e65f' : '#5ac54f';
+    faded(ctx, k < 0.55 ? 1 : (1 - k) * 1.3, () =>
+      floorRing(ctx, this.ringX, this.ringY - 2, 20 + 62 * k, 5 + 9 * k, color, k < 0.4 ? 2 : 1),
+    );
   }
 
   override lights(): GlowLight[] {
@@ -562,80 +636,39 @@ class Shot extends SkillEffect {
     });
   }
 
+  /**
+   * The coin and the ball of silk turn over in drawn frames, the sickle of
+   * blood is the blood crescent the bat lord throws, in the hero's own
+   * light, and each of the five fires is a hot core in its head's colour. A
+   * fire that has burst is a ring of its colour opening out, thinning away.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
+    const fire = Math.max(0, CROWN_COLORS.indexOf(this.color));
     if (this.burst >= 0) {
       const k = clamp(this.burst / 0.3, 0, 1);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, this.x, this.y, 18 + 30 * k, this.color, 0.7 * (1 - k));
-      ctx.restore();
+      const color = CROWN_FIRE[fire];
+      glow(ctx, this.x, this.y, 18 + 30 * k, color, 0.7 * (1 - k));
+      faded(ctx, 1 - k, () => pixelRing(ctx, this.x, this.y, 8 + 24 * k, color, k < 0.5 ? 2 : 1));
       return;
     }
-    ctx.save();
-    ctx.translate(this.x, this.y);
+    const turn = (rate: number, frames: number): number =>
+      ((Math.floor((this.spin * rate * frames) / TAU) % frames) + frames) % frames;
     switch (this.style) {
-      case 'coin': {
-        // Turning over as it flies: a disc seen from its edge and its face.
-        const face = Math.abs(Math.cos(this.spin));
-        ctx.fillStyle = '#b8861f';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 1.5 + 5 * face, 6.5, 0, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#ffd866';
-        ctx.beginPath();
-        ctx.ellipse(-0.5, -0.5, 1 + 4 * face, 5.4, 0, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#fff6c8';
-        ctx.fillRect(-1, -3, 1.6 * face + 0.4, 3);
+      case 'coin':
+        COIN.draw(ctx, `c${turn(2, 4)}`, this.x, this.y, 3, 3);
         break;
-      }
-      case 'web': {
-        ctx.rotate(this.spin * 0.3);
-        ctx.fillStyle = 'rgba(232,240,248,0.9)';
-        ctx.beginPath();
-        ctx.arc(0, 0, 6.5, 0, TAU);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(232,240,248,0.75)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * TAU;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
-          ctx.lineTo(Math.cos(a) * 11, Math.sin(a) * 11);
-          ctx.stroke();
-        }
+      case 'web':
+        WEB.draw(ctx, turn(1.2, 2) === 0 ? 'w0' : 'w1', this.x, this.y, 5, 5, 1, 'friendly');
         break;
-      }
-      case 'blood': {
-        // A crescent, opening forwards, along the way it flies.
-        ctx.rotate(Math.atan2(this.vy, this.vx));
-        ctx.globalCompositeOperation = 'lighter';
-        glow(ctx, 0, 0, 20, 'rgba(255,60,90,0.5)');
-        ctx.fillStyle = '#ff5470';
-        ctx.beginPath();
-        ctx.moveTo(4, -12);
-        ctx.quadraticCurveTo(16, 0, 4, 12);
-        ctx.quadraticCurveTo(9, 0, 4, -12);
-        ctx.fill();
-        ctx.fillStyle = '#ffd6de';
-        ctx.beginPath();
-        ctx.moveTo(6, -8);
-        ctx.quadraticCurveTo(13, 0, 6, 8);
-        ctx.quadraticCurveTo(9, 0, 6, -8);
-        ctx.fill();
+      case 'blood':
+        glow(ctx, this.x, this.y, 18, '#ea323c', 0.5);
+        BLOOD.draw(ctx, 'mid', this.x, this.y, 7, 5, this.vx < 0 ? -1 : 1);
         break;
-      }
-      case 'crown': {
-        ctx.globalCompositeOperation = 'lighter';
-        glow(ctx, 0, 0, 18, this.color, 0.75);
-        ctx.fillStyle = '#fff8e0';
-        ctx.beginPath();
-        ctx.arc(0, 0, 4, 0, TAU);
-        ctx.fill();
+      case 'crown':
+        glow(ctx, this.x, this.y, 18, CROWN_FIRE[fire], 0.75);
+        CROWN_SHOT.draw(ctx, 'f', this.x, this.y, 2, 2, 1, `h${fire}`);
         break;
-      }
     }
-    ctx.restore();
   }
 
   override lights(): GlowLight[] {
@@ -698,40 +731,38 @@ class SunColumn extends SkillEffect {
     world.particles.burst(this.x, this.floor - 4, 8, 'rgba(255,230,160,0.9)', { speed: 140, gravity: -60, shape: 'spark', angle: -Math.PI / 2, spread: 1.4 });
   }
 
+  /**
+   * The mark is a ring on the floor drawing in and a single thread of light
+   * coming down. The column itself is three hard bands - a thin pattern of
+   * gold at its edges, a denser one inside, and a white core opaque enough
+   * to be solid - that breathe a pixel wider and narrower, over a ring
+   * burned into the floor.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     const x = this.x;
     const y = this.floor;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     if (this.t < SunColumn.MARK) {
-      // The mark: a ring on the floor, drawing in, and a thread of light.
       const k = this.t / SunColumn.MARK;
-      ctx.strokeStyle = `rgba(255,220,140,${(0.4 + 0.5 * k).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(x, y - 2, 40 - 18 * k, 7 - 3 * k, 0, 0, TAU);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(255,230,160,${(0.15 + 0.25 * k).toFixed(3)})`;
-      ctx.fillRect(x - 1, y - 640, 2, 640);
-    } else {
-      const fade = this.burning ? 1 : 1 - (this.t - SunColumn.MARK - SunColumn.BURN) / SunColumn.FADE;
-      const wob = Math.sin(this.t * 30) * 2;
-      const g = ctx.createLinearGradient(x - 26, 0, x + 26, 0);
-      g.addColorStop(0, 'rgba(255,200,110,0)');
-      g.addColorStop(0.3, `rgba(255,214,140,${(0.45 * fade).toFixed(3)})`);
-      g.addColorStop(0.5, `rgba(255,250,225,${(0.9 * fade).toFixed(3)})`);
-      g.addColorStop(0.7, `rgba(255,214,140,${(0.45 * fade).toFixed(3)})`);
-      g.addColorStop(1, 'rgba(255,200,110,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(x - 26 - wob, y - 640, 52 + wob * 2, 640);
-      glow(ctx, x, y - 6, 60, `rgba(255,226,150,${(0.6 * fade).toFixed(3)})`);
-      ctx.strokeStyle = `rgba(255,240,200,${(0.7 * fade).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(x, y - 2, 30, 6, 0, 0, TAU);
-      ctx.stroke();
+      faded(ctx, 0.55 + 0.45 * k, () => floorRing(ctx, x, y - 2, 40 - 18 * k, 7 - 3 * k, '#ffc825'));
+      faded(ctx, 0.3 + 0.3 * k, () => pixelRect(ctx, x - 1, y - 640, 2, 640, '#ffeb57'));
+      return;
     }
-    ctx.restore();
+    const fade = this.burning ? 1 : 1 - (this.t - SunColumn.MARK - SunColumn.BURN) / SunColumn.FADE;
+    const b = Math.floor(this.t * 15) % 2 === 0 ? ART : 0;
+    const top = y - 640;
+    glow(ctx, x, y - 6, 60, '#ffc825', 0.6 * fade);
+    // Side by side, never over each other: laid over each other, two thin
+    // patterns would add up to a solid band.
+    faded(ctx, 0.3 * fade, () => {
+      pixelRect(ctx, x - 26 - b, top, 12, 640, '#ffc825');
+      pixelRect(ctx, x + 14 + b, top, 12, 640, '#ffc825');
+    });
+    faded(ctx, 0.55 * fade, () => {
+      pixelRect(ctx, x - 14 - b, top, 10 + b, 640, '#ffeb57');
+      pixelRect(ctx, x + 4, top, 10 + b, 640, '#ffeb57');
+    });
+    faded(ctx, fade > 0.5 ? 1 : fade * 1.2, () => pixelRect(ctx, x - 4, top, 8, 640, '#ffffff'));
+    faded(ctx, fade, () => floorRing(ctx, x, y - 2, 30, 6, '#ffeb57'));
   }
 
   override lights(): GlowLight[] {
@@ -806,33 +837,19 @@ class FireWave extends SkillEffect {
     if (!spawning && this.pillars.every((s) => s.t >= FireWave.LIFE)) this.done = true;
   }
 
+  /**
+   * Each pillar is a drawn flame at the height it has risen to - a handful of
+   * heights, each in three flickers - opaque and outlined like anything else
+   * that hurts.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (const s of this.pillars) {
       const k = this.power(s);
       if (k <= 0.02) continue;
-      const h = FireWave.HEIGHT * k;
-      const top = s.floor - h;
-      const g = ctx.createLinearGradient(0, top, 0, s.floor);
-      g.addColorStop(0, 'rgba(255,120,40,0)');
-      g.addColorStop(0.3, `rgba(255,150,60,${(0.75 * k).toFixed(3)})`);
-      g.addColorStop(1, `rgba(255,236,170,${(0.95 * k).toFixed(3)})`);
-      ctx.fillStyle = g;
-      const wob = Math.sin(s.t * 40 + s.x) * 4;
-      ctx.beginPath();
-      ctx.moveTo(s.x - 17, s.floor);
-      ctx.quadraticCurveTo(s.x - 19, s.floor - h * 0.5, s.x + wob, top);
-      ctx.quadraticCurveTo(s.x + 19, s.floor - h * 0.5, s.x + 17, s.floor);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,252,230,${(0.7 * k).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(s.x - 6, s.floor);
-      ctx.quadraticCurveTo(s.x, s.floor - h * 0.75, s.x + 6, s.floor);
-      ctx.fill();
+      const step = pillarStep((FireWave.HEIGHT * k) / ART);
+      const flicker = Math.floor(s.t * 18 + s.x * 0.1) % 3;
+      FIRE_PILLAR.draw(ctx, `${step}-${flicker}`, s.x, s.floor, 8, step);
     }
-    ctx.restore();
   }
 
   override lights(): GlowLight[] {
@@ -897,46 +914,29 @@ class Springtide extends SkillEffect {
     if (!live) this.done = true;
   }
 
+  /**
+   * First the floor wells up - a strip of water on the rim, thickening, and
+   * bubbles of a pixel each climbing out of it - then the spout is a drawn
+   * column of water at the height it has reached.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
     for (const s of this.spouts) {
       if (s.t < Springtide.BUBBLE) {
         const k = s.t / Springtide.BUBBLE;
-        ctx.fillStyle = `rgba(127,227,205,${(0.25 + 0.4 * k).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.ellipse(s.x, s.floor - 1, 16 + 6 * k, 4, 0, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(210,250,240,0.8)';
+        faded(ctx, 0.3 + 0.5 * k, () => pixelRect(ctx, s.x - 16 - 6 * k, s.floor - 2, 32 + 12 * k, 2, '#0098dc'));
+        ctx.fillStyle = '#94fdff';
         for (let i = 0; i < 3; i++) {
-          const bx = s.x + Math.sin(s.t * 13 + i * 2.1) * 10;
-          const by = s.floor - 3 - ((s.t * 50 + i * 7) % 12);
-          ctx.beginPath();
-          ctx.arc(bx, by, 1.6, 0, TAU);
-          ctx.fill();
+          const bx = s.x + Math.round(Math.sin(s.t * 13 + i * 2.1) * 5) * ART;
+          const by = s.floor - 4 - Math.floor(((s.t * 50 + i * 7) % 12) / ART) * ART;
+          ctx.fillRect(Math.floor(bx / ART) * ART, Math.floor(by / ART) * ART, ART, ART);
         }
         continue;
       }
       const k = this.power(s);
       if (k <= 0.02) continue;
-      const h = Springtide.HEIGHT * k;
-      const top = s.floor - h;
-      const g = ctx.createLinearGradient(0, top, 0, s.floor);
-      g.addColorStop(0, `rgba(220,255,248,${(0.9 * k).toFixed(3)})`);
-      g.addColorStop(0.4, `rgba(127,227,205,${(0.8 * k).toFixed(3)})`);
-      g.addColorStop(1, `rgba(40,120,140,${(0.7 * k).toFixed(3)})`);
-      ctx.fillStyle = g;
-      const wob = Math.sin(s.t * 36 + s.x) * 3;
-      ctx.beginPath();
-      ctx.moveTo(s.x - 15, s.floor);
-      ctx.lineTo(s.x - 12 + wob, top + 8);
-      ctx.quadraticCurveTo(s.x, top - 8, s.x + 12 + wob, top + 8);
-      ctx.lineTo(s.x + 15, s.floor);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = `rgba(240,255,252,${(0.6 * k).toFixed(3)})`;
-      ctx.fillRect(s.x - 3 + wob * 0.5, top + 6, 4, h - 10);
+      const step = pillarStep((Springtide.HEIGHT * k) / ART);
+      WATER_PILLAR.draw(ctx, `${step}-${Math.floor(s.t * 16) % 2}`, s.x, s.floor, 7, step);
     }
-    ctx.restore();
   }
 
   override lights(): GlowLight[] {
@@ -985,28 +985,13 @@ class FloorWave extends SkillEffect {
     }
   }
 
+  /** A crest of shadow with violet burning in its heart, flickering in four frames, thinning out at the end. */
   draw(ctx: CanvasRenderingContext2D): void {
     const k = clamp(1 - this.t / 0.9, 0, 1);
-    ctx.save();
-    ctx.translate(this.x, this.floor);
-    ctx.scale(this.dir, 1);
-    ctx.globalAlpha = 0.5 + 0.5 * k;
-    ctx.fillStyle = '#2a2145';
-    ctx.beginPath();
-    ctx.moveTo(-22, 0);
-    ctx.quadraticCurveTo(-6, -10, 2, -34);
-    ctx.quadraticCurveTo(10, -16, 14, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = 'rgba(154,134,232,0.85)';
-    ctx.beginPath();
-    ctx.moveTo(-12, 0);
-    ctx.quadraticCurveTo(-2, -8, 3, -24);
-    ctx.quadraticCurveTo(8, -10, 10, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    const dir: 1 | -1 = this.dir < 0 ? -1 : 1;
+    faded(ctx, k > 0.3 ? 1 : 0.4 + k * 2, () =>
+      SHADOW_CREST.draw(ctx, `c${Math.floor(this.t * 14) % 4}`, this.x, this.floor, 7, 17, dir),
+    );
   }
 
   override lights(): GlowLight[] {
@@ -1081,21 +1066,21 @@ class ShadeStep extends SkillEffect {
     world.particles.burst(p.cx, p.bottom - 10, 20, 'rgba(201,184,255,0.9)', { speed: 160, gravity: -30, shape: 'spark' });
   }
 
+  /**
+   * A pool of dark on the floor where he goes down and where he comes up: a
+   * flat black band on the rim with a violet lip, opening out and closing.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     const pool = (x: number, y: number, k: number): void => {
       if (k <= 0) return;
-      ctx.fillStyle = `rgba(14,8,28,${(0.85 * k).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(x, y - 1, 24 * k + 6, 5, 0, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(201,184,255,${(0.6 * k).toFixed(3)})`;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      const half = 24 * k + 6;
+      faded(ctx, Math.min(1, k * 1.4), () => {
+        pixelRect(ctx, x - half, y - 2, half * 2, 2, '#0e071b');
+        pixelRect(ctx, x - half + 4, y - 4, half * 2 - 8, 2, '#7a09fa');
+      });
     };
-    ctx.save();
     pool(this.fromX, this.fromY, this.risen ? 1 - (this.t - ShadeStep.SINK) / 0.4 : Math.min(1, this.t / 0.1));
     if (this.risen) pool(this.toX, this.toY, 1 - (this.t - ShadeStep.SINK) / 0.4);
-    ctx.restore();
   }
 }
 
@@ -1128,26 +1113,14 @@ class CrystalCharge extends SkillEffect {
     }
   }
 
+  /** Splinters of crystal left in the charge's wake, each at one of eight angles, thinning away. */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (const s of this.shards) {
       if (s.life <= 0) continue;
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      ctx.rotate(s.a);
-      ctx.globalAlpha = s.life;
-      ctx.fillStyle = '#c79bff';
-      ctx.beginPath();
-      ctx.moveTo(0, -7);
-      ctx.lineTo(3.5, 0);
-      ctx.lineTo(0, 7);
-      ctx.lineTo(-3.5, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      faded(ctx, s.life > 0.5 ? 1 : s.life * 1.6, () =>
+        SHARD.draw(ctx, `d${dirIndex(Math.cos(s.a), Math.sin(s.a))}`, s.x, s.y, 3, 3),
+      );
     }
-    ctx.restore();
   }
 }
 
@@ -1196,33 +1169,13 @@ class CrystalRain extends SkillEffect {
     if (this.drops.length >= CrystalRain.COUNT && this.drops.every((d) => d.dead)) this.done = true;
   }
 
+  /** Each crystal falling point first, with a glint of cold light round it. */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
     for (const d of this.drops) {
       if (d.dead) continue;
-      ctx.save();
-      ctx.translate(d.x, d.y);
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 0, 0, 16, 'rgba(143,232,255,0.5)');
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = '#8fe8ff';
-      ctx.beginPath();
-      ctx.moveTo(0, 11);
-      ctx.lineTo(5, -2);
-      ctx.lineTo(0, -11);
-      ctx.lineTo(-5, -2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#eafcff';
-      ctx.beginPath();
-      ctx.moveTo(0, 8);
-      ctx.lineTo(2, -2);
-      ctx.lineTo(0, -8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      glow(ctx, d.x, d.y, 16, '#94fdff', 0.5);
+      CRYSTAL.draw(ctx, 'c', d.x, d.y, 2, 5);
     }
-    ctx.restore();
   }
 
   override lights(): GlowLight[] {
@@ -1298,37 +1251,10 @@ class Boulder extends SkillEffect {
     world.particles.burst(this.x, this.y, 14, 'rgba(160,130,100,0.9)', { speed: 160, gravity: 500, size: 3 });
   }
 
+  /** The rock the boar throws, rolling over in eight drawn turns; crumbling, it thins away. */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    if (this.stopped >= 0) ctx.globalAlpha = 1 - this.stopped / 0.25;
-    ctx.rotate(this.spin);
-    ctx.fillStyle = '#5c4a3c';
-    ctx.beginPath();
-    ctx.moveTo(-12, -3);
-    ctx.lineTo(-7, -11);
-    ctx.lineTo(4, -12);
-    ctx.lineTo(12, -4);
-    ctx.lineTo(11, 7);
-    ctx.lineTo(2, 12);
-    ctx.lineTo(-9, 9);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#7e6852';
-    ctx.beginPath();
-    ctx.moveTo(-7, -9);
-    ctx.lineTo(3, -10);
-    ctx.lineTo(8, -3);
-    ctx.lineTo(-4, -2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(30,22,16,0.8)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(-3, 2);
-    ctx.lineTo(4, 6);
-    ctx.stroke();
-    ctx.restore();
+    const turn = ((Math.floor((this.spin * 8) / TAU) % 8) + 8) % 8;
+    faded(ctx, this.stopped >= 0 ? 1 - this.stopped / 0.25 : 1, () => ROCK.draw(ctx, `r${turn}`, this.x, this.y, 6, 6));
   }
 }
 
@@ -1384,19 +1310,11 @@ class MoonCrescent extends SkillEffect {
     }
   }
 
+  /** A sickle of moonlight wheeling through eight drawn turns, with a cold glint round it. */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.t * 16 * this.dir);
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 0, 0, 22, 'rgba(180,200,255,0.45)');
-    ctx.fillStyle = '#dfe6ff';
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, -1.2, 1.2);
-    ctx.arc(4, 0, 9, 1.0, -1.0, true);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    const turn = ((Math.floor((this.t * 16 * this.dir * 8) / TAU) % 8) + 8) % 8;
+    glow(ctx, this.x, this.y, 22, '#c7cfdd', 0.45);
+    SICKLE.draw(ctx, `m${turn}`, this.x, this.y, 6, 6);
   }
 
   override lights(): GlowLight[] {
@@ -1449,36 +1367,25 @@ class Pendulum extends SkillEffect {
     strike(world, { x: b.x - 18, y: b.y - 18, w: 36, h: 36 }, 2, this.dir, this.struck, '#ffe0a0');
   }
 
+  /**
+   * The arc it sweeps as a row of brass dots, the rod a line of whole
+   * pixels, the bob a drawn ball of brass lit from the upper left.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     const b = this.bob;
     const fade = this.t > Pendulum.TIME ? 1 - (this.t - Pendulum.TIME) / 0.12 : 1;
-    ctx.save();
-    ctx.globalAlpha = fade;
-    // The arc it sweeps, faintly.
-    ctx.strokeStyle = 'rgba(240,194,122,0.25)';
-    ctx.lineWidth = 6;
-    ctx.beginPath();
-    ctx.arc(this.px, this.py, Pendulum.REACH, Math.PI / 2 - 1.15, Math.PI / 2 + 1.15);
-    ctx.stroke();
-    ctx.strokeStyle = '#8a6a3a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(this.px, this.py);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-    ctx.fillStyle = '#c9963e';
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 16, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#f6d88e';
-    ctx.beginPath();
-    ctx.arc(b.x - 4, b.y - 4, 6, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#5a4020';
-    ctx.beginPath();
-    ctx.arc(this.px, this.py, 4, 0, TAU);
-    ctx.fill();
-    ctx.restore();
+    faded(ctx, fade, () => {
+      ctx.fillStyle = '#edab50';
+      for (let i = 0; i <= 14; i++) {
+        const a = Math.PI / 2 - 1.15 + (i / 14) * 2.3;
+        const x = this.px + Math.cos(a) * Pendulum.REACH;
+        const y = this.py + Math.sin(a) * Pendulum.REACH;
+        ctx.fillRect(Math.floor(x / ART) * ART, Math.floor(y / ART) * ART, ART, ART);
+      }
+      pixelLine(ctx, this.px, this.py, b.x, b.y, '#8a4836');
+      PENDULUM.draw(ctx, 'pivot', this.px, this.py, 2, 2);
+      PENDULUM.draw(ctx, 'bob', b.x, b.y, 8, 8);
+    });
   }
 
   override lights(): GlowLight[] {
@@ -1530,39 +1437,17 @@ class Phantom extends SkillEffect {
     }
   }
 
-  /** The hero's outline, in the jester's violet: head, body, blade out. */
-  private figure(ctx: CanvasRenderingContext2D, x: number, alpha: number, slash: boolean): void {
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(x, this.floor);
-    ctx.scale(this.dir, 1);
-    ctx.fillStyle = '#c99cff';
-    ctx.fillRect(-6, -24, 12, 16);
-    ctx.fillRect(-6, -8, 4, 8);
-    ctx.fillRect(2, -8, 4, 8);
-    ctx.beginPath();
-    ctx.arc(0, -28, 5.5, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = '#f2e4ff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    if (slash) {
-      ctx.arc(4, -18, 20, -1.1, 1.0);
-    } else {
-      ctx.moveTo(4, -16);
-      ctx.lineTo(22, -26);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
+  /**
+   * The hero's double in the jester's violet, running and then cutting, with
+   * the afterimages it leaves as thin patterns of pixels - a ghost drawn the
+   * way a palette of a few colours draws one.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const g of this.ghosts) if (g.life > 0) this.figure(ctx, g.x, g.life * 0.25, false);
-    const fade = this.t < Phantom.RUN ? 0.85 : clamp(1 - (this.t - Phantom.RUN) / Phantom.FADE, 0, 1) * 0.85;
-    this.figure(ctx, this.x, fade, this.t > Phantom.RUN * 0.55);
-    ctx.restore();
+    for (const g of this.ghosts) {
+      if (g.life > 0) faded(ctx, g.life * 0.45, () => PHANTOM.draw(ctx, 'run', g.x, this.floor, 5, 17, this.dir));
+    }
+    const fade = this.t < Phantom.RUN ? 1 : clamp(1 - (this.t - Phantom.RUN) / Phantom.FADE, 0, 1);
+    faded(ctx, fade, () => PHANTOM.draw(ctx, this.t > Phantom.RUN * 0.55 ? 'cut' : 'run', this.x, this.floor, 5, 17, this.dir));
   }
 
   override lights(): GlowLight[] {
@@ -1608,15 +1493,13 @@ class Wisps extends SkillEffect {
     });
   }
 
+  /** Three motes of white light with a yellow edge, twinkling between two frames. */
   draw(ctx: CanvasRenderingContext2D): void {
     const fade = clamp((Wisps.LIFE - this.t) / 0.4, 0, 1) * clamp(this.t / 0.2, 0, 1);
-    for (const w of this.at) {
-      glow(ctx, w.x, w.y, 16, `rgba(255,240,168,${(0.6 * fade).toFixed(3)})`);
-      ctx.fillStyle = `rgba(255,250,224,${(0.95 * fade).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(w.x, w.y, 3.2, 0, TAU);
-      ctx.fill();
-    }
+    this.at.forEach((w, i) => {
+      glow(ctx, w.x, w.y, 16, '#ffeb57', 0.6 * fade);
+      faded(ctx, fade * 1.3, () => WISP.draw(ctx, Math.floor(this.t * 10 + i) % 2 === 0 ? 'w0' : 'w1', w.x, w.y, 2, 2));
+    });
   }
 
   override lights(): GlowLight[] {
@@ -1684,48 +1567,24 @@ class StoneFall extends SkillEffect {
     for (let i = 0; i < 12; i++) this.rubble.push({ x: this.x + rand(-14, 14), y: this.floor - rand(6, 20), vx: rand(-160, 160), vy: -rand(120, 300), life: 1 });
   }
 
+  /**
+   * A ring on the floor drawing in where it will land, then the statue -
+   * crouched, wings folded, head down - and the rubble it throws up, chips of
+   * two art pixels that thin away.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.t < StoneFall.MARK + 0.15 && this.landed < 0) {
       const k = clamp(this.t / StoneFall.MARK, 0, 1);
-      ctx.strokeStyle = `rgba(200,210,224,${(0.35 + 0.45 * k).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(this.x, this.floor - 2, 34 - 12 * k, 6 - 2 * k, 0, 0, TAU);
-      ctx.stroke();
+      faded(ctx, 0.5 + 0.5 * k, () => floorRing(ctx, this.x, this.floor - 2, 34 - 12 * k, 6 - 2 * k, '#c7cfdd'));
     }
     if (this.landed < 0.25) {
-      // The statue: crouched, wings folded, head down - it is coming.
       const y = this.landed >= 0 ? this.floor : this.y;
-      ctx.save();
-      ctx.translate(this.x, y);
-      ctx.globalAlpha = this.landed >= 0 ? 1 - this.landed / 0.25 : 1;
-      ctx.fillStyle = '#7e8896';
-      ctx.beginPath();
-      ctx.moveTo(-16, 0);
-      ctx.lineTo(-20, -26);
-      ctx.lineTo(-10, -40);
-      ctx.lineTo(0, -34);
-      ctx.lineTo(10, -40);
-      ctx.lineTo(20, -26);
-      ctx.lineTo(16, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#9aa4b2';
-      ctx.beginPath();
-      ctx.ellipse(0, -30, 9, 8, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#3a4048';
-      ctx.fillRect(-5, -31, 3, 2);
-      ctx.fillRect(2, -31, 3, 2);
-      ctx.restore();
+      faded(ctx, this.landed >= 0 ? 1 - this.landed / 0.25 : 1, () => STATUE.draw(ctx, 's', this.x, y, 6, 16));
     }
-    ctx.fillStyle = '#8a94a2';
     for (const r of this.rubble) {
       if (r.life <= 0) continue;
-      ctx.globalAlpha = clamp(r.life, 0, 1);
-      ctx.fillRect(r.x - 2, r.y - 2, 4, 4);
+      faded(ctx, clamp(r.life * 1.4, 0, 1), () => pixelRect(ctx, r.x - 2, r.y - 2, 4, 4, '#92a1b9'));
     }
-    ctx.globalAlpha = 1;
   }
 }
 
@@ -1804,25 +1663,21 @@ export function castSkill(id: SkillId, world: World): SkillEffect[] {
   }
 }
 
-/** Arachna's silk on whatever it binds, drawn over it while it holds. */
+/**
+ * Arachna's silk on whatever it binds, drawn over it while it holds: four
+ * strands across it and a loop round its middle, lines of whole pixels that
+ * thin into a pattern as the hold wears off.
+ */
 export function drawSnare(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, k: number): void {
-  ctx.save();
-  ctx.globalAlpha = 0.35 + 0.5 * clamp(k, 0, 1);
-  ctx.strokeStyle = '#e8f0f8';
-  ctx.lineWidth = 1.2;
   const cx = x + w / 2;
   const cy = y + h / 2;
   const rx = w / 2 + 4;
   const ry = h / 2 + 4;
-  for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI;
-    ctx.beginPath();
-    ctx.moveTo(cx - Math.cos(a) * rx, cy - Math.sin(a) * ry);
-    ctx.lineTo(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
-    ctx.stroke();
-  }
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rx * 0.6, ry * 0.6, 0, 0, TAU);
-  ctx.stroke();
-  ctx.restore();
+  faded(ctx, 0.4 + 0.6 * clamp(k, 0, 1), () => {
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI;
+      pixelLine(ctx, cx - Math.cos(a) * rx, cy - Math.sin(a) * ry, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, '#c7cfdd');
+    }
+    floorRing(ctx, cx, cy, rx * 0.6, ry * 0.6, '#ffffff');
+  });
 }

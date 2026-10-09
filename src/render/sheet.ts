@@ -173,6 +173,208 @@ export function smear(
   }
 }
 
+/* -------------------------------------------- frames worked out by rule */
+
+/*
+ * Some shapes are better worked out than placed: a flame is layers of colour
+ * round its own outline, a boulder turning over keeps its light on the upper
+ * left whichever way up it is. These make such frames once, when the sheet is
+ * built, as ordinary rows of characters - whole cells, no smoothing - so they
+ * are drawn exactly like the hand-placed ones.
+ */
+
+/** A number in 0..1 for a pair of integers, the same every time: noise for frames. */
+export function hash2(a: number, b: number): number {
+  let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** How many cells in from the outline of the filled shape each filled cell is (1 on the edge). */
+function depths(cells: string[][], filled: (c: string) => boolean): number[][] {
+  const h = cells.length;
+  const w = cells[0]?.length ?? 0;
+  const out: number[][] = [];
+  for (let y = 0; y < h; y++) {
+    out.push([]);
+    for (let x = 0; x < w; x++) {
+      if (!filled(cells[y][x])) {
+        out[y].push(0);
+        continue;
+      }
+      let d = 1;
+      for (; d < 6; d++) {
+        let edge = false;
+        for (let k = -d; k <= d && !edge; k++) {
+          for (const [px, py] of [
+            [x + k, y - d],
+            [x + k, y + d],
+            [x - d, y + k],
+            [x + d, y + k],
+          ]) {
+            if (py < 0 || py >= h || px < 0 || px >= w || !filled(cells[py][px])) {
+              edge = true;
+              break;
+            }
+          }
+        }
+        if (edge) break;
+      }
+      out[y].push(d);
+    }
+  }
+  return out;
+}
+
+/**
+ * A tongue of flame w×h cells standing on its bottom row: each column burns to
+ * a height that falls away from the middle, ragged by `seed`, a lick or two
+ * torn off above; coloured in layers round its own outline - `tones` from the
+ * outermost layer in - so the tip and the edges are the coolest colour and
+ * the core the hottest, the way a pixel artist paints fire.
+ */
+export function flame(w: number, h: number, seed: number, tones: string, spread = 0.35): string[] {
+  const cells = blank(w, h);
+  const mid = (w - 1) / 2;
+  for (let x = 0; x < w; x++) {
+    const off = Math.abs(x - mid) / (w / 2);
+    const height = h * Math.pow(Math.max(0, 1 - off), 0.8) + (hash2(x, seed) - 0.5) * h * spread;
+    const top = Math.max(1, Math.min(h, Math.round(height)));
+    for (let k = 0; k < top; k++) plot(cells, x, h - 1 - k, '#');
+    // Now and then a lick torn off above the column.
+    if (top < h - 2 && hash2(x + 17, seed) > 0.78) plot(cells, x, h - 2 - top - Math.round(hash2(x, seed + 5)), '#');
+  }
+  const deep = depths(cells, (c) => c === '#');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (cells[y][x] !== '#') continue;
+      // The hot core sits low: lift the depth near the base a little.
+      const d = deep[y][x] + (y >= h - 2 && Math.abs(x - mid) < w / 4 ? 1 : 0);
+      cells[y][x] = tones[Math.min(tones.length - 1, d - 1)];
+    }
+  }
+  return rows(cells);
+}
+
+/**
+ * A lump - a polygon of corner points round (0, 0) in cells - turned by
+ * `angle` and filled on a w×h grid, then lit from the upper left whatever way
+ * up it has been turned: `tones` from shadow to highlight, the cells on its
+ * lower right edge in the darkest. A tumbling rock is these, one per angle.
+ */
+export function tumble(w: number, h: number, corners: readonly number[], angle: number, tones: string): string[][] {
+  const cells = blank(w, h);
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const cx = w / 2;
+  const cy = h / 2;
+  const pts: number[] = [];
+  let reach = 0;
+  for (let i = 0; i < corners.length; i += 2) {
+    const x = corners[i];
+    const y = corners[i + 1];
+    pts.push(cx + x * c - y * s, cy + x * s + y * c);
+    reach = Math.max(reach, Math.hypot(x, y));
+  }
+  const n = pts.length / 2;
+  const inside = (px: number, py: number): boolean => {
+    let odd = false;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const yi = pts[i * 2 + 1];
+      const yj = pts[j * 2 + 1];
+      if (yi > py !== yj > py && px < pts[i * 2] + ((py - yi) / (yj - yi)) * (pts[j * 2] - pts[i * 2])) odd = !odd;
+    }
+    return odd;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!inside(x + 0.5, y + 0.5)) continue;
+      const nx = (x + 0.5 - cx) / reach;
+      const ny = (y + 0.5 - cy) / reach;
+      const light = -0.6 * nx - 0.8 * ny;
+      const k = Math.max(0, Math.min(tones.length - 2, Math.floor((light + 0.75) * (tones.length - 1) * 0.7)));
+      plot(cells, x, y, tones[k + 1]);
+    }
+  }
+  // The edge facing away from the light in the darkest tone.
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (cells[y][x] === '.') continue;
+      const below = cells[y + 1]?.[x] ?? '.';
+      const right = cells[y][x + 1] ?? '.';
+      if (below === '.' || right === '.') cells[y][x] = tones[0];
+    }
+  }
+  return cells;
+}
+
+/**
+ * Something flying with a tail: a head of radius `head` cells at the front of a
+ * w×h frame and a tail streaming `tail` cells back from it along the angle it
+ * flies at, narrowing to nothing. Coloured by how far back along the tail a
+ * cell is and how near the middle: `tones` from the tail's end to the head's
+ * core. Worked out per direction, so a comet at 45° is drawn at 45°.
+ */
+export function comet(w: number, h: number, angle: number, head: number, tail: number, tones: string): string[] {
+  const cells = blank(w, h);
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  // The head sits forward of the middle, so the tail has room.
+  const hx = w / 2 + dx * (w / 2 - head - 0.5);
+  const hy = h / 2 + dy * (h / 2 - head - 0.5);
+  const n = tones.length;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const px = x + 0.5 - hx;
+      const py = y + 0.5 - hy;
+      const along = px * dx + py * dy;
+      const across = Math.abs(-px * dy + py * dx);
+      const r = Math.hypot(px, py);
+      let heat = -1;
+      if (r <= head + 0.25) heat = 1 - (r / (head + 0.25)) * 0.45;
+      else if (along < 0 && along > -tail) {
+        const k = 1 + along / tail;
+        if (across <= head * k + 0.15) heat = 0.55 * k - (across / (head + 0.5)) * 0.2;
+      }
+      if (heat < 0) continue;
+      plot(cells, x, y, tones[Math.max(0, Math.min(n - 1, Math.floor(heat * n)))]);
+    }
+  }
+  return rows(cells);
+}
+
+/**
+ * A crescent: the cells of the disc round (ax, ay) radius ar that are not in
+ * the disc round (bx, by) radius br. Its front edge (the outermost cells of
+ * the first disc on the far side from the second) takes `front`, the cells
+ * just behind it `core`, the rest `back`.
+ */
+export function moon(
+  w: number,
+  h: number,
+  ax: number,
+  ay: number,
+  ar: number,
+  bx: number,
+  by: number,
+  br: number,
+  front: string,
+  core: string,
+  back: string,
+): string[] {
+  const cells = blank(w, h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const da = Math.hypot(x + 0.5 - ax, y + 0.5 - ay);
+      const db = Math.hypot(x + 0.5 - bx, y + 0.5 - by);
+      if (da > ar || db <= br) continue;
+      const rim = ar - da;
+      plot(cells, x, y, rim < 1 ? front : db - br < 1.6 ? back : core);
+    }
+  }
+  return rows(cells);
+}
+
 /**
  * The eight directions of travel, as an index: 0 right, then clockwise on
  * screen - 1 down-right, 2 down, 3 down-left, 4 left, 5 up-left, 6 up,
