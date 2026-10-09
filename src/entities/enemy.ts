@@ -7,9 +7,10 @@ import { hash2 } from '../render/sheet';
 import { glow, shadow, withHitFlash } from '../render/sprites';
 import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
-import { angleStep, blit, ovalRing, quad } from './boss-art';
+import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Body } from './entity';
 import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
+import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
 import {
   BAT,
   type BatFrame,
@@ -2669,184 +2670,111 @@ export class Thalassa extends Enemy {
     return Math.min(rise, fall);
   }
 
+  /**
+   * Her light: the crown burning before every move, and each column of the
+   * tide as it stands. They light the hall's floor and walls round her; she
+   * is drawn as she is.
+   */
+  override lights(): GlowLight[] {
+    const out: GlowLight[] = [];
+    if (this.dead || !this.engaged) return out;
+    out.push({ x: this.cx, y: this.bottom - 80, radius: 70 + this.crown * 60, rgb: '150,240,225', strength: 0.3 + this.crown * 0.45, tint: 0.3 });
+    for (const g of this.geysers) {
+      const power = this.geyserPower(g);
+      if (power > 0.1) out.push({ x: g.x, y: this.floorY - GEYSER_H * power * 0.5, radius: 80, rgb: '150,235,225', strength: 0.5 * power, tint: 0.3 });
+    }
+    return out;
+  }
+
+  /*
+   * Drawn for the grid (thalassa-art.ts): the water standing up behind her as
+   * a mantle, then the queen herself in the pose of what she is about to do,
+   * her crown at the heat of the tell - each a sprite made once per pose and
+   * frame, mirrored to face the hero. A struck queen is white for two frames.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
     this.drawTide(ctx);
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.6);
-      ctx.scale(this.facing, 1);
-      const heat = 0.35 + this.crown * 0.65;
-
-      // Robe: a wide skirt of water-heavy cloth, wider at the floor.
-      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
-      g.addColorStop(0, '#2c5f63');
-      g.addColorStop(0.6, '#1a3d45');
-      g.addColorStop(1, '#0b1e26');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-9, -this.h + 12);
-      ctx.lineTo(9, -this.h + 12);
-      ctx.quadraticCurveTo(22, -20, 24, 0);
-      ctx.lineTo(-24, 0);
-      ctx.quadraticCurveTo(-22, -20, -9, -this.h + 12);
-      ctx.closePath();
-      ctx.fill();
-      // Weed trailing off the hem, drawn still: this zone holds its breath.
-      ctx.fillStyle = 'rgba(60,140,110,0.55)';
-      for (let i = -3; i <= 3; i++) {
-        ctx.fillRect(i * 6 - 1, -6, 2, 6 + Math.abs(i));
-      }
-
-      // Shoulders and arms. The throwing arm rears back for the anchor.
-      ctx.fillStyle = '#20464e';
-      ctx.fillRect(-14, -this.h + 14, 28, 7);
-      if (this.tell === 'anchor') {
-        ctx.fillRect(-12, -this.h + 4, 6, 18);
-      } else if (this.tell === 'tide') {
-        ctx.fillRect(10, -this.h + 2, 6, 18);
-        ctx.fillRect(-16, -this.h + 2, 6, 18);
-      } else {
-        ctx.fillRect(this.crown > 0.5 ? 12 : 10, -this.h + 18, 6, 20);
-      }
-
-      // Head, veiled.
-      ctx.fillStyle = '#173239';
-      ctx.beginPath();
-      ctx.moveTo(-8, -this.h + 14);
-      ctx.quadraticCurveTo(0, -this.h - 8, 8, -this.h + 14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = `rgba(150,240,225,${(0.5 + heat * 0.5).toFixed(2)})`;
-      ctx.fillRect(-4, -this.h + 4, 3, 2.5);
-      ctx.fillRect(2, -this.h + 4, 3, 2.5);
-
-      this.drawTell(ctx);
-
-      // The crown, which is the tell: it fills before every move.
-      const cy = -this.h - 4;
-      const halo = ctx.createRadialGradient(0, cy, 0, 0, cy, 34 * heat);
-      halo.addColorStop(0, `rgba(120,225,210,${(0.5 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(120,225,210,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-34, cy - 34, 68, 68);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(190,250,240,${(0.55 + heat * 0.45).toFixed(2)})`;
-      for (let i = -2; i <= 2; i++) {
-        const h = 9 - Math.abs(i) * 2;
-        const bx = i * 6;
-        ctx.beginPath();
-        ctx.moveTo(bx, cy - h);
-        ctx.lineTo(bx + 2.5, cy + 3);
-        ctx.lineTo(bx - 2.5, cy + 3);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.restore();
-      ctx.restore();
-    });
+    shadow(ctx, this.cx, this.bottom, this.w * 0.6);
+    const frame = Math.floor(this.anim * 6) & 3;
+    const telling = this.tell !== 'none' && this.crown > 0.05;
+    const pose: QueenPose = !telling
+      ? 'still'
+      : this.tell === 'surge'
+        ? 'surge'
+        : this.tell === 'anchor'
+          ? 'anchor'
+          : this.tell === 'undertow'
+            ? 'undertow'
+            : 'raise';
+    const heat = this.crown > 0.7 ? 2 : this.crown > 0.3 ? 1 : 0;
+    const mirrored = this.facing < 0;
+    withHitFlash(
+      ctx,
+      solidFlash(this.flash),
+      (c) => {
+        blit(c, mantlePart(frame, telling && this.tell === 'tide'), this.cx, this.bottom, mirrored);
+        blit(c, queenPart(pose, frame, heat), this.cx, this.bottom, mirrored);
+        this.drawTell(c);
+      },
+      { x: this.cx - 70, y: this.bottom - 150, w: 140, h: 160 },
+    );
   }
 
   /**
-   * What she is about to do, drawn on her rather than only over her head, so
-   * the four moves can be told apart at a glance. Called inside her own
-   * mirrored space, hence the +x for what is in front of her.
+   * What she is about to do, drawn round her as well as in her pose, so the
+   * four moves can be told apart at a glance: the surge as two arcs of foam
+   * running out along the floor, the undertow as water winding in at her
+   * feet, the tide as water already climbing out of her raised hands.
    */
   private drawTell(ctx: CanvasRenderingContext2D): void {
     if (this.tell === 'none' || this.crown < 0.05) return;
-    const a = this.crown;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const x = snap(this.cx);
+    const y = snap(this.bottom);
+    const near = this.crown > 0.6;
     switch (this.tell) {
       case 'surge':
-        // Two arcs sweeping out along the floor from under the hem.
-        ctx.strokeStyle = `rgba(140,235,225,${(0.5 * a).toFixed(2)})`;
-        ctx.lineWidth = 3;
-        for (const r of [18, 30]) {
-          ctx.beginPath();
-          ctx.ellipse(0, -3, r, r * 0.32, 0, Math.PI, Math.PI * 2);
-          ctx.stroke();
-        }
+        for (const r of near ? [20, 32] : [20]) ovalRing(ctx, x, y - 3, r, r * 0.32, 1, RAMP.blue[6], true);
         break;
-      case 'anchor': {
-        // The weight itself, held back over her shoulder.
-        ctx.fillStyle = `rgba(120,200,205,${(0.75 * a).toFixed(2)})`;
-        ctx.beginPath();
-        ctx.arc(-15, -this.h - 4, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(180,240,235,${(0.5 * a).toFixed(2)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-10, -this.h + 6);
-        ctx.lineTo(-15, -this.h - 4);
-        ctx.stroke();
-        break;
-      }
       case 'undertow':
-        // Water winding inwards at her feet.
-        ctx.strokeStyle = `rgba(160,240,230,${(0.55 * a).toFixed(2)})`;
-        ctx.lineWidth = 2.5;
         for (let i = 0; i < 3; i++) {
           const r = 34 - i * 9;
-          ctx.beginPath();
-          ctx.ellipse(0, -5, r, r * 0.3, 0, 0.3 + i * 0.5, Math.PI * 1.3 + i * 0.5);
-          ctx.stroke();
+          dashedOval(ctx, x, y - 5, r, r * 0.3, 5, 3, i === 1 ? RAMP.blue[4] : RAMP.blue[6], this.anim * (2 + i));
         }
         break;
       case 'tide':
-        // Both hands up, and the water answering from over her head.
-        ctx.fillStyle = `rgba(170,245,235,${(0.4 * a).toFixed(2)})`;
-        for (let i = -1; i <= 1; i += 2) {
-          ctx.fillRect(i * 13 - 2, -this.h - 14, 4, 12);
+        // Water climbing out of her raised hands, a drop at a time.
+        for (const side of [-1, 1]) {
+          const hx = x + side * 12;
+          const climb = Math.floor(this.anim * 14) % 3;
+          for (let k = 0; k < 3; k++) rect(ctx, hx - 2, y - 92 - k * 8 - climb * 2, 4, 4, k === 2 ? RAMP.blue[6] : RAMP.blue[4]);
         }
         break;
+      default:
+        break;
     }
-    ctx.restore();
   }
 
-  /** The spring tide, drawn in world space: marks first, then the water. */
+  /**
+   * The spring tide: marks on the floor first - a ring of foam closing in on
+   * the spot over a pool of dark water - then the columns, banded water with
+   * foam on their heads, standing as tall as their power says.
+   */
   private drawTide(ctx: CanvasRenderingContext2D): void {
     if (this.geysers.length === 0) return;
-    ctx.save();
+    const F = snap(this.floorY);
     for (const g of this.geysers) {
+      const x = snap(g.x);
       if (g.t < g.wind) {
-        // The mark: a ring closing in on the spot, no flicker in it.
         const p = clamp(g.t / g.wind, 0, 1);
-        ctx.strokeStyle = `rgba(150,235,225,${(0.2 + p * 0.45).toFixed(2)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(g.x, this.floorY - 2, GEYSER_W * (0.9 - p * 0.3), 6 - p * 2, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = `rgba(120,215,210,${(0.12 + p * 0.2).toFixed(2)})`;
-        ctx.beginPath();
-        ctx.ellipse(g.x, this.floorY - 2, GEYSER_W * 0.6, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
+        rect(ctx, x - GEYSER_W * 0.5, F - 4, GEYSER_W, 2, RAMP.blue[1]);
+        ovalRing(ctx, x, F - 2, GEYSER_W * (0.9 - p * 0.3), 6 - p * 2, 1, p > 0.55 ? RAMP.blue[6] : RAMP.blue[4]);
         continue;
       }
       const power = this.geyserPower(g);
       if (power <= 0) continue;
-      const h = GEYSER_H * power;
-      const top = this.floorY - h;
-      const col = ctx.createLinearGradient(0, top, 0, this.floorY);
-      col.addColorStop(0, `rgba(214,252,248,${(0.9 * power).toFixed(2)})`);
-      col.addColorStop(0.4, `rgba(118,214,212,${(0.78 * power).toFixed(2)})`);
-      col.addColorStop(1, `rgba(46,138,152,${(0.6 * power).toFixed(2)})`);
-      ctx.fillStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(g.x - GEYSER_W / 2, this.floorY);
-      ctx.quadraticCurveTo(g.x - GEYSER_W * 0.42, top + h * 0.3, g.x - GEYSER_W * 0.3, top);
-      ctx.lineTo(g.x + GEYSER_W * 0.3, top);
-      ctx.quadraticCurveTo(g.x + GEYSER_W * 0.42, top + h * 0.3, g.x + GEYSER_W / 2, this.floorY);
-      ctx.closePath();
-      ctx.fill();
-      // Crest.
-      ctx.fillStyle = `rgba(226,255,252,${(0.7 * power).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(g.x, top + 2, GEYSER_W * 0.34, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const h = Math.max(8, Math.round((GEYSER_H * power) / 4) * 4);
+      blit(ctx, columnPart(h, (Math.floor(this.anim * 10) & 1) as 0 | 1), x, F);
     }
-    ctx.restore();
   }
 }
 

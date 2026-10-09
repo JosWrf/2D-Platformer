@@ -71,6 +71,32 @@ function quarterTurns(grid: readonly string[], q: number): string[] {
   return g;
 }
 
+/** Stamps the decals of a part into its cells: see Decal. (px, py) is the pivot's cell. */
+function stamp(cells: Int32Array, w: number, h: number, px: number, py: number, theta: number, scale: number, decals: readonly Decal[]): void {
+  const c = Math.cos(theta);
+  const s = Math.sin(theta);
+  for (const d of decals) {
+    const q = ((Math.round((theta + (d.turn ?? 0)) / (Math.PI / 2)) % 4) + 4) % 4;
+    const g = quarterTurns(d.grid, q);
+    const ax = px + Math.round(((d.x * c - d.y * s) * scale) / ART);
+    const ay = py + Math.round(((d.x * s + d.y * c) * scale) / ART);
+    const gh = g.length;
+    const gw = Math.max(...g.map((row) => row.length));
+    const ox = ax - Math.floor(gw / 2);
+    const oy = ay - Math.floor(gh / 2);
+    for (let y = 0; y < gh; y++) {
+      for (let x = 0; x < gw; x++) {
+        const ch = g[y][x];
+        const v = ch && ch !== '.' ? d.cells[ch] : undefined;
+        const i = ox + x;
+        const j = oy + y;
+        if (v === undefined || i < 0 || j < 0 || i >= w || j >= h) continue;
+        cells[j * w + i] = v;
+      }
+    }
+  }
+}
+
 /**
  * Rasterises a part. `reach` is how far from its pivot (logical px, before
  * scale) the part can go; `theta` its turn as the canvas measures one
@@ -100,28 +126,7 @@ export function buildPart(
       cells[j * n + i] = paint(x, y);
     }
   }
-  if (decals.length) {
-    for (const d of decals) {
-      const q = ((Math.round((theta + (d.turn ?? 0)) / (Math.PI / 2)) % 4) + 4) % 4;
-      const g = quarterTurns(d.grid, q);
-      const ax = r + Math.round(((d.x * c - d.y * s) * scale) / ART);
-      const ay = r + Math.round(((d.x * s + d.y * c) * scale) / ART);
-      const gh = g.length;
-      const gw = Math.max(...g.map((row) => row.length));
-      const ox = ax - Math.floor(gw / 2);
-      const oy = ay - Math.floor(gh / 2);
-      for (let y = 0; y < gh; y++) {
-        for (let x = 0; x < gw; x++) {
-          const ch = g[y][x];
-          const v = ch && ch !== '.' ? d.cells[ch] : undefined;
-          const i = ox + x;
-          const j = oy + y;
-          if (v === undefined || i < 0 || j < 0 || i >= n || j >= n) continue;
-          cells[j * n + i] = v;
-        }
-      }
-    }
-  }
+  stamp(cells, n, n, r, r, theta, scale, decals);
   return finish(cells, n, n, r, r, mats);
 }
 
@@ -137,6 +142,7 @@ export function buildUpright(
   bottom: number,
   mats: readonly Mat[],
   paint: (x: number, y: number) => number,
+  decals: readonly Decal[] = [],
 ): PartSprite {
   const px = Math.ceil(-left / ART) + 1;
   const py = Math.ceil(-top / ART) + 1;
@@ -146,6 +152,7 @@ export function buildUpright(
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) cells[j * w + i] = paint((i - px) * ART, (j - py) * ART);
   }
+  stamp(cells, w, h, px, py, 0, 1, decals);
   return finish(cells, w, h, px, py, mats);
 }
 
@@ -271,9 +278,9 @@ export function solidFlash(flash: number): number {
 /**
  * The pixels between two ellipses round (cx, cy): the outer one rx × ry, the
  * inner one `thick` art pixels in (logical coordinates). A ring lying on the
- * floor, seen edge on.
+ * floor, seen edge on - or only its far half, a wave going out over it.
  */
-export function ovalRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, thick: number, color: string): void {
+export function ovalRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, thick: number, color: string, upper = false): void {
   const ox = rx / ART;
   const oy = ry / ART;
   if (ox <= 0 || oy <= 0) return;
@@ -283,7 +290,7 @@ export function ovalRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
   const ccy = cy / ART;
   ctx.fillStyle = color;
   const top = Math.ceil(ccy - oy - 0.5);
-  const bottom = Math.floor(ccy + oy - 0.5);
+  const bottom = upper ? Math.floor(ccy - 0.5) : Math.floor(ccy + oy - 0.5);
   for (let row = top; row <= bottom; row++) {
     const v = (row + 0.5 - ccy) / oy;
     const k = 1 - v * v;
@@ -303,7 +310,6 @@ export function ovalRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, 
     const ir = Math.floor(ccx + inner - 0.5);
     if (il > left) ctx.fillRect(left * ART, row * ART, (il - left) * ART, ART);
     if (right > ir) ctx.fillRect((ir + 1) * ART, row * ART, (right - ir) * ART, ART);
-    if (il <= left && right <= ir) continue;
   }
 }
 
