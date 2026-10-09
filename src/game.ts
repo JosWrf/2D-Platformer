@@ -51,25 +51,6 @@ export const VIEW_H = 540;
 /** The outline round everything the hero reads: a deep violet-black, not black. */
 const OUTLINE_ABGR = abgrOf('#120c24');
 
-/** "rgb(r,g,b)" or "#rrggbb" as numbers, for the actor pass's tint. */
-const rgbCache = new Map<string, [number, number, number]>();
-function rgbOf(color: string): [number, number, number] {
-  let out = rgbCache.get(color);
-  if (!out) {
-    const hex = /^#([0-9a-f]{6})$/i.exec(color.trim());
-    if (hex) {
-      const v = parseInt(hex[1], 16);
-      out = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
-    } else {
-      const [r = 0, g = 0, b = 0] = (color.match(/\d+/g) ?? []).map(Number);
-      out = [r, g, b];
-    }
-    if (rgbCache.size > 256) rgbCache.clear();
-    rgbCache.set(color, out);
-  }
-  return out;
-}
-
 export type GameState = 'title' | 'playing' | 'paused' | 'dead' | 'victory';
 
 interface SpawnRecord {
@@ -1645,7 +1626,7 @@ export class Game implements World {
     const sporeRgb = blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb;
     drawEdgeLight(a, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb, lights);
 
-    this.drawActors(a, darkness, tint);
+    this.drawActors(a);
 
     a.save();
     a.translate(-this.camera.renderX, -this.camera.renderY);
@@ -1694,10 +1675,10 @@ export class Game implements World {
    * The hero, what he fights, what is thrown and what lies about to be picked
    * up: on their own layer, settled onto the grid in one pass over its pixels
    * (settleActors - bodies opaque, glows as an ordered pattern, a one-pixel
-   * outline round every body), and laid over the darkness with only a breath
-   * of it.
+   * outline round every body), and laid over the darkness untouched by it:
+   * the hero reads what he fights in any light.
    */
-  private drawActors(target: CanvasRenderingContext2D, ambient: number, tint: string): void {
+  private drawActors(target: CanvasRenderingContext2D): void {
     const c = this.actors.ctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
@@ -1728,14 +1709,7 @@ export class Game implements World {
 
     c.setTransform(1, 0, 0, 1, 0, 0);
     const image = c.getImageData(0, 0, ART_W, ART_H);
-    settleActors(
-      image,
-      OUTLINE_ABGR,
-      rgbOf(tint),
-      Math.min(0.3, ambient * 0.22),
-      Math.round(this.camera.renderX / ART),
-      Math.round(this.camera.renderY / ART),
-    );
+    settleActors(image, OUTLINE_ABGR, Math.round(this.camera.renderX / ART), Math.round(this.camera.renderY / ART));
     c.putImageData(image, 0, 0);
     target.save();
     target.setTransform(1, 0, 0, 1, 0, 0);

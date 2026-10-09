@@ -127,10 +127,23 @@ const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) =>
  */
 export class PaletteMapper {
   private readonly lut = new Uint32Array(32768);
+  /**
+   * One bit for every colour a pixel can have, set for the palette's own: a
+   * pixel already in the palette is left as it is. Without this the dither
+   * would push a flat fill of the darkest grey half-way to the next one and
+   * break it into a checker - the dither is for what falls between colours,
+   * not for what is drawn in them.
+   */
+  private readonly exact = new Uint32Array(1 << 19);
   readonly colors: readonly number[];
 
   constructor(colors: readonly number[]) {
     this.colors = colors;
+    for (const c of colors) {
+      // The low 24 bits of the ABGR word ImageData holds.
+      const key = ((c & 255) << 16) | (c & 0xff00) | ((c >> 16) & 255);
+      this.exact[key >>> 5] |= 1 << (key & 31);
+    }
     const pr = colors.map((c) => (c >> 16) & 255);
     const pg = colors.map((c) => (c >> 8) & 255);
     const pb = colors.map((c) => c & 255);
@@ -181,6 +194,7 @@ export class PaletteMapper {
     const h = image.height;
     const px = new Uint32Array(image.data.buffer, image.data.byteOffset, w * h);
     const lut = this.lut;
+    const exact = this.exact;
     const hi = FIVE_BITS;
     const d = this.rowDither;
     for (let y = 0; y < h; y++) {
@@ -194,16 +208,25 @@ export class PaletteMapper {
       const end = i + w - (w & 3);
       for (; i < end; i += 4) {
         let c = px[i];
-        px[i] = lut[(hi[(c & 255) + d0] << 10) | (hi[((c >> 8) & 255) + d0] << 5) | hi[((c >> 16) & 255) + d0]];
+        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
+          px[i] = lut[(hi[(c & 255) + d0] << 10) | (hi[((c >> 8) & 255) + d0] << 5) | hi[((c >> 16) & 255) + d0]];
+        }
         c = px[i + 1];
-        px[i + 1] = lut[(hi[(c & 255) + d1] << 10) | (hi[((c >> 8) & 255) + d1] << 5) | hi[((c >> 16) & 255) + d1]];
+        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
+          px[i + 1] = lut[(hi[(c & 255) + d1] << 10) | (hi[((c >> 8) & 255) + d1] << 5) | hi[((c >> 16) & 255) + d1]];
+        }
         c = px[i + 2];
-        px[i + 2] = lut[(hi[(c & 255) + d2] << 10) | (hi[((c >> 8) & 255) + d2] << 5) | hi[((c >> 16) & 255) + d2]];
+        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
+          px[i + 2] = lut[(hi[(c & 255) + d2] << 10) | (hi[((c >> 8) & 255) + d2] << 5) | hi[((c >> 16) & 255) + d2]];
+        }
         c = px[i + 3];
-        px[i + 3] = lut[(hi[(c & 255) + d3] << 10) | (hi[((c >> 8) & 255) + d3] << 5) | hi[((c >> 16) & 255) + d3]];
+        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
+          px[i + 3] = lut[(hi[(c & 255) + d3] << 10) | (hi[((c >> 8) & 255) + d3] << 5) | hi[((c >> 16) & 255) + d3]];
+        }
       }
       for (let x = end - y * w; x < w; x++, i++) {
         const c = px[i];
+        if (exact[(c & 0xffffff) >>> 5] & (1 << (c & 31))) continue;
         const dx = d[x & 3];
         px[i] = lut[(hi[(c & 255) + dx] << 10) | (hi[((c >> 8) & 255) + dx] << 5) | hi[((c >> 16) & 255) + dx]];
       }
@@ -228,8 +251,10 @@ let actorMask = new Uint8Array(0);
 
 /**
  * The actor layer made pixel art, in one pass over its pixels:
- *   - what is mostly opaque is body: made wholly opaque, and darkened a
- *     breath towards the zone's night (tint by amount, 0..1);
+ *   - what is mostly opaque is body: made wholly opaque, its colour left
+ *     exactly as drawn, so a sprite drawn in the palette stays in it (a
+ *     breath of the zone's night laid over the actors used to push every
+ *     flat fill between two palette colours, into a checker);
  *   - what is translucent - a glow, a trail, a ghost - becomes a pattern of
  *     opaque pixels, as many as its alpha asks for, picked by the same 4×4
  *     ordered pattern as the palette's dither and fixed to the world the same
@@ -239,25 +264,13 @@ let actorMask = new Uint8Array(0);
  * No pixel is left half transparent, so no edge is soft and nothing smears
  * across two pixels; and only bodies are outlined, never their glows.
  */
-export function settleActors(
-  image: ImageData,
-  outline: number,
-  tint: readonly [number, number, number],
-  amount: number,
-  ox = 0,
-  oy = 0,
-): void {
+export function settleActors(image: ImageData, outline: number, ox = 0, oy = 0): void {
   const w = image.width;
   const h = image.height;
   const n = w * h;
   const px = new Uint32Array(image.data.buffer, image.data.byteOffset, n);
   if (actorMask.length < n) actorMask = new Uint8Array(n);
   const mask = actorMask;
-  const k = Math.round(Math.max(0, Math.min(1, amount)) * 256);
-  const keep = 256 - k;
-  const tr = tint[0] * k;
-  const tg = tint[1] * k;
-  const tb = tint[2] * k;
   for (let y = 0; y < h; y++) {
     const row = ((y + oy) & 3) * 4;
     let i = y * w;
@@ -275,10 +288,7 @@ export function settleActors(
         mask[i] = 0;
         continue;
       }
-      const r = ((c & 255) * keep + tr) >> 8;
-      const g = (((c >> 8) & 255) * keep + tg) >> 8;
-      const b = (((c >> 16) & 255) * keep + tb) >> 8;
-      px[i] = 0xff000000 | (b << 16) | (g << 8) | r;
+      px[i] = c | 0xff000000;
     }
   }
   for (let y = 0; y < h; y++) {
