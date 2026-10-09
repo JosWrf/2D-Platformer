@@ -137,10 +137,20 @@ const DEEP = '#0e071b';
 function beside(hex: string, d: -1 | 1, fallback: string): string {
   for (const ramp of Object.values(RAMP) as readonly (readonly string[])[]) {
     const i = ramp.indexOf(hex);
-    if (i >= 0) return ramp[i + d] ?? fallback;
+    if (i >= 0) return ramp[i + d] ?? (d < 0 ? (DARKER[hex] ?? fallback) : fallback);
   }
   return fallback;
 }
+
+/** Below the foot of a ramp: the darker colour another ramp continues it with. */
+const DARKER: Readonly<Record<string, string>> = {
+  '#0c2e44': '#03193f',
+  '#03193f': '#0e071b',
+  '#3b1443': '#1c121c',
+  '#571c27': '#1c121c',
+  '#1c121c': '#0e071b',
+  '#131313': '#0e071b',
+};
 
 /* ----------------------------------------------------------------- sky */
 
@@ -877,7 +887,6 @@ interface CavePlan {
 function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
   const p = new Pix(640, 300);
   const base = ink(look.horizon);
-  const top = ink(look.top);
   // Seams a ramp step darker than the rock, lips a step lighter: the wall is
   // drawn in its own neighbours, with half the lines the play layer has, so
   // it stays back there.
@@ -925,11 +934,12 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
       if (rng.next() < 0.5) p.set(x - 1, y, lip);
     }
   }
-  // The roof's shadow, thinning downwards in bands.
-  p.dither(0, 0, p.w, 22, top, 16);
-  p.dither(0, 22, p.w, 14, top, 11);
-  p.dither(0, 36, p.w, 14, top, 6);
-  p.dither(0, 50, p.w, 14, top, 2);
+  // The roof's shadow, thinning downwards in bands of the rock's own darker
+  // neighbour, so the transition never dots two far-apart colours together.
+  p.dither(0, 0, p.w, 22, seam, 16);
+  p.dither(0, 22, p.w, 14, seam, 12);
+  p.dither(0, 36, p.w, 14, seam, 8);
+  p.dither(0, 50, p.w, 14, seam, 4);
   const sparks: Spark[] = [];
   if (plan.veins) {
     const [vein, core] = plan.veins;
@@ -1503,13 +1513,13 @@ function* throne(look: Look, ink: Ink): Painting {
   const near = ink(look.near);
   const red = ink(look.accent);
   const deep = ink(DEEP);
-  const top = ink(look.top);
   const base = ink(look.horizon);
   const strips: Strip[] = [];
   const wall = new Pix(640, 300);
   masonry(wall, 0, 0, wall.w, 300, 40, 18, { body: base, mortar: ink(beside(look.horizon, -1, look.near)), lit: ink(beside(look.horizon, 1, look.far)) }, rng);
-  wall.dither(0, 0, wall.w, 30, top, 12);
-  wall.dither(0, 30, wall.w, 16, top, 6);
+  const shadow = ink(beside(look.horizon, -1, look.top));
+  wall.dither(0, 0, wall.w, 30, shadow, 12);
+  wall.dither(0, 30, wall.w, 16, shadow, 6);
   for (let x = 64; x < wall.w; x += 128) {
     pointed(wall, x, 100, 18, 200, near, 3, red);
     // Leading: the glass in panes, a rose at the head.
