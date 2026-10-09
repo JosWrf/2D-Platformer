@@ -54,6 +54,13 @@ const TINT_BANDS: readonly (readonly [number, number])[] = [
 ];
 
 /**
+ * How far a light's colour is darkened before it is laid on as a dodge: a
+ * channel at full in the light raises what it lights by up to 1 / (1 - 0.4),
+ * two thirds again; a channel the light has none of leaves it as it is.
+ */
+const DODGE = 0.4;
+
+/**
  * Two-pass lighting. The world is drawn as usual, then a sheet of darkness is
  * laid over it with holes burned where the lights are, and finally the lit
  * spots take on the colour of what lights them. That is what turns a flat
@@ -132,12 +139,14 @@ export class LightPass {
     ctx.restore();
 
     // Give the lit spots their colour: drawn at the mask's resolution too, a
-    // quarter of the work, and laid on in one go - as an overlay, not added.
-    // Added, a torch's orange laid a disc of flat grey over a night sky,
-    // because warm light on top of a cold near-black is grey; laid over, a
-    // light warms and brightens what it falls on in proportion to how bright
-    // that already is, so a lit wall turns amber and the sky behind it stays
-    // the sky.
+    // quarter of the work, and laid on in one go - as a gain, not added. Added,
+    // a torch's orange laid a disc of flat grey over a night sky, because
+    // warm light on top of a cold near-black is grey; laid over, it took the
+    // blue out of a cave wall round a row of gems and left a grey box. As a
+    // dodge with the light's colour darkened (see DODGE), each channel of what
+    // is lit is raised in proportion to how bright it already is, by up to the
+    // light's own hue: a lit wall turns amber, black stays black, and nothing
+    // is ever made darker by a light.
     const gc = this.glowCtx;
     gc.globalCompositeOperation = 'source-over';
     gc.globalAlpha = 1;
@@ -145,7 +154,7 @@ export class LightPass {
     gc.globalCompositeOperation = 'lighter';
     let any = false;
     for (const light of lights) {
-      const tint = (light.tint ?? 0.22) * 1.4 * light.strength;
+      const tint = (light.tint ?? 0.22) * 2.2 * light.strength;
       if (tint <= 0.01) continue;
       const r = Math.round((light.radius * 0.85) / MASK);
       if (r < 1) continue;
@@ -161,7 +170,7 @@ export class LightPass {
     if (any) {
       ctx.save();
       ctx.imageSmoothingEnabled = false;
-      ctx.globalCompositeOperation = 'overlay';
+      ctx.globalCompositeOperation = 'color-dodge';
       ctx.drawImage(this.glow, 0, 0, w * MASK, h * MASK);
       ctx.restore();
     }
@@ -178,12 +187,16 @@ export class LightPass {
     return stamp;
   }
 
-  /** A light's own colour at radius r mask pixels: two flat bands, made once. */
+  /** A light's own colour, darkened for the dodge, at radius r mask pixels: two flat bands, made once. */
   private tint(r: number, rgb: string): HTMLCanvasElement {
     const id = `${r}|${rgb}`;
     let stamp = this.tints.get(id);
     if (!stamp) {
-      stamp = bandedDisc(r, TINT_BANDS, rgb);
+      const dodge = rgb
+        .split(',')
+        .map((v) => Math.round(Number(v) * DODGE))
+        .join(',');
+      stamp = bandedDisc(r, TINT_BANDS, dodge);
       this.tints.set(id, stamp);
       if (this.tints.size > 120) this.tints.delete(this.tints.keys().next().value as string);
     }

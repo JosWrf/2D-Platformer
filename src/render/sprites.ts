@@ -475,11 +475,16 @@ const flashLayers = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRend
  * (brightness and saturate), which the browser runs over a layer the size of
  * the whole canvas for every draw - tens of milliseconds on a canvas kept in
  * main memory - and which turned the struck hero lilac rather than white.
+ *
+ * `bounds`, if given, is a box (in the transform's coordinates) the drawing
+ * stays inside: only that much of the layer is cleared, whitened and laid on,
+ * instead of the whole canvas for every struck sprite.
  */
 export function withHitFlash(
   ctx: CanvasRenderingContext2D,
   flash: number,
   draw: (ctx: CanvasRenderingContext2D) => void,
+  bounds?: { x: number; y: number; w: number; h: number },
 ): void {
   if (flash <= 0) {
     draw(ctx);
@@ -492,22 +497,38 @@ export function withHitFlash(
     layer = makeCanvas(width, height);
     flashLayers.set(key, layer);
   }
+  const m = ctx.getTransform();
+  let rx = 0;
+  let ry = 0;
+  let rw = width;
+  let rh = height;
+  if (bounds) {
+    const xa = m.a * bounds.x + m.c * bounds.y + m.e;
+    const xb = m.a * (bounds.x + bounds.w) + m.c * (bounds.y + bounds.h) + m.e;
+    const ya = m.b * bounds.x + m.d * bounds.y + m.f;
+    const yb = m.b * (bounds.x + bounds.w) + m.d * (bounds.y + bounds.h) + m.f;
+    rx = Math.max(0, Math.floor(Math.min(xa, xb)));
+    ry = Math.max(0, Math.floor(Math.min(ya, yb)));
+    rw = Math.min(width, Math.ceil(Math.max(xa, xb))) - rx;
+    rh = Math.min(height, Math.ceil(Math.max(ya, yb))) - ry;
+    if (rw <= 0 || rh <= 0) return;
+  }
   const f = layer.ctx;
   f.setTransform(1, 0, 0, 1, 0, 0);
   f.globalAlpha = 1;
   f.globalCompositeOperation = 'source-over';
-  f.clearRect(0, 0, width, height);
-  f.setTransform(ctx.getTransform());
+  f.clearRect(rx, ry, rw, rh);
+  f.setTransform(m);
   draw(f);
   f.setTransform(1, 0, 0, 1, 0, 0);
   f.globalAlpha = flash >= FLASH_SOLID ? 1 : (flash / FLASH_SOLID) * 0.35;
   f.globalCompositeOperation = 'source-atop';
   f.fillStyle = '#ffffff';
-  f.fillRect(0, 0, width, height);
+  f.fillRect(rx, ry, rw, rh);
   f.globalCompositeOperation = 'source-over';
   f.globalAlpha = 1;
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(layer.canvas, 0, 0);
+  ctx.drawImage(layer.canvas, rx, ry, rw, rh, rx, ry, rw, rh);
   ctx.restore();
 }

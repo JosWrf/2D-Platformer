@@ -401,6 +401,18 @@ function drawPips(ctx: CanvasRenderingContext2D, e: Enemy, top: number): void {
 }
 
 /**
+ * The box a roster monster's drawing stays inside while it flashes: so far
+ * either side of its middle, so far above its feet (or its middle, for a
+ * flyer: a negative `below` measures from there) and so far below.
+ */
+function flashBox(e: Enemy, side: number, above: number, below: number): { x: number; y: number; w: number; h: number } | undefined {
+  if (e.flash <= 0) return undefined;
+  const base = below < 0 ? e.cy : e.bottom;
+  const under = Math.abs(below);
+  return { x: e.cx - side, y: base - above, w: side * 2, h: above + under };
+}
+
+/**
  * The contact line under a monster that walks or hops: on the floor below
  * it, narrower and fainter the higher it is, gone more than a few tiles up.
  */
@@ -487,7 +499,7 @@ export class Slime extends Enemy {
     else frame = Math.floor(this.anim * 2.6) % 2 === 0 ? 'idle0' : 'idle1';
     const palette = paletteFor(homeZone(this));
     footShadow(ctx, world, this, this.w * 1.3, 0.34);
-    withHitFlash(ctx, this.flash, (c) => SLIME.draw(c, frame, this.cx, this.bottom, 9, SLIME_H, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => SLIME.draw(c, frame, this.cx, this.bottom, 9, SLIME_H, this.facing, palette), flashBox(this, 40, 34, 6));
     drawPips(ctx, this, this.bottom - (frame === 'rise' ? 28 : 22));
   }
 }
@@ -619,7 +631,7 @@ export class Bat extends Enemy {
     const palette = paletteFor(homeZone(this));
     const burn = this.tell > 0 ? 1 - this.tell / BAT_TELL : 0;
     if (burn > 0) glow(ctx, this.cx, this.cy - 2, 10 + burn * 12, keyColor(BAT, palette, 'e'), 0.3 + burn * 0.5);
-    withHitFlash(ctx, this.flash, (c) => BAT.draw(c, frame, this.cx, this.cy, 11, 8, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => BAT.draw(c, frame, this.cx, this.cy, 11, 8, this.facing, palette), flashBox(this, 30, 20, -16));
     drawPips(ctx, this, this.cy - 12);
   }
 }
@@ -772,7 +784,7 @@ export class Skeleton extends Enemy {
     const palette = paletteFor(homeZone(this));
     footShadow(ctx, world, this, 28, 0.34);
     if (this.state === 'windup') glow(ctx, this.cx, this.bottom - 35, 14, '#ffd27a', 0.6);
-    withHitFlash(ctx, this.flash, (c) => SKELETON.draw(c, frame, this.cx, this.bottom, SKELETON_SPINE, SKELETON_H, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => SKELETON.draw(c, frame, this.cx, this.bottom, SKELETON_SPINE, SKELETON_H, this.facing, palette), flashBox(this, 64, 64, 6));
     drawPips(ctx, this, this.bottom - (frame === 'windup0' || frame === 'windup1' ? 60 : 40));
   }
 }
@@ -872,7 +884,7 @@ export class DarkMage extends Enemy {
         : 'idle1';
     const palette = paletteFor(homeZone(this));
     glow(ctx, this.cx + this.facing * 14, this.bottom - 45, casting ? 22 : 12, keyColor(MAGE, palette, 'o'), casting ? 0.7 : 0.3);
-    withHitFlash(ctx, this.flash, (c) => MAGE.draw(c, frame, this.cx, this.bottom, MAGE_SPINE, MAGE_H, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => MAGE.draw(c, frame, this.cx, this.bottom, MAGE_SPINE, MAGE_H, this.facing, palette), flashBox(this, 40, 56, 6));
     drawPips(ctx, this, this.bottom - 42);
   }
 }
@@ -1018,7 +1030,7 @@ export class Bomber extends Enemy {
     const shudder = lit && Math.floor(this.anim * 30) % 2 === 0 ? ART : 0;
     footShadow(ctx, world, this, this.w * 1.2, 0.34);
     if (lit) glow(ctx, this.cx, this.cy - 4, 18 + heat * 14, '#ffa214', 0.35 + heat * 0.4);
-    withHitFlash(ctx, this.flash, (c) => ZUNDER.draw(c, frame, this.cx + shudder, this.bottom, 9, ZUNDER_FEET, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => ZUNDER.draw(c, frame, this.cx + shudder, this.bottom, 9, ZUNDER_FEET, this.facing, palette), flashBox(this, 28, 40, 6));
     if (lit) {
       // The closing ring, in world space so its size means distance.
       pixelRing(ctx, this.cx, this.cy, BOOM_RADIUS * (1 - heat * 0.72), `rgba(255,200,37,${(0.45 + heat * 0.15).toFixed(2)})`);
@@ -1195,7 +1207,7 @@ export class Shieldman extends Enemy {
     const palette = paletteFor(homeZone(this));
     footShadow(ctx, world, this, 30, 0.36);
     if (this.exposed) glow(ctx, this.cx + this.facing * 2, this.bottom - 31, 12, '#ffa214', 0.6);
-    withHitFlash(ctx, this.flash, (c) => SCHILDWACHE.draw(c, frame, this.cx, this.bottom, SHIELD_SPINE, SHIELD_H, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => SCHILDWACHE.draw(c, frame, this.cx, this.bottom, SHIELD_SPINE, SHIELD_H, this.facing, palette), flashBox(this, 72, 44, 6));
     drawPips(ctx, this, this.bottom - 40);
   }
 }
@@ -1354,7 +1366,7 @@ export class Charger extends Enemy {
     }
     const palette = paletteFor(homeZone(this));
     footShadow(ctx, world, this, 34, 0.36);
-    withHitFlash(ctx, this.flash, (c) => KLINGENLAEUFER.draw(c, frame, this.cx, this.bottom, CHARGER_SPINE, CHARGER_FEET, this.facing, palette));
+    withHitFlash(ctx, this.flash, (c) => KLINGENLAEUFER.draw(c, frame, this.cx, this.bottom, CHARGER_SPINE, CHARGER_FEET, this.facing, palette), flashBox(this, 44, 34, 6));
     if (this.state === 'dazed') {
       ctx.fillStyle = '#ffeb57';
       for (let i = 0; i < 3; i++) {

@@ -22,11 +22,12 @@ const RAMPS: readonly (readonly string[])[] = [
   /* gold */ ['#ffeb57', '#edab50', '#e07438', '#bf6f4a', '#8a4836', '#5d2c28'],
   /* blood */ ['#f68187', '#f5555d', '#ea323c', '#c42430', '#891e2b', '#571c27', '#3b1443'],
   /* leaf */ ['#d3fc7e', '#99e65f', '#5ac54f', '#33984b', '#1e6f50', '#134c4c', '#0c2e44'],
+  // Before water, so that white - a hit spark, a death spark - cools as steel.
+  /* steel */ ['#ffffff', '#c7cfdd', '#92a1b9', '#657392', '#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
   /* water and ice */ ['#ffffff', '#94fdff', '#0cf1ff', '#00cdf9', '#0098dc', '#0069aa', '#00396d', '#03193f'],
   /* magic */ ['#fdd2ed', '#f389f5', '#db3ffd', '#7a09fa', '#3003d9', '#0c0293'],
   /* plum */ ['#fdd2ed', '#ca52c9', '#93388f', '#622461', '#3b1443', '#1c121c'],
   /* earth */ ['#f9e6cf', '#f6ca9f', '#e69c69', '#bf6f4a', '#8a4836', '#5d2c28', '#391f21', '#1c121c'],
-  /* steel */ ['#ffffff', '#c7cfdd', '#92a1b9', '#657392', '#424c6e', '#2a2f4e', '#1a1932', '#0e071b'],
 ];
 
 const FIRE = 0;
