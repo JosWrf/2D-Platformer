@@ -142,6 +142,19 @@ function beside(hex: string, d: -1 | 1, fallback: string): string {
   return fallback;
 }
 
+/**
+ * A shadow along the top of a wall, a roof's or a vault's: solid for `rows`,
+ * then thinning out in three steps of two rows each (75, 50, 25 %) - read as
+ * a gradient, in as few lone dots as a dither can be drawn with. Half-tone
+ * bands a dozen rows deep were a screen of them.
+ */
+function shadowTop(p: Pix, rows: number, c: Abgr): void {
+  p.rect(0, 0, p.w, rows, c);
+  p.dither(0, rows, p.w, 2, c, 12);
+  p.dither(0, rows + 2, p.w, 2, c, 8);
+  p.dither(0, rows + 4, p.w, 2, c, 4);
+}
+
 /** Below the foot of a ramp: the darker colour another ramp continues it with. */
 const DARKER: Readonly<Record<string, string>> = {
   '#0c2e44': '#03193f',
@@ -238,10 +251,10 @@ function mistBand(width: number, height: number, c: Abgr, peak: number, seed: nu
     for (let y = 0; y < height; y++) {
       const v = 1 - Math.abs((y + 0.5) / height - 0.5) * 2;
       const level = peak * v * (0.35 + puff * 0.9);
-      // Solid where the mist is thick, a half-pattern only along its rim, and
-      // nothing where it is thin: a bank of fog with an edge, not a veil of
-      // single pixels.
-      const on = level >= 4.5 || (level >= 2.5 && bayerOn(x, y, 8));
+      // Solid where the mist is thick enough to be seen and nothing where it
+      // is thin: a bank of fog with a ragged edge, the way a palette of a few
+      // colours draws a cloud - not a veil, nor a rim, of single pixels.
+      const on = level >= 3.5;
       if (on) p.data[y * width + x] = c;
     }
   }
@@ -934,12 +947,9 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
       if (rng.next() < 0.5) p.set(x - 1, y, lip);
     }
   }
-  // The roof's shadow, thinning downwards in bands of the rock's own darker
-  // neighbour, so the transition never dots two far-apart colours together.
-  p.dither(0, 0, p.w, 22, seam, 16);
-  p.dither(0, 22, p.w, 14, seam, 12);
-  p.dither(0, 36, p.w, 14, seam, 8);
-  p.dither(0, 50, p.w, 14, seam, 4);
+  // The roof's shadow, in the rock's own darker neighbour, so the transition
+  // never dots two far-apart colours together.
+  shadowTop(p, 34, seam);
   const sparks: Spark[] = [];
   if (plan.veins) {
     const [vein, core] = plan.veins;
@@ -1136,8 +1146,7 @@ function* drowned(look: Look, ink: Ink, altar = false): Painting {
   // The far wall: big blocks of masonry, tall windows lit faintly from outside.
   const wall = new Pix(640, 300);
   masonry(wall, 0, 0, wall.w, 300, 40, 18, { body: stone, mortar: seam, lit }, rng);
-  wall.dither(0, 0, wall.w, 30, deep, 12);
-  wall.dither(0, 30, wall.w, 16, seam, 8);
+  shadowTop(wall, 30, seam);
   for (let x = 40; x < wall.w; x += 120) {
     pointed(wall, x, 82, 9, 162, seam, 2, glass);
     wall.rect(x, 70, 1, 92, seam);
@@ -1518,8 +1527,7 @@ function* throne(look: Look, ink: Ink): Painting {
   const wall = new Pix(640, 300);
   masonry(wall, 0, 0, wall.w, 300, 40, 18, { body: base, mortar: ink(beside(look.horizon, -1, look.near)), lit: ink(beside(look.horizon, 1, look.far)) }, rng);
   const shadow = ink(beside(look.horizon, -1, look.top));
-  wall.dither(0, 0, wall.w, 30, shadow, 12);
-  wall.dither(0, 30, wall.w, 16, shadow, 6);
+  shadowTop(wall, 30, shadow);
   for (let x = 64; x < wall.w; x += 128) {
     pointed(wall, x, 100, 18, 200, near, 3, red);
     // Leading: the glass in panes, a rose at the head.
