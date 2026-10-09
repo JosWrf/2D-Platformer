@@ -88,12 +88,19 @@ const SWINGS: readonly SwingShape[] = [
 /** Index of the charged swing inside SWINGS. */
 const CHARGED_SWING = 3;
 
-/** The run, eight drawn frames; and frames of it per unit of runCycle. */
+/**
+ * The run, eight drawn frames, and frames of it per unit of runCycle: at full
+ * speed runCycle gains about twelve a second, so the cycle comes round three
+ * times a second - six strides, about what his speed asks for.
+ */
 const RUN_FRAMES: readonly HeroFrame[] = ['run0', 'run1', 'run2', 'run3', 'run4', 'run5', 'run6', 'run7'];
 const RUN_PACE = 2;
-/** Standing, four frames of breath. */
+/**
+ * Standing, four frames of breath: runCycle gains two a second at rest, so
+ * a breath in and out takes a little over a second.
+ */
 const IDLE_FRAMES: readonly HeroFrame[] = ['idle0', 'idle1', 'idle2', 'idle3'];
-const IDLE_PACE = 2.5;
+const IDLE_PACE = 1.5;
 
 /** How long the attack key has to be held before the blade is ready. */
 const CHARGE_TIME = 0.42;
