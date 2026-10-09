@@ -1827,6 +1827,14 @@ npm run playtest       # Bot spielt das Level mit echter Physik und meldet Häng
 npm run screenshots    # erzeugt die Bilder in screenshots/
 ```
 
+`verify:balance` stellt jeden Boss mit den Relikten, die der Weg bis zu ihm
+hergibt, einem Leser und einem Draufhauer gegenüber — siehe [Herausfordernd,
+aber keine Wand](#herausfordernd-aber-keine-wand). Die Bank liegt in
+`tools/balance/harness.mjs`, die Leser in `tools/balance/readers/`, einer je
+Boss; jeder darf nur sehen, was 0,3 s alt ist (`h.lag`). `--boss wyrm,clock`
+misst nur diese, `--runs 5` öfter, `--style masher` nur den Draufhauer und
+`--dist` einen anderen Build, etwa einen älteren zum Vergleich.
+
 `verify:level` baut einen Graphen aus allen begehbaren Kacheln und prüft mit
 einem bewusst konservativen Sprungmodell, ob Boss **und** Tor vom Startpunkt
 aus erreichbar sind — nützlich, sobald man am Level schraubt. Es meldet Gegner,
