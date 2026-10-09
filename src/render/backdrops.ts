@@ -1,4 +1,5 @@
 import { Rng } from '../core/math';
+import { RAMP } from './palette';
 import {
   type Abgr,
   Pix,
@@ -125,6 +126,21 @@ export interface Art {
 
 /** The darkest colour of the backdrops: shade in the strips right behind the play. */
 const DEEP = '#0e071b';
+
+/**
+ * The colour a ramp step darker (d < 0) or lighter (d > 0) than `hex` on its
+ * own ramp, or `fallback` where the ramp ends there. A far wall draws its
+ * seams and lips in these, so its lines stay a step from its fill and never
+ * in the near-black the play layer is outlined with: drawn that way it sinks
+ * back behind the play instead of reading as one surface with it.
+ */
+function beside(hex: string, d: -1 | 1, fallback: string): string {
+  for (const ramp of Object.values(RAMP) as readonly (readonly string[])[]) {
+    const i = ramp.indexOf(hex);
+    if (i >= 0) return ramp[i + d] ?? fallback;
+  }
+  return fallback;
+}
 
 /* ----------------------------------------------------------------- sky */
 
@@ -862,15 +878,18 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
   const p = new Pix(640, 300);
   const base = ink(look.horizon);
   const top = ink(look.top);
-  const lip = ink(look.far);
-  const seam = ink(look.top);
+  // Seams a ramp step darker than the rock, lips a step lighter: the wall is
+  // drawn in its own neighbours, with half the lines the play layer has, so
+  // it stays back there.
+  const lip = ink(beside(look.horizon, 1, look.far));
+  const seam = ink(beside(look.horizon, -1, look.top));
   p.rect(0, 0, p.w, p.h, base);
   // Strata: courses of rock of uneven height, the seams between them broken
   // here and there, each course split by joints into blocks. A block's top
   // edge catches the light from above, its underside and its right-hand
   // joint fall into shade.
   const seams: Int16Array[] = [];
-  for (let y0 = 34; y0 < p.h + 20; y0 += rng.int(10, 22)) {
+  for (let y0 = 34; y0 < p.h + 20; y0 += rng.int(20, 40)) {
     const line = new Int16Array(p.w);
     const s = seams.length;
     for (let x = 0; x < p.w; x++) line[x] = y0 + Math.round((noise(x, p.w, 8, plan.seed + s) - 0.5) * 14 + (noise(x, p.w, 40, plan.seed + s + 50) - 0.5) * 4);
@@ -880,13 +899,15 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
     const line = seams[s];
     const below = seams[s + 1];
     for (let x = 0; x < p.w; x++) {
-      if (noise(x, p.w, 32, plan.seed + s * 7) < 0.22) continue;
+      const n = noise(x, p.w, 32, plan.seed + s * 7);
+      if (n < 0.22) continue;
       p.set(x, line[x], seam);
-      p.set(x, line[x] + 1, lip);
+      // The lip only where the seam runs deep.
+      if (n > 0.55) p.set(x, line[x] + 1, lip);
     }
     if (!below) continue;
     // Joints down to the next seam, a block's width apart.
-    for (let x0 = rng.int(0, 30); x0 < p.w; x0 += rng.int(18, 90)) {
+    for (let x0 = rng.int(0, 60); x0 < p.w; x0 += rng.int(40, 170)) {
       let x = x0;
       for (let y = line[x0] + 2; y < below[x0]; y++) {
         if (rng.next() < 0.3) x += rng.int(-1, 1);
@@ -896,7 +917,7 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
     }
   }
   // Cracks running down, and ledges of lighter rock.
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 7; i++) {
     let x = rng.int(0, p.w);
     for (let y = rng.int(50, 150); y < 280; y++) {
       if (rng.next() < 0.3) x += rng.int(-1, 1);
@@ -1104,7 +1125,7 @@ function* drowned(look: Look, ink: Ink, altar = false): Painting {
 
   // The far wall: big blocks of masonry, tall windows lit faintly from outside.
   const wall = new Pix(640, 300);
-  masonry(wall, 0, 0, wall.w, 300, 24, 12, { body: stone, mortar: seam, lit }, rng);
+  masonry(wall, 0, 0, wall.w, 300, 40, 18, { body: stone, mortar: seam, lit }, rng);
   wall.dither(0, 0, wall.w, 30, deep, 12);
   wall.dither(0, 30, wall.w, 16, seam, 8);
   for (let x = 40; x < wall.w; x += 120) {
@@ -1486,7 +1507,7 @@ function* throne(look: Look, ink: Ink): Painting {
   const base = ink(look.horizon);
   const strips: Strip[] = [];
   const wall = new Pix(640, 300);
-  masonry(wall, 0, 0, wall.w, 300, 24, 12, { body: base, mortar: near, lit: ink('#5d2c28') }, rng);
+  masonry(wall, 0, 0, wall.w, 300, 40, 18, { body: base, mortar: ink(beside(look.horizon, -1, look.near)), lit: ink(beside(look.horizon, 1, look.far)) }, rng);
   wall.dither(0, 0, wall.w, 30, top, 12);
   wall.dither(0, 30, wall.w, 16, top, 6);
   for (let x = 64; x < wall.w; x += 128) {

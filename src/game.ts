@@ -1409,7 +1409,7 @@ export class Game implements World {
         const flicker = 0.92 + Math.sin(this.time * 7 + d.x) * 0.08;
         add(d.x + 8, d.y + 2, 190 * flicker, '255,168,84', 1, 0.34);
       } else {
-        add(d.x + 8, d.y - 6, 120, '99,230,255', 0.85, 0.4);
+        add(d.x + 8, d.y - 6, 120, d.hot ? '255,112,56' : '99,230,255', 0.85, 0.4);
       }
     }
 

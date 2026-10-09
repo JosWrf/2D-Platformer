@@ -324,47 +324,49 @@ const DEFS: Record<string, MaterialDef> = {
     plank: 'wood',
     rim: '#657392',
   },
-  // The grotto: the same rock with every light eaten out of its veins.
+  // The grotto: rock gone the colour of the dark that lives in it, broken
+  // into small sharp facets, every light eaten out of its veins.
   grotto: {
-    ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [2.8, 2.55, 2.3],
+    ramp: ['#0e071b', '#1c121c', '#3b1443', '#622461', '#93388f'],
+    bands: [2.35, 2.1, 1.85],
     grain: 0.45,
-    pattern: 'rock',
+    pattern: 'facets',
     top: 'lip',
-    topColors: ['#2a2f4e', '#1a1932'],
+    topColors: ['#622461', '#3b1443'],
     features: ['vein', 'crack', 'pebble'],
-    accent: ['#1a1932', '#2a2f4e', '#424c6e'],
+    accent: ['#1c121c', '#3b1443', '#622461'],
     cover: 0,
     plank: 'wood',
-    rim: '#424c6e',
+    rim: '#93388f',
   },
-  // Arachna's chamber: cold rock with silk across it.
+  // Arachna's chamber: cold grey slabs with silk across them.
   web: {
-    ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
+    ramp: ['#131313', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d'],
     bands: [2.95, 2.7, 2.45],
     grain: 0.45,
-    pattern: 'rock',
+    pattern: 'slabs',
     top: 'lip',
-    topColors: ['#424c6e', '#2a2f4e'],
+    topColors: ['#5d5d5d', '#3d3d3d'],
     features: ['silk', 'vein', 'crack'],
-    accent: ['#424c6e', '#657392', '#92a1b9'],
+    accent: ['#3d3d3d', '#858585', '#b4b4b4'],
     cover: 0,
     plank: 'wood',
-    rim: '#657392',
+    rim: '#858585',
   },
-  // Ignivor's chamber: the rock with embers where the crystal was.
+  // Ignivor's chamber: basalt, red-brown and black, embers where the
+  // crystal was.
   forge: {
-    ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
+    ramp: ['#0e071b', '#1c121c', '#391f21', '#5d2c28', '#8a4836'],
     bands: [2.9, 2.65, 2.4],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
-    topColors: ['#424c6e', '#2a2f4e'],
+    topColors: ['#5d2c28', '#391f21'],
     features: ['ember', 'crack', 'ember'],
     accent: ['#8e251d', '#c64524', '#e07438'],
     cover: 0,
     plank: 'wood',
-    rim: '#657392',
+    rim: '#8a4836',
   },
   // The drowned hall: wet blocks, algae on top, a tide mark down every face.
   drowned: {

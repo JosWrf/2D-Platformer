@@ -20,7 +20,9 @@ type PropKind =
   | 'candle'
   | 'vine'
   | 'stalactite'
-  | 'chain';
+  | 'chain'
+  | 'ember'
+  | 'obsidian';
 
 interface Prop {
   kind: PropKind;
@@ -40,6 +42,7 @@ const GLOWING: Partial<Record<PropKind, { rgb: string; radius: number }>> = {
   shard: { rgb: '99,230,255', radius: 66 },
   riftshard: { rgb: '176,120,255', radius: 70 },
   candle: { rgb: '255,178,96', radius: 82 },
+  ember: { rgb: '255,112,56', radius: 58 },
 };
 
 /*
@@ -83,6 +86,15 @@ const K = {
   /** Petals. */
   p: '#657392',
   o: '#8a4836',
+  /** Obsidian: black glass, its body, the light along an edge. */
+  x: '#0e071b',
+  X: '#3b1443',
+  h: '#93388f',
+  /** Embers: the coal's dark glow, its heat, and where it burns brightest. */
+  r: '#8e251d',
+  R: '#c64524',
+  y: '#ed7614',
+  Y: '#ffa214',
 } as const;
 
 function sprites(...variants: string[][]): PixelSprite[] {
@@ -129,12 +141,21 @@ const ART_OF: Record<PropKind, PixelSprite[][]> = {
   ],
   stalactite: [sprites(['lSSSs', 'lSSs.', '.lSs.', '.lS..', '..S..']), sprites(['lSSSSs', 'lSSSs.', '.lSSs.', '.lSs..', '..lS..', '..S...', '..S...'])],
   chain: [sprites(['.I.', 'I.I', '.I.', '.i.', '.I.', 'I.I', '.I.', '.i.', '.I.', 'I.I', '.I.'])],
+  ember: [
+    sprites(['..y...', '.rRr..', 'xRyRxr', 'xxRxxx'], ['..Y...', '.rRr..', 'xRYRxr', 'xxRxxx']),
+    sprites(['.r..', 'xRr.', 'xyRx', 'xxxx'], ['.R..', 'xRr.', 'xYRx', 'xxxx']),
+  ],
+  obsidian: [
+    sprites(['..h..', '.Xh..', '.Xhx.', 'XXhx.', 'XXhxx', 'XXhxx']),
+    sprites(['.h..', 'Xh..', 'Xhx.', 'XXhx', 'xXxx']),
+  ],
 };
 
 /**
  * Scatters the level with the small things that make a place look inhabited:
  * grass and ferns in the forest, rubble in the ruins, glowing mushrooms and
- * stalagmites in the caves, bones and candles in the castle.
+ * stalagmites in the caves, obsidian and embers in the Glutkammer, bones and
+ * candles in the castle.
  *
  * Everything is derived from the tile map with a per-tile seed, so no level
  * data has to be maintained by hand and the result is identical on every run.
@@ -160,7 +181,7 @@ export class Scatter {
         // Standing on a surface.
         if (level.tileAt(tx, ty - 1) === Tile.Empty) {
           const roll = rng.next();
-          const kind = Scatter.surfaceProp(zone.name, roll, rng);
+          const kind = Scatter.surfaceProp(zone.backdrop === 'forge' ? 'forge' : zone.name, roll, rng);
           if (kind) {
             this.push({
               kind,
@@ -214,6 +235,13 @@ export class Scatter {
         if (roll < 0.22) return 'stalagmite';
         if (roll < 0.34) return 'shroom';
         if (roll < 0.4) return rng.next() < 0.5 ? 'shard' : 'rubble';
+        return null;
+      case 'forge':
+        // Ignivor's chamber: obsidian and embers, nothing that grows or
+        // glints cold.
+        if (roll < 0.14) return 'obsidian';
+        if (roll < 0.24) return 'ember';
+        if (roll < 0.34) return 'rubble';
         return null;
       case 'castle':
         if (roll < 0.14) return 'rubble';
@@ -291,7 +319,7 @@ export class Scatter {
       // Grass leans now and then and a flame flickers - each on its own
       // clock, a whole frame at a time; in a calm zone they hold still.
       const moving = frames.length > 1 && !prop.calm;
-      const rate = prop.kind === 'candle' ? 7 : 0.9;
+      const rate = prop.kind === 'candle' ? 7 : prop.kind === 'ember' ? 3 : 0.9;
       const frame = moving ? frames[Math.floor(time * rate + prop.seed * 17) % 2] : frames[0];
       const facing = prop.seed * 100 - Math.floor(prop.seed * 100) < 0.5 ? 1 : -1;
       const x = prop.x - (frame.w * ART) / 2;
