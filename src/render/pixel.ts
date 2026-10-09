@@ -11,11 +11,12 @@
  * HiDPI screen than on any other.
  *
  * Three things keep the art honest once it is on the grid:
- *   - a fixed palette every frame is mapped to (PaletteMapper), with an
- *     ordered dither where a gradient or a soft edge falls between two of its
- *     colours, instead of the tens of thousands of colours a canvas makes;
+ *   - a fixed palette every frame is mapped to (render/palettemap.ts), with
+ *     an ordered pattern only where a blend falls between two neighbouring
+ *     colours of a ramp, instead of the tens of thousands of colours a canvas
+ *     makes;
  *   - a one-pixel outline round everything the player has to read - the hero,
- *     what he fights, what is thrown and what he picks up (outlineLayer) -
+ *     what he fights, what is thrown and what he picks up (settleActors) -
  *     and never round the terrain, which is what separates the play from the
  *     scenery;
  *   - helpers that place and draw on whole art pixels (snap, artRect,
@@ -113,134 +114,6 @@ export class PixelSprite {
   }
 }
 
-/* ------------------------------------------------------------- palette */
-
-/** 4×4 Bayer matrix, centred on zero, in units of one step. */
-const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16 - 0.5);
-
-/**
- * Maps a frame to a fixed palette. A 15-bit lookup table holds, for every
- * colour a canvas can make (to 5 bits a channel), the nearest colour of the
- * palette by a perceptually weighted distance; the frame is read once, nudged
- * by an ordered dither so that what falls between two palette colours comes
- * out as a pattern of both, and written back.
- */
-export class PaletteMapper {
-  private readonly lut = new Uint32Array(32768);
-  /**
-   * One bit for every colour a pixel can have, set for the palette's own: a
-   * pixel already in the palette is left as it is. Without this the dither
-   * would push a flat fill of the darkest grey half-way to the next one and
-   * break it into a checker - the dither is for what falls between colours,
-   * not for what is drawn in them.
-   */
-  private readonly exact = new Uint32Array(1 << 19);
-  readonly colors: readonly number[];
-
-  constructor(colors: readonly number[]) {
-    this.colors = colors;
-    for (const c of colors) {
-      // The low 24 bits of the ABGR word ImageData holds.
-      const key = ((c & 255) << 16) | (c & 0xff00) | ((c >> 16) & 255);
-      this.exact[key >>> 5] |= 1 << (key & 31);
-    }
-    const pr = colors.map((c) => (c >> 16) & 255);
-    const pg = colors.map((c) => (c >> 8) & 255);
-    const pb = colors.map((c) => c & 255);
-    for (let i = 0; i < 32768; i++) {
-      const r = ((i >> 10) & 31) * 8 + 4;
-      const g = ((i >> 5) & 31) * 8 + 4;
-      const b = (i & 31) * 8 + 4;
-      let best = 0;
-      let bestD = Infinity;
-      for (let k = 0; k < colors.length; k++) {
-        // "Redmean": a cheap distance that weighs the channels the way the eye
-        // does, more so in the reds.
-        const rm = (r + pr[k]) / 2;
-        const dr = r - pr[k];
-        const dg = g - pg[k];
-        const db = b - pb[k];
-        const d = (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
-        if (d < bestD) {
-          bestD = d;
-          best = k;
-        }
-      }
-      // ImageData is RGBA in memory: as a little-endian Uint32 that is ABGR.
-      this.lut[i] = (255 << 24) | (pb[best] << 16) | (pg[best] << 8) | pr[best];
-    }
-  }
-
-  /**
-   * The table as bytes, red, green, blue and alpha per entry: a 32×32×32
-   * texture with blue running fastest, then green, then red.
-   */
-  lutBytes(): Uint8Array {
-    return new Uint8Array(this.lut.buffer);
-  }
-
-  /**
-   * Maps the pixels in place. `dither` is the spread of the pattern in levels
-   * of 0-255; (ox, oy) is where the image sits in the world, in art pixels,
-   * so that the pattern stays put on the world as the camera moves instead of
-   * crawling over it like a pane of frosted glass.
-   *
-   * Written for speed, since it runs over every pixel of every frame: the
-   * dither of a row is four whole numbers, worked out once per row, and the
-   * clamping and the drop to five bits a channel are one table lookup.
-   */
-  map(image: ImageData, dither: number, ox = 0, oy = 0): void {
-    const w = image.width;
-    const h = image.height;
-    const px = new Uint32Array(image.data.buffer, image.data.byteOffset, w * h);
-    const lut = this.lut;
-    const exact = this.exact;
-    const hi = FIVE_BITS;
-    const d = this.rowDither;
-    for (let y = 0; y < h; y++) {
-      const row = ((y + oy) & 3) * 4;
-      for (let k = 0; k < 4; k++) d[k] = Math.round(BAYER4[row + ((k + ox) & 3)] * dither) + SLACK;
-      const d0 = d[0];
-      const d1 = d[1];
-      const d2 = d[2];
-      const d3 = d[3];
-      let i = y * w;
-      const end = i + w - (w & 3);
-      for (; i < end; i += 4) {
-        let c = px[i];
-        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
-          px[i] = lut[(hi[(c & 255) + d0] << 10) | (hi[((c >> 8) & 255) + d0] << 5) | hi[((c >> 16) & 255) + d0]];
-        }
-        c = px[i + 1];
-        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
-          px[i + 1] = lut[(hi[(c & 255) + d1] << 10) | (hi[((c >> 8) & 255) + d1] << 5) | hi[((c >> 16) & 255) + d1]];
-        }
-        c = px[i + 2];
-        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
-          px[i + 2] = lut[(hi[(c & 255) + d2] << 10) | (hi[((c >> 8) & 255) + d2] << 5) | hi[((c >> 16) & 255) + d2]];
-        }
-        c = px[i + 3];
-        if (!(exact[(c & 0xffffff) >>> 5] & (1 << (c & 31)))) {
-          px[i + 3] = lut[(hi[(c & 255) + d3] << 10) | (hi[((c >> 8) & 255) + d3] << 5) | hi[((c >> 16) & 255) + d3]];
-        }
-      }
-      for (let x = end - y * w; x < w; x++, i++) {
-        const c = px[i];
-        if (exact[(c & 0xffffff) >>> 5] & (1 << (c & 31))) continue;
-        const dx = d[x & 3];
-        px[i] = lut[(hi[(c & 255) + dx] << 10) | (hi[((c >> 8) & 255) + dx] << 5) | hi[((c >> 16) & 255) + dx]];
-      }
-    }
-  }
-
-  private readonly rowDither = new Int32Array(4);
-}
-
-/** Room either side of 0-255 for the dither to push a channel into. */
-const SLACK = 64;
-/** A channel plus its dither (offset by SLACK), clamped to 0-255 and cut to five bits. */
-const FIVE_BITS = new Uint8Array(256 + SLACK * 2).map((_, v) => Math.max(0, Math.min(255, v - SLACK)) >> 3);
-
 /* ------------------------------------------------------------- actors */
 
 /** Alpha from which an actor's pixel counts as body rather than glow. */
@@ -302,9 +175,20 @@ export function settleActors(image: ImageData, outline: number, ox = 0, oy = 0):
         (y < h - 1 && mask[i + w] === 2)
       ) {
         px[i] = outline;
+        mask[i] = 3;
       }
     }
   }
+}
+
+/**
+ * Which pixels of the last settled actor layer are actors: 0 for none, 1 a
+ * glow's pattern, 2 body, 3 outline. The palette pass leaves these out of the
+ * light (an actor is drawn in its own colours; a pool of light round a torch
+ * should not bleach the hero walking through it).
+ */
+export function actorCoverage(): Uint8Array {
+  return actorMask;
 }
 
 /** "#rrggbb" as the ABGR word ImageData holds, fully opaque. */

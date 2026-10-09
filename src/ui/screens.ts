@@ -1,15 +1,16 @@
 import { ART_H, ART_W } from '../render/pixel';
 import { BADGE, keyCap, relicBadge, skillBadge, studIcon } from './icons';
-import { UI, artCanvas, blinkOn, blit, box, drawFrame, frame, paletteColor, text, textWidth, veil, wrap } from './kit';
+import { UI, artCanvas, blinkOn, blit, box, drawFrame, frame, paletteColor, text, textWidth, wrap } from './kit';
 import { logo, logoCentre } from './logo';
 
 /**
  * The screens laid over the game: what is said, the pause menu, the fall,
  * the end, and the title. Like the HUD they are drawn in art pixels from
- * cached pieces, in colours of the palette. The world under them is dimmed
- * with a veil the palette turns into its dither - the screen sinks down the
- * palette's ramps instead of under a sheet of grey - and the big words are
- * set in two tones, light over dark.
+ * cached pieces, in colours of the palette, after the frame has been mapped
+ * to it. The world under them is dimmed by shifting the palette (the game's
+ * fadeRows) - the screen sinks down its ramps instead of under a sheet of grey
+ * or a veil of dither - and the big words are set in two tones, light over
+ * dark.
  */
 
 const OVER = { outline: UI.ink } as const;
@@ -54,7 +55,6 @@ const DIALOG_BOTTOM = 232;
  * the top of the frame, and a marker blinks in the corner while it waits.
  */
 export function drawDialogue(ctx: CanvasRenderingContext2D, d: DialogueInfo, time: number): void {
-  veil(ctx, UI.ink, 0.62);
   const x = (ART_W - DIALOG_W) / 2;
   const inner = DIALOG_W - 24;
   const prev = d.index > 0 ? wrap(d.lines[d.index - 1] ?? '', inner) : [];
@@ -112,7 +112,6 @@ const COL_W = 224;
  * what it does and how it is set. One casing throughout: capitals.
  */
 export function drawPause(ctx: CanvasRenderingContext2D, p: PauseInfo, time: number): void {
-  veil(ctx, UI.ink, 0.8);
   // A solid bar along the top and a strip along the bottom, so the HUD under
   // them does not show through the menu's own words.
   box(ctx, 0, 0, ART_W, 23, UI.night);
@@ -200,7 +199,6 @@ function drawEntry(ctx: CanvasRenderingContext2D, e: PauseEntry, kind: 'relics' 
  * way back, blinking.
  */
 export function drawFallen(ctx: CanvasRenderingContext2D, fade: number, canReturn: boolean, time: number): void {
-  veil(ctx, '#28040a', fade * 0.78);
   const cy = ART_H / 2 - 14;
   // A band of dark blood behind the word, so it stands on something, with a
   // seam of brighter blood along each edge.
@@ -240,7 +238,6 @@ export interface VictoryInfo {
  * found), and how to go again.
  */
 export function drawVictory(ctx: CanvasRenderingContext2D, v: VictoryInfo, time: number): void {
-  veil(ctx, UI.ink, 0.78);
   const title = v.trueEnding ? 'DAS WAHRE ENDE' : 'SIEG!';
   const [color, lower, shadow] = v.trueEnding ? [UI.cyan, '#0cf1ff', '#0069aa'] : [UI.goldLight, UI.goldDark, UI.amber];
   text(ctx, title, ART_W / 2, 52, { scale: 2, color, lower, align: 'center', ...OVER, shadow });
@@ -315,14 +312,11 @@ export interface TitleInfo {
 
 /**
  * The title: the logotype over the scene the game is standing in, quieted
- * by a veil of the night's ink rather than blacked out; the name of the
+ * a step down the palette rather than blacked out; the name of the
  * story under it, the call to start, the controls on a card along the bottom,
  * and which build this is in the corner.
  */
 export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: number): void {
-  veil(ctx, UI.ink, 0.35);
-  // The top of the screen, where the words are, a step darker.
-  veil(ctx, UI.ink, 0.4, 0, 0, ART_W, 92);
   blit(ctx, logo(), Math.round(ART_W / 2 - logoCentre()), 12);
   text(ctx, 'Die Klinge von Nachtfall', ART_W / 2, 61, { color: UI.cyan, align: 'center', ...OVER });
   text(ctx, 'Vierzehn Bosse stehen zwischen dir und dem Tor nach Hause — keiner lässt sich umgehen.', ART_W / 2, 76, {

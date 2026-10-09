@@ -1,4 +1,5 @@
-import { ART, makeCanvas, snap } from './pixel';
+import { addGlow } from './lighting';
+import { ART, ART_H, ART_W, makeCanvas, snap } from './pixel';
 
 /* ------------------------------------------------------------- colours */
 
@@ -67,95 +68,18 @@ function artPoint(ctx: CanvasRenderingContext2D, x: number, y: number): { ax: nu
 /* ---------------------------------------------------------------- glow */
 
 /**
- * The bands of a glow, from the middle out: as far as this share of its
- * radius, at this share of its strength. Hard steps, the way a palette of a
- * few colours draws light: no gradient anywhere.
- */
-const GLOW_BANDS: readonly (readonly [number, number])[] = [
-  [0.42, 1],
-  [0.7, 0.55],
-  [1, 0.25],
-];
-
-/**
- * The most a glow is ever laid on with. On the actor layer whatever ends up
- * at 160 of 255 or more counts as body - made opaque and outlined - and
- * whatever is fainter becomes an ordered pattern of single pixels (see
- * settleActors). Under this, even two glows laid over each other - a pair of
- * eyes, a blade and the hand that holds it - stay a glow.
- */
-const GLOW_MAX = 0.38;
-
-const glowStamps = new Map<string, HTMLCanvasElement>();
-
-/**
- * A glow of radius r art pixels in one colour, made once: three concentric
- * discs, each a flat share of the full strength, the outer one a shade darker
- * so that the light falls off in colour as well as in density.
- */
-function glowStamp(r: number, c: Rgba): HTMLCanvasElement {
-  const id = `${r}|${c.r},${c.g},${c.b}`;
-  let stamp = glowStamps.get(id);
-  if (stamp) {
-    // Most recently used goes to the back of the line.
-    glowStamps.delete(id);
-    glowStamps.set(id, stamp);
-    return stamp;
-  }
-  const size = r * 2 + 1;
-  const { canvas, ctx } = makeCanvas(size, size);
-  const fills = GLOW_BANDS.map(([, share], i) => {
-    const k = i === GLOW_BANDS.length - 1 ? 0.72 : 1;
-    return `rgba(${Math.round(c.r * k)},${Math.round(c.g * k)},${Math.round(c.b * k)},${share})`;
-  });
-  const limits = GLOW_BANDS.map(([reach]) => (r * reach + 0.4) ** 2);
-  for (let y = 0; y < size; y++) {
-    const dy = y - r;
-    let runStart = 0;
-    let runBand = -1;
-    for (let x = 0; x <= size; x++) {
-      let band = -1;
-      if (x < size) {
-        const dx = x - r;
-        const d2 = dx * dx + dy * dy;
-        for (let i = 0; i < limits.length; i++) {
-          if (d2 <= limits[i]) {
-            band = i;
-            break;
-          }
-        }
-      }
-      if (band !== runBand) {
-        if (runBand >= 0) {
-          ctx.fillStyle = fills[runBand];
-          ctx.fillRect(runStart, y, x - runStart, 1);
-        }
-        runBand = band;
-        runStart = x;
-      }
-    }
-  }
-  glowStamps.set(id, canvas);
-  if (glowStamps.size > 96) {
-    const oldest = glowStamps.keys().next().value;
-    if (oldest !== undefined) glowStamps.delete(oldest);
-  }
-  return canvas;
-}
-
-/**
- * Light round a point: hard concentric bands on whole art pixels, from a
- * stamp made once per size and colour and blitted from then on. It used to
- * be a radial gradient built on every call - about a hundred a frame in a
- * busy fight - which is the one thing a palette of a few colours cannot draw:
- * mapped, a smooth falloff comes out as a haze of dither. On the actor layer
- * the bands come out as an ordered pattern of single pixels, thinning out
- * from the middle; anywhere else the palette's own dither fills them.
+ * Light round a point, given off by whatever is being drawn: handed to the
+ * light pass (lighting.ts addGlow) as a small pool, which the palette pass
+ * turns into what is round it climbing a step or two up its ramp - a mage's
+ * hands warm the wall behind him. It used to be painted, first as a radial
+ * gradient built on every call, then as banded discs; on the actor layer
+ * either came out as a field of opaque dots, because the actor pass makes
+ * every pixel there body or nothing. Light is not paint.
  *
- * The strength is the colour's alpha times `alpha`. The radius is rounded to
- * whole art pixels and the centre to the art pixel it falls in, whatever the
- * transform it is called under - a glow is round, so a rotation or a mirror
- * changes nothing about it.
+ * The strength is the colour's alpha times `alpha`. Only glows drawn onto the
+ * screen's own layers (the art buffer's size) light anything; a glow drawn
+ * into a private canvas - a silhouette, a mirror image - has no place on the
+ * screen to light.
  */
 export function glow(
   ctx: CanvasRenderingContext2D,
@@ -166,17 +90,12 @@ export function glow(
   alpha = 1,
 ): void {
   const c = parseColor(color);
-  const strength = Math.min(GLOW_MAX, c.a * alpha);
-  const { ax, ay, unit, m } = artPoint(ctx, x, y);
-  const r = Math.round((radius * Math.hypot(m.a, m.b)) / unit);
-  if (strength > 0.02 && r >= 1) {
-    const stamp = glowStamp(r, c);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.globalAlpha = strength;
-    ctx.drawImage(stamp, (Math.floor(ax) - r) * unit, (Math.floor(ay) - r) * unit, stamp.width * unit, stamp.height * unit);
-    ctx.restore();
+  const strength = c.a * alpha;
+  if (strength > 0.02 && ctx.canvas.width === ART_W && ctx.canvas.height === ART_H) {
+    const m = ctx.getTransform();
+    const sx = (m.a * x + m.c * y + m.e) * ART;
+    const sy = (m.b * x + m.d * y + m.f) * ART;
+    addGlow(sx, sy, radius * Math.hypot(m.a, m.b) * ART, `${c.r},${c.g},${c.b}`, Math.min(1, strength * 1.5));
   }
   // As before: a glow leaves the canvas fully opaque for what comes next.
   ctx.globalAlpha = 1;

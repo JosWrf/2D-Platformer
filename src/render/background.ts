@@ -1,8 +1,7 @@
 import { Camera } from '../core/camera';
 import { type Art, type Ink, type Look, type Painting, type Strip, paintBackdrop } from './backdrops';
-import { LightPass } from './lighting';
 import { ZONES, type Zone, zoneBlend } from './palette';
-import { ART, ART_H, ART_W, makeCanvas } from './pixel';
+import { ART, ART_H, ART_W } from './pixel';
 import type { Abgr } from './pixpaint';
 
 /** A strip of a built backdrop, ready to blit. */
@@ -53,9 +52,6 @@ const ROW_ORDER = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
 export class Background {
   private readonly cache = new Map<string, Built>();
   private readonly keys = new Map<Zone, string>();
-  /** A light pass of our own, to measure what the real one does to a colour. */
-  private readonly probe = new LightPass(PROBE_W, 4);
-  private readonly inks = new Map<string, { ink: Ink; factorKey: string }>();
   /** Backdrops being painted ahead of time, a step a frame. */
   private readonly jobs = new Map<string, { ink: Ink; painting: Painting; art: Art | null; layers: Layer[] }>();
   /** The rows of the dissolve at each of its levels, made once. */
@@ -265,73 +261,19 @@ export class Background {
   }
 
   /**
-   * The ink for a zone: each palette colour painted as whatever the light
-   * pass turns into that colour away from any light, so that it comes out of
-   * the darkness as the colour it was chosen as - and, being one of the
-   * palette's own, untouched by the dither the palette pass lays over the
-   * world. Colours the darkness leaves alone are painted as they are.
-   *
-   * What the darkness does is measured, not worked out here: a ramp of greys
-   * goes through a light pass of our own, and each channel's curve is read
-   * off and turned round. So the ink follows the lighting, whether its
-   * darkness multiplies a colour down or pulls it under a ceiling.
+   * The ink for a zone: the palette's colours as they are. The backdrop is
+   * painted as it is meant to be seen - the darkness of the light pass falls
+   * on the ground layer in front of it, never on the painted strips (it used
+   * to, and every colour had to be painted brighter by what the darkness
+   * would take from it again, which a light then burned back through as a
+   * halo in the sky).
    */
-  private inkFor(zone: Zone): { ink: Ink; factorKey: string } {
-    const dkey = `${zone.darkness}|${zone.darkTint}`;
-    let found = this.inks.get(dkey);
-    if (found) return found;
-    const { ctx } = makeCanvas(PROBE_W, 4);
-    for (let v = 0; v < 256; v++) {
-      ctx.fillStyle = `rgb(${v},${v},${v})`;
-      ctx.fillRect(v * 4, 0, 4, 4);
-    }
-    this.probe.draw(ctx, PROBE_CAMERA, [], zone.darkness, zone.darkTint);
-    const d = ctx.getImageData(0, 1, PROBE_W, 1).data;
-    // For each channel and each wanted value, the painted value that comes
-    // out nearest to it; of equals, the one nearest the value itself.
-    const turn = [0, 1, 2].map((ch) => {
-      const out = new Uint8Array(256);
-      for (let want = 0; want < 256; want++) {
-        let best = want;
-        let miss = Infinity;
-        for (let v = 0; v < 256; v++) {
-          const m = Math.abs(d[v * 16 + 4 + ch] - want) * 1024 + Math.abs(v - want);
-          if (m < miss) {
-            miss = m;
-            best = v;
-          }
-        }
-        out[want] = best;
-      }
-      return out;
-    });
-    const memo = new Map<string, Abgr>();
-    const ink: Ink = (hex) => {
-      let v = memo.get(hex);
-      if (v === undefined) {
-        const n = parseInt(hex.slice(1), 16);
-        const r = turn[0][(n >> 16) & 255];
-        const g = turn[1][(n >> 8) & 255];
-        const b = turn[2][n & 255];
-        v = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
-        memo.set(hex, v);
-      }
-      return v;
-    };
-    // Backdrops painted for one darkness are not shared with another.
-    found = { ink, factorKey: [64, 128, 192].map((v) => `${d[v * 16 + 4]},${d[v * 16 + 5]},${d[v * 16 + 6]}`).join('/') };
-    this.inks.set(dkey, found);
-    return found;
+  private inkFor(_zone: Zone): { ink: Ink; factorKey: string } {
+    return { ink: plain, factorKey: 'plain' };
   }
 }
 
-/** The probe: 256 greys, four pixels each, so every one fills a mask pixel of its own. */
-const PROBE_W = 1024;
-
-/** All the light pass reads of a camera is where it is. */
-const PROBE_CAMERA = { renderX: 0, renderY: 0 } as unknown as Camera;
-
-/** The palette's colours as they are, for what is drawn after the light pass. */
+/** The palette's colours as they are. */
 const plain: Ink = (hex) => {
   const n = parseInt(hex.slice(1), 16);
   return ((255 << 24) | ((n & 255) << 16) | (n & 0xff00) | ((n >> 16) & 255)) >>> 0;

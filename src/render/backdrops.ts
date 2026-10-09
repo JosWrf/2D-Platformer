@@ -152,13 +152,16 @@ function nightSky(look: Look, ink: Ink, rng: Rng, plan: SkyPlan): Strip {
   const top = ink(look.top);
   const base = ink(look.horizon);
   p.rect(0, 0, p.w, p.h, base);
-  let row = 0;
-  for (const [rows, level] of plan.zenith) {
-    p.dither(0, row, p.w, rows, top, level);
-    row += rows;
-  }
+  // The zenith flat, and only its last six rows a ramp down into the horizon
+  // colour, three-quarters, a half, a quarter: a large sky in one colour, not
+  // a checker of two from edge to edge.
+  const zenith = plan.zenith.reduce((n, [rows]) => n + rows, 0);
+  p.rect(0, 0, p.w, Math.max(0, zenith - 6), top);
+  for (let r = 0; r < 6; r++) p.dither(0, zenith - 6 + r, p.w, 1, top, 12 - Math.floor(r / 2) * 4);
+  // The glow over the horizon only where it is strong enough to be a band of
+  // its own; a faint one was a sprinkling of single pixels over half the sky.
   const glow = ink(look.accent);
-  for (const [from, rows, a, b] of plan.glow) p.fade(from, rows, glow, a, b);
+  for (const [from, rows, a, b] of plan.glow) if (Math.max(a, b) >= 6) p.fade(from, rows, glow, a, b);
   const [dim, bright] = plan.starHex ?? ['#424c6e', '#657392'];
   const sparks: Spark[] = [];
   for (let i = 0; i < plan.stars; i++) {
@@ -208,8 +211,12 @@ function mistBand(width: number, height: number, c: Abgr, peak: number, seed: nu
     const puff = noise(x, width, width / 64, seed) * 0.65 + noise(x, width, width / 16, seed + 7) * 0.35;
     for (let y = 0; y < height; y++) {
       const v = 1 - Math.abs((y + 0.5) / height - 0.5) * 2;
-      const level = Math.round(peak * v * (0.35 + puff * 0.9));
-      if (bayerOn(x, y, level)) p.data[y * width + x] = c;
+      const level = peak * v * (0.35 + puff * 0.9);
+      // Solid where the mist is thick, a half-pattern only along its rim, and
+      // nothing where it is thin: a bank of fog with an edge, not a veil of
+      // single pixels.
+      const on = level >= 4.5 || (level >= 2.5 && bayerOn(x, y, 8));
+      if (on) p.data[y * width + x] = c;
     }
   }
   return p;
@@ -217,7 +224,11 @@ function mistBand(width: number, height: number, c: Abgr, peak: number, seed: nu
 
 /** A strip's foot fading into a colour, so the next strip in front stands out against it. */
 function hazeFoot(p: Pix, from: number, c: Abgr, peak: number): void {
-  p.fade(from, p.h - from, c, 0, peak, 'solid');
+  // The last six rows, a quarter then a half: haze at the foot of a range,
+  // not a sprinkling over all of it.
+  const rows = Math.min(6, p.h - from);
+  const start = p.h - rows;
+  for (let r = 0; r < rows; r++) p.dither(0, start + r, p.w, 1, c, r < rows / 2 ? 4 : Math.min(8, Math.max(4, peak)), 'solid');
 }
 
 /* ------------------------------------------------------------- outdoors */

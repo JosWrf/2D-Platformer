@@ -681,7 +681,7 @@ export function mixHex(a: string, b: string, t: number): string {
 }
 
 /**
- * The palette every frame is mapped to (render/pixel.ts, PaletteMapper):
+ * The palette every frame is mapped to (render/palettemap.ts, PaletteMap):
  * sixty-four colours in ramps - greys, cold slate blues down to a violet
  * black, flesh and rust, fire from deep red to pale yellow, the greens of the
  * forest and the teals of the drowned hall, the blues of the caves, violets for

@@ -277,20 +277,6 @@ export function screen(
   ctx.drawImage(screenSheet(color, density), x, y, w, h, x * ART, y * ART, w * ART, h * ART);
 }
 
-/**
- * A colour laid over an area at some strength, left for the palette to turn
- * into its ordered dither: what is under it sinks down the palette's own
- * ramps, the way a sixteen-bit screen dims by shifting its palette. Right for
- * a whole screen that stands still under it (a pause, a dialogue); for
- * anything that sits over a moving world, see screen.
- */
-export function veil(ctx: CanvasRenderingContext2D, color: string, alpha: number, ax = 0, ay = 0, aw = ART_W, ah = ART_H): void {
-  const before = ctx.globalAlpha;
-  ctx.globalAlpha = alpha;
-  box(ctx, ax, ay, aw, ah, color);
-  ctx.globalAlpha = before;
-}
-
 /* ------------------------------------------------------------- timing */
 
 /**

@@ -27,9 +27,10 @@ import { Decor } from './render/decor';
 import { Spores } from './render/atmosphere';
 import { LightPass, type Light } from './render/lighting';
 import { drawEdgeLight } from './render/rims';
-import { ART, ART_H, ART_W, PaletteMapper, abgrOf, makeCanvas, settleActors } from './render/pixel';
+import { ART, ART_H, ART_W, abgrOf, actorCoverage, makeCanvas, settleActors } from './render/pixel';
+import { PaletteMap } from './render/palettemap';
 import { Scatter } from './render/scatter';
-import { ART_PALETTE, PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
+import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { drawTilemap } from './render/tilemap';
 import {
   RELIC_ROW,
@@ -42,7 +43,7 @@ import {
   drawSkillPanel as drawSkillCard,
   splitBarName,
 } from './ui/hud';
-import { UI, screen, veil } from './ui/kit';
+import { UI, screen } from './ui/kit';
 import * as screens from './ui/screens';
 import type { PauseEntry } from './ui/screens';
 import type { World } from './world/context';
@@ -331,8 +332,14 @@ export class Game implements World {
   private readonly art = makeCanvas(ART_W, ART_H);
   /** What the hero reads - himself, what he fights, what flies and what he picks up - drawn apart to be outlined. */
   private readonly actors = makeCanvas(ART_W, ART_H);
+  /** The ground and everything standing on it, drawn apart to take the darkness and the light. */
+  private readonly ground = makeCanvas(ART_W, ART_H);
+  /** Which pixels of the frame the ground covers (see LightPass.shade). */
+  private readonly groundCover = new Uint8Array(ART_W * ART_H);
   /** The palette every frame is mapped to, built on the first frame. */
-  private paletteMapper: PaletteMapper | null = null;
+  private paletteMap: PaletteMap | null = null;
+  /** The fade of each row of the screen this frame (see fadeRows). */
+  private readonly fadeBuffer: (Uint8Array | null)[] = new Array<Uint8Array | null>(ART_H).fill(null);
 
   player: Player;
   boss: Boss | null = null;
@@ -1419,10 +1426,11 @@ export class Game implements World {
       }
     }
 
+    // A gem carries no pool of light: a row of them made a cloud of it. It
+    // sparkles instead (pickup.ts). A heart keeps a small one.
     for (const pickup of this.pickups) {
-      if (pickup.dead) continue;
-      const glowRgb = pickup.kind === 'gem' ? '242,193,78' : '255,87,115';
-      add(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, 46, glowRgb, 0.9, 0.42);
+      if (pickup.dead || pickup.kind === 'gem') continue;
+      add(pickup.x + pickup.w / 2, pickup.y + pickup.h / 2, 46, '255,87,115', 0.9, 0.42);
     }
     for (const cp of this.checkpoints) {
       add(cp.x + 12, cp.y + 20, cp.activated ? 150 : 70, cp.activated ? '255,214,110' : '110,140,190', 0.8, 0.32);
@@ -1618,27 +1626,45 @@ export class Game implements World {
     a.fillRect(0, 0, VIEW_W, VIEW_H);
     this.background.draw(a, this.camera, this.time);
 
-    a.save();
-    a.translate(-this.camera.renderX, -this.camera.renderY);
-    drawTilemap(a, this.level, this.camera, this.time);
-    this.scatter.draw(a, this.camera, VIEW_W, this.time);
+    // The ground and everything on it, on a layer of its own over the painted
+    // backdrop: the darkness falls on it - as steps down the palette, see
+    // LightPass.shade - and so, later, does the light.
+    const g = this.ground.ctx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, ART_W, ART_H);
+    g.setTransform(1 / ART, 0, 0, 1 / ART, -this.camera.renderX / ART, -this.camera.renderY / ART);
+    g.imageSmoothingEnabled = false;
+    drawTilemap(g, this.level, this.camera, this.time);
+    this.scatter.draw(g, this.camera, VIEW_W, this.time);
     for (const d of this.decor) {
-      if (this.isVisible(d.x, d.y, 120)) d.draw(a);
+      if (this.isVisible(d.x, d.y, 120)) d.draw(g);
     }
     for (const cp of this.checkpoints) {
-      if (this.isVisible(cp.x, cp.y, 120)) cp.draw(a);
+      if (this.isVisible(cp.x, cp.y, 120)) cp.draw(g);
     }
-    if (this.portal && this.isVisible(this.portal.x, this.portal.y, 200)) this.portal.draw(a);
+    if (this.portal && this.isVisible(this.portal.x, this.portal.y, 200)) this.portal.draw(g);
     for (const platform of this.platforms) {
-      if (this.isVisible(platform.x, platform.y, 200)) platform.draw(a);
+      if (this.isVisible(platform.x, platform.y, 200)) platform.draw(g);
     }
-    a.restore();
 
     const blend = zoneBlend(this.player.cx);
-    const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * blend.t;
-    const tint = mixHex(blend.from.darkTint, blend.to.darkTint, blend.t);
+    // A crossing between two zones' darkness in four steps, so each step's
+    // tables are made once and kept.
+    const bt = Math.round(blend.t * 4) / 4;
+    const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * bt;
+    const tint = mixHex(blend.from.darkTint, blend.to.darkTint, bt);
     const lights = this.collectLights();
-    this.lightPass.draw(a, this.camera, lights, darkness, tint);
+    this.paletteMap ??= new PaletteMap();
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    const groundImage = g.getImageData(0, 0, ART_W, ART_H);
+    this.lightPass.shade(groundImage, this.camera, lights, darkness, tint, this.paletteMap, this.groundCover);
+    g.putImageData(groundImage, 0, 0);
+    a.save();
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    a.drawImage(this.ground.canvas, 0, 0);
+    a.restore();
 
     // Readability first: ledges and pit walls keep a rim of light.
     const sporeRgb = blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb;
@@ -1659,30 +1685,52 @@ export class Game implements World {
     // and a drifting field of bright dots is movement.
     const calm = (blend.t > 0.5 ? blend.to.calm : blend.from.calm) || this.camera.motion <= 0;
     this.spores.draw(a, this.camera, this.time, sporeRgb, calm);
-    this.drawLighting(a);
 
-    // Words and the HUD on the same grid and through the same palette: one
-    // picture, not a game with a sharper screen laid over it.
-    a.save();
-    a.translate(-this.camera.renderX, -this.camera.renderY);
-    this.particles.drawTexts(a);
-    a.restore();
-    if (this.state !== 'title') this.drawHud(a);
-    this.drawOverlays(a);
-
-    // The whole frame to the palette: one read of the buffer, and the pixels
-    // written straight onto the screen, which is the buffer's size. (Drawn
+    // The whole frame to the palette, in one pass over it: every pixel one of
+    // the palette's colours, the lights as steps up their ramps, and a pause
+    // or a fall as the palette shifting under it (render/palettemap.ts). The
+    // pixels go straight onto the screen, which is the buffer's size. (Drawn
     // across as a canvas instead, the screen would hold on to a copy of the
     // buffer for every frame until the browser next showed one - and in a
     // loop that never lets it, pay for them all at once.)
-    this.paletteMapper ??= new PaletteMapper(ART_PALETTE);
+    this.paletteMap ??= new PaletteMap();
     a.setTransform(1, 0, 0, 1, 0, 0);
     const image = a.getImageData(0, 0, ART_W, ART_H);
-    this.paletteMapper.map(image, 14, Math.round(this.camera.renderX / ART), Math.round(this.camera.renderY / ART));
-    if (ctx.canvas.width === ART_W && ctx.canvas.height === ART_H) {
-      ctx.putImageData(image, 0, 0);
-    } else {
-      a.putImageData(image, 0, 0);
+    const field = this.lightPass.field(this.camera, lights);
+    // The light falls on the ground, not on the painted backdrop and not on
+    // the actors, who are drawn in their own colours.
+    const actors = actorCoverage();
+    this.paletteMap.map(
+      image,
+      Math.round(this.camera.renderX / ART),
+      Math.round(this.camera.renderY / ART),
+      field,
+      this.groundCover,
+      actors.length === ART_W * ART_H ? actors : null,
+      this.fadeRows(this.paletteMap),
+    );
+    const direct = ctx.canvas.width === ART_W && ctx.canvas.height === ART_H;
+    (direct ? ctx : a).putImageData(image, 0, 0);
+
+    // Words, the HUD and the menus after the palette, on the same grid, in
+    // the palette's own colours: never dithered, never lit, never dimmed with
+    // the picture under them.
+    const ui = direct ? ctx : a;
+    ui.save();
+    ui.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+    ui.imageSmoothingEnabled = false;
+    ui.globalAlpha = 1;
+    ui.globalCompositeOperation = 'source-over';
+    this.drawLighting(ui);
+    ui.save();
+    ui.translate(-this.camera.renderX, -this.camera.renderY);
+    this.particles.drawTexts(ui);
+    ui.restore();
+    if (this.state === 'playing' || this.state === 'dead') this.drawHud(ui);
+    this.drawOverlays(ui);
+    ui.restore();
+
+    if (!direct) {
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       ctx.globalAlpha = 1;
@@ -1690,6 +1738,51 @@ export class Game implements World {
       ctx.drawImage(this.art.canvas, 0, 0, VIEW_W, VIEW_H);
       ctx.restore();
     }
+  }
+
+  /**
+   * How the picture under the words is faded this frame, row by row: a
+   * dialogue or the title dims it a step or two, the pause and the end three,
+   * the fall sinks it into old blood, and the white flash of a boss falling
+   * lifts it towards white - every one a shift of the palette, as a
+   * sixteen-bit screen fades, instead of a veil the dither would turn into a
+   * checker over the whole frame.
+   */
+  private fadeRows(pm: PaletteMap): (Uint8Array | null)[] | null {
+    let all: Uint8Array | null = null;
+    let top: Uint8Array | null = null;
+    let topRows = 0;
+    if (this.dialogue) {
+      all = pm.darken(2);
+    } else {
+      switch (this.state) {
+        case 'title':
+          // The top, where the logotype and the words are, a step darker.
+          all = pm.darken(1);
+          top = pm.darken(2);
+          topRows = 92;
+          break;
+        case 'paused':
+        case 'victory':
+          all = pm.darken(3);
+          break;
+        case 'dead': {
+          const k = Math.min(3, Math.ceil(clamp(1.1 - this.deathTimer, 0, 1) * 3));
+          if (k > 0) all = pm.bleed(k);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+    if (this.flashWhite > 0) {
+      const flash = pm.brighten(Math.max(1, Math.min(4, Math.round(this.flashWhite * 4))));
+      all = all ? pm.then(all, flash) : flash;
+      if (top) top = pm.then(top, flash);
+    }
+    if (!all && !top) return null;
+    for (let y = 0; y < ART_H; y++) this.fadeBuffer[y] = y < topRows && top ? top : all;
+    return this.fadeBuffer;
   }
 
   /**
@@ -1759,10 +1852,8 @@ export class Game implements World {
       }
     }
 
-    // The white flash of a boss falling or a relic taken: the picture fades
-    // up the palette towards white and back, through the palette's own dither
-    // - the way a sixteen-bit screen flashes, by its palette.
-    if (this.flashWhite > 0) veil(ctx, '#fff5e1', this.flashWhite * 0.8);
+    // (The white flash of a boss falling or a relic taken is a fade of the
+    // palette now - see fadeRows - so the words over it stay as they are.)
   }
 
   private drawHud(ctx: CanvasRenderingContext2D): void {
