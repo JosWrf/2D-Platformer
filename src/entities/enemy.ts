@@ -12,6 +12,7 @@ import { Body } from './entity';
 import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
 import { clusterPart, heartAt, heartPart, shardPart } from './prism-art';
 import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
+import { wardenPart } from './warden-art';
 import {
   BAT,
   type BatFrame,
@@ -1647,85 +1648,30 @@ export class Warden extends Enemy {
     super.touchPlayer(world);
   }
 
+  /** The diamond on its chest lights the rift round it, and burns before every move. */
+  override lights(): GlowLight[] {
+    if (this.dead || !this.engaged) return [];
+    return [{ x: this.cx, y: this.bottom - 40, radius: 60 + this.core * 60, rgb: '226,196,255', strength: 0.3 + this.core * 0.45, tint: 0.3 }];
+  }
+
+  /*
+   * Drawn for the grid (warden-art.ts): one sprite per lean, flare and heat -
+   * rearing back for the lunge, driving into it; the shoulder shards turned
+   * out and the diamond and the visor burning while it winds up, which is the
+   * tell; a stride while it walks. A struck warden is white for two frames.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, this.w * 0.6);
-      ctx.scale(this.facing, 1);
-      const lean = this.state === 'lungeWind' ? -0.16 : this.state === 'lunge' ? 0.2 : 0;
-      ctx.rotate(lean);
-
-      // Body: a slab of rift stone standing on two short legs.
-      const g = ctx.createLinearGradient(0, -this.h, 0, 0);
-      g.addColorStop(0, '#4a3070');
-      g.addColorStop(1, '#1d1230');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-16, -this.h + 8);
-      ctx.lineTo(16, -this.h + 3);
-      ctx.lineTo(20, -13);
-      ctx.lineTo(-19, -13);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#2e1d4a';
-      ctx.fillRect(-16, -this.h + 8, 32, 3);
-      ctx.fillStyle = '#170e26';
-      ctx.fillRect(-15, -14, 11, 14);
-      ctx.fillRect(4, -14, 11, 14);
-
-      // The core, which is also the tell: it burns before every move.
-      const heat = 0.35 + this.core * 0.65;
-      const cy = -this.h + 26;
-      const halo = ctx.createRadialGradient(2, cy, 0, 2, cy, 30 * heat);
-      halo.addColorStop(0, `rgba(200,140,255,${(0.5 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(200,140,255,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-28, cy - 30, 60, 60);
-      ctx.fillStyle = `rgba(226,196,255,${(0.6 + heat * 0.4).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.moveTo(2, cy - 12);
-      ctx.lineTo(10, cy);
-      ctx.lineTo(2, cy + 12);
-      ctx.lineTo(-6, cy);
-      ctx.closePath();
-      ctx.fill();
-
-      // Shoulder shards, turned outwards while it winds up.
-      const flare = this.core * 5;
-      ctx.fillStyle = '#6d4aa8';
-      for (const side of [-1, 1]) {
-        ctx.save();
-        ctx.translate(side * (16 + flare), -this.h + 16);
-        ctx.rotate(side * (0.5 + this.core * 0.35));
-        ctx.beginPath();
-        ctx.moveTo(0, -17);
-        ctx.lineTo(7, 8);
-        ctx.lineTo(-7, 8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      // A crown of splinters, so the silhouette alone says "not a skeleton".
-      ctx.fillStyle = '#553584';
-      for (let i = -1; i <= 1; i++) {
-        const bx = i * 9;
-        const bh = 12 - Math.abs(i) * 4;
-        ctx.beginPath();
-        ctx.moveTo(bx, -this.h - 4 - bh);
-        ctx.lineTo(bx + 4, -this.h + 2);
-        ctx.lineTo(bx - 4, -this.h + 2);
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      // Head: a narrow visor, lit from inside.
-      ctx.fillStyle = '#241640';
-      ctx.fillRect(-11, -this.h - 2, 22, 14);
-      ctx.fillStyle = `rgba(255,190,120,${(0.55 + this.core * 0.45).toFixed(2)})`;
-      ctx.fillRect(-6, -this.h + 3, 13, 4);
-      ctx.restore();
-    });
+    shadow(ctx, this.cx, this.bottom, this.w * 0.6);
+    const lean: -1 | 0 | 1 = this.state === 'lungeWind' ? -1 : this.state === 'lunge' ? 1 : 0;
+    const heat: 0 | 1 | 2 = this.core > 0.7 ? 2 : this.core > 0.3 ? 1 : 0;
+    const walking = this.state === 'stalk' && this.onGround && Math.abs(this.vx) > 12;
+    const step = walking ? ([1, 0, 2, 0] as const)[Math.floor(Math.abs(this.x) / 12) % 4] : 0;
+    withHitFlash(
+      ctx,
+      solidFlash(this.flash),
+      (c) => blit(c, wardenPart({ lean, flare: this.core > 0.5, heat, step }), this.cx, this.bottom, this.facing < 0),
+      { x: this.cx - 60, y: this.bottom - 120, w: 120, h: 126 },
+    );
   }
 }
 
