@@ -18,43 +18,45 @@ import { ART, PixelSprite } from '../render/pixel';
  */
 
 /**
- * His paints: sixteen colours of the palette in four ramps and a few
- * accents, lit from the upper left. The blues of the cloak run from a violet
- * slate in the folds to an azure in the light; the gold goes brown in its
- * shadow, the skin goes red.
+ * His paints: fourteen colours of the palette, lit from the upper left, in
+ * ramps that shift as they darken - the blues from a cyan light through azure
+ * and blue to a violet slate in the deepest folds, the gold to a brown, the
+ * skin and the leather towards red.
  */
 const PAINT: Record<string, string> = {
   /** The deepest fold, and the line that parts an arm from the chest. */
   K: RAMP.slate[1],
-  /** Cloak and hood: in shadow, plain, in the light. */
+  /** The cape in shadow. */
   C: RAMP.blue[1],
+  /** The cape; hood and tunic in shadow. */
   B: RAMP.blue[2],
+  /** Hood and tunic; the cape in the light. */
   L: RAMP.blue[3],
-  /** The eye, and the blade's glow. */
+  /** Hood and tunic in the light, the eye, and the blade's glow. */
   Y: RAMP.blue[4],
-  /** Steel in the light, and steel. */
+  /** The sheathed blade's steel. */
   W: RAMP.slate[6],
+  /** Breeches in the light, plain, in shadow (the far leg is a step darker). */
   M: RAMP.slate[5],
-  /** Breeches: in the light, plain, in shadow. */
   m: RAMP.slate[4],
   t: RAMP.slate[3],
-  d: RAMP.slate[2],
   /** Gold in the light, and gold. */
   G: RAMP.fire[3],
   g: RAMP.rust[3],
-  /** Skin in shadow (and the gold's shadow), and skin. */
+  /** Skin in shadow, gold in shadow, boots; skin, boots in the light. */
   o: RAMP.earth[4],
   S: RAMP.earth[5],
-  /** Leather: boots, gloves, the grip. */
+  /** Leather in shadow: bracers, gloves, the soles. */
   b: RAMP.earth[3],
   /** The hand that holds the sword: leather, and where the blade starts. */
   H: RAMP.earth[3],
 };
 
 /**
- * What he is made of: his sixteen paints, and the only colours his frames,
- * his sword and his slashes come out in (the actor pass and the palette
- * mapping leave a colour of the palette exactly as it is drawn).
+ * What he is made of: his paints and the white of his blade's edge and his
+ * slashes - the only colours his frames, his sword, his slashes and his tells
+ * come out in (the actor pass and the palette mapping leave a colour of the
+ * palette exactly as it is drawn). Fifteen, and the actors' outline.
  */
 export const HERO_PALETTE: readonly string[] = [...new Set([...Object.values(PAINT), RAMP.grey[7]])];
 

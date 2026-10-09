@@ -40,6 +40,8 @@ export const DIRS = {
   downFwd: [1, 1],
   downSteep: [1, 2],
   down: [0, 1],
+  downBackSteep: [-1, 2],
+  downBack: [-1, 1],
   backDown: [-2, 1],
   back: [-1, 0],
   backUp: [-2, -1],

@@ -1343,16 +1343,18 @@ export class Player extends Body {
     // frames each, rather than half there all the time - counted so that he
     // is still there in the frame the stun lets go of him, whichever stun.
     // Not while the blow still has him reeling - that he has to be seen
-    // taking - nor while he swings: a cut is drawn whole. And a slash outlives
-    // his blinking out: it shows what his blade reaches either way.
+    // taking - nor while he swings: a cut, and the reach its slash shows, is
+    // drawn whole.
     const hidden = this.invuln > 0 && this.hurtTimer <= 0 && this.attackTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 0;
-    if (!hidden) this.drawContact(ctx, world, mid);
-    if (this.trail.length) this.drawAfterimages(ctx);
     // The game goes on drawing him under the victory screen, with nothing
     // updating him any more: he holds the sword up. (World does not promise
     // a state; the game that is passed in has one.)
     const victory = 'state' in world && world.state === 'victory';
-    this.drawFigure(ctx, victory ? VICTORY : this.look(), mid, feet, hidden && !victory);
+    if (this.trail.length) this.drawAfterimages(ctx);
+    if (!hidden || victory) {
+      this.drawContact(ctx, world, mid);
+      this.drawFigure(ctx, victory ? VICTORY : this.look(), mid, feet);
+    }
     this.drawGuard(ctx, mid, feet);
   }
 
@@ -1469,8 +1471,7 @@ export class Player extends Body {
    * first, so the actors' outline runs between it and him and he stays one
    * readable shape in front of his own slash.
    */
-  private drawFigure(ctx: CanvasRenderingContext2D, look: Look, mid: number, feet: number, hidden: boolean): void {
-    if (hidden && !look.smear) return;
+  private drawFigure(ctx: CanvasRenderingContext2D, look: Look, mid: number, feet: number): void {
     const { canvas, ctx: f } = figureCanvas();
     f.clearRect(0, 0, FIGURE_W, FIGURE_H);
     const body = heroSprite(look.frame);
@@ -1482,11 +1483,6 @@ export class Player extends Body {
       // In the air he is drawn a pixel higher, and his slash with him.
       f.drawImage(s.canvas, FIGURE_X - s.ox, FIGURE_Y - s.oy - (look.frame.startsWith('air') ? 1 : 0));
       behind = true;
-    }
-    if (hidden) {
-      // Blinking out: the slash alone, with no hole cut in it where he is.
-      this.blitFigure(ctx, canvas, mid, feet);
-      return;
     }
     const hand = body.hand;
     const sword = look.blade && hand ? blade(look.blade.dir, look.blade.length, look.blade.hot) : null;
