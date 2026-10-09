@@ -3,6 +3,8 @@ import { Input } from '../core/input';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
 import { PALETTE } from '../render/palette';
 import { glow, shadow, slashCrescent, withHitFlash } from '../render/sprites';
+import { snap } from '../render/pixel';
+import { type HeroFrame, drawHero } from './heroArt';
 import { TILE } from '../world/tiles';
 import type { Level } from '../world/level';
 import type { World } from '../world/context';
@@ -73,6 +75,13 @@ const SWINGS: readonly SwingShape[] = [
 /** Index of the charged swing inside SWINGS. */
 const CHARGED_SWING = 3;
 
+/** The run, eight drawn frames; and frames of it per unit of runCycle. */
+const RUN_FRAMES: readonly HeroFrame[] = ['run0', 'run1', 'run2', 'run3', 'run4', 'run5', 'run6', 'run7'];
+const RUN_PACE = 2;
+/** Standing, four frames of breath. */
+const IDLE_FRAMES: readonly HeroFrame[] = ['idle0', 'idle1', 'idle2', 'idle3'];
+const IDLE_PACE = 2.5;
+
 /** How long the attack key has to be held before the blade is ready. */
 const CHARGE_TIME = 0.42;
 /** And with Ankhor's fist in it. */
@@ -87,8 +96,6 @@ const PARRY_RECOVERY = 0.38;
 /** Where the blade rests between combos - up and slightly forward. */
 const CARRY_ANGLE = -1.05;
 
-/** Pose of the sword slung across the hero's back. */
-const SHEATH = { x: -2, y: -24, angle: 2.42, length: 22, scale: 0.72 };
 /** How long the blade takes to travel back to the shoulder after a combo. */
 const SHEATH_TIME = 0.16;
 
@@ -1321,28 +1328,38 @@ export class Player extends Body {
     const groundDist = world.level.groundBelow(this.cx, this.bottom - 2, 8);
     shadow(ctx, this.cx, this.bottom + Math.min(groundDist, 200), 26 * clamp(1 - groundDist / 260, 0.3, 1), 0.3 * clamp(1 - groundDist / 260, 0.2, 1));
 
-    const blink = this.invuln > 0 && Math.floor(this.invuln * 18) % 2 === 0;
-    if (blink && this.hurtTimer <= 0) ctx.globalAlpha = 0.45;
-
     const pose = this.attackTimer > 0 ? this.swingPose(ATTACK_TOTAL - this.attackTimer) : null;
 
-    ctx.save();
-    ctx.translate(this.cx, this.bottom);
-    // Tilt into the swing before mirroring, so the lean follows the facing.
-    if (pose) ctx.rotate(pose.lean * this.facing);
-    const sq = this.squash;
-    ctx.scale(this.facing * (1 - sq * 0.35), 1 + sq * 0.45);
-
-    withHitFlash(ctx, this.flash, (ctx) => {
-      // Carried on the back when idle, so it never crosses the torso.
-      if (!pose) this.drawCarriedBlade(ctx);
-      this.drawBody(ctx, pose);
-    });
-    ctx.restore();
-    ctx.globalAlpha = 1;
+    // Untouchable after a blow: there one moment and gone the next, three
+    // frames each, rather than half there all the time.
+    const hidden = this.invuln > 0 && this.hurtTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 1;
+    if (!hidden) {
+      // On the grid: the middle column of the hitbox, and the row under his feet.
+      const mid = snap(this.x) + 8;
+      const feet = snap(this.bottom);
+      withHitFlash(ctx, this.flash, (c) => drawHero(c, this.frame(), mid, feet, this.facing));
+    }
 
     if (pose) this.drawSwing(ctx, pose);
     this.drawGuard(ctx);
+  }
+
+  /** Just after a combo, while the blade goes back over his shoulder. */
+  private get sheathing(): boolean {
+    return this.sheathTimer > 0 && this.sheathPose !== null && this.sheathReach > 0;
+  }
+
+  /** The frame of him that fits what he is doing. */
+  private frame(): HeroFrame {
+    if (this.sheathing && this.onGround) return 'idle0';
+    if (!this.onGround) {
+      if (this.vy < -250) return 'jump0';
+      if (this.vy < 80) return 'jump1';
+      return this.vy < 420 ? 'fall0' : 'fall1';
+    }
+    if (this.squash > 0.12) return 'land';
+    if (Math.abs(this.vx) > 25) return RUN_FRAMES[Math.floor(this.runCycle * RUN_PACE) % 8];
+    return IDLE_FRAMES[Math.floor(this.runCycle * IDLE_PACE) % 4];
   }
 
   /**
@@ -1424,84 +1441,6 @@ export class Player extends Body {
     }
   }
 
-  private drawBody(ctx: CanvasRenderingContext2D, pose: SwingPose | null): void {
-    const t = this.runCycle;
-    const moving = Math.abs(this.vx) > 25 && this.onGround;
-    const airborne = !this.onGround;
-    const bob = moving ? Math.sin(t * 2) * 1.2 : Math.sin(t * 0.8) * 0.8;
-    const legSwing = moving ? Math.sin(t * 2) * 5 : 0;
-
-    // Cloak billowing behind the hero.
-    const cloakSway = clamp((-this.vx * this.facing) / 220, -1, 1) * 6 + Math.sin(t * 1.6) * 1.6;
-    ctx.fillStyle = PALETTE.playerCloakDark;
-    ctx.beginPath();
-    ctx.moveTo(-2, -26);
-    ctx.quadraticCurveTo(-10 - cloakSway, -18, -8 - cloakSway * 1.6, -3 + (airborne ? -3 : 0));
-    ctx.lineTo(1, -6);
-    ctx.lineTo(2, -26);
-    ctx.closePath();
-    ctx.fill();
-
-    // Legs.
-    ctx.fillStyle = '#26314f';
-    ctx.fillRect(-6 + legSwing * 0.5, -9, 5, 9 - Math.abs(legSwing) * 0.2);
-    ctx.fillRect(1 - legSwing * 0.5, -9, 5, 9 - Math.abs(legSwing) * 0.2);
-    ctx.fillStyle = '#131a2c';
-    ctx.fillRect(-7 + legSwing * 0.5, -2, 7, 2);
-    ctx.fillRect(0 - legSwing * 0.5, -2, 7, 2);
-
-    // Torso.
-    ctx.fillStyle = PALETTE.playerCloak;
-    ctx.fillRect(-6, -22 + bob, 12, 14);
-    ctx.fillStyle = '#5b8bf0';
-    ctx.fillRect(-6, -22 + bob, 12, 3);
-    // Belt + chest strap.
-    ctx.fillStyle = '#f2c14e';
-    ctx.fillRect(-6, -12 + bob, 12, 2);
-    ctx.fillStyle = '#cfd6f2';
-    ctx.fillRect(-5, -21 + bob, 3, 12);
-
-    // Arms. While swinging, the sword arm reaches out to the hilt.
-    ctx.fillStyle = '#3a5fb8';
-    if (pose) {
-      const hand = this.handOffset(pose);
-      const shoulderX = 2;
-      const shoulderY = -19 + bob;
-      const dx = hand.x - shoulderX;
-      const dy = hand.y - shoulderY;
-      ctx.save();
-      ctx.translate(shoulderX, shoulderY);
-      ctx.rotate(Math.atan2(dy, dx));
-      ctx.fillRect(-1, -2, Math.hypot(dx, dy) + 2, 4);
-      ctx.restore();
-      // Glove at the hilt.
-      ctx.fillStyle = '#2a3f7a';
-      ctx.fillRect(hand.x - 2, hand.y - 2, 4, 4);
-    } else {
-      ctx.fillRect(4, -20 + bob, 4, 8);
-    }
-
-    // Head with hood.
-    const headY = -32 + bob;
-    ctx.fillStyle = PALETTE.skin;
-    ctx.fillRect(-4, headY + 3, 8, 7);
-    ctx.fillStyle = PALETTE.playerCloakDark;
-    ctx.beginPath();
-    ctx.moveTo(-6, headY + 6);
-    ctx.quadraticCurveTo(-6, headY - 2, 0, headY - 2);
-    ctx.quadraticCurveTo(6, headY - 2, 6, headY + 6);
-    ctx.lineTo(4, headY + 6);
-    ctx.quadraticCurveTo(4, headY + 1, 0, headY + 1);
-    ctx.quadraticCurveTo(-2, headY + 1, -3, headY + 4);
-    ctx.lineTo(-3, headY + 8);
-    ctx.lineTo(-6, headY + 9);
-    ctx.closePath();
-    ctx.fill();
-    // Eye glint.
-    ctx.fillStyle = '#8fe6ff';
-    ctx.fillRect(1, headY + 5, 3, 2);
-  }
-
   /** The blade, its trail and the after-images that sell the speed. */
   private drawSwing(ctx: CanvasRenderingContext2D, pose: SwingPose): void {
     const dir = this.facing;
@@ -1580,40 +1519,6 @@ export class Player extends Body {
       glow(ctx, tip.x, tip.y, combo === 3 ? 26 : 19, 'rgba(200,244,255,0.55)', heat);
       glow(ctx, hand.x, hand.y, 14, 'rgba(150,220,255,0.35)', heat * 0.7);
     }
-  }
-
-  /**
-   * Sword slung across the hero's back. Right after a combo it is still on its
-   * way there, swinging back over the shoulder along the shorter path.
-   */
-  private drawCarriedBlade(ctx: CanvasRenderingContext2D): void {
-    let x = SHEATH.x;
-    let y = SHEATH.y;
-    let angle = SHEATH.angle;
-    let length = SHEATH.length;
-    let scale = SHEATH.scale;
-
-    if (this.sheathTimer > 0 && this.sheathPose) {
-      const k = easeOut(1 - this.sheathTimer / SHEATH_TIME, 2);
-      const from = this.sheathPose;
-      const hand = this.handOffset(from);
-      // Going over the head can be the shorter way round after a rising cut.
-      const target =
-        Math.abs(SHEATH.angle - from.angle) <= Math.abs(SHEATH.angle - TAU - from.angle)
-          ? SHEATH.angle
-          : SHEATH.angle - TAU;
-      x = lerp(hand.x, SHEATH.x, k);
-      y = lerp(hand.y, SHEATH.y, k);
-      angle = lerp(from.angle, target, k);
-      length = lerp(this.sheathReach, SHEATH.length, k);
-      scale = lerp(1, SHEATH.scale, k);
-    }
-
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    this.drawBlade(ctx, length, scale);
-    ctx.restore();
   }
 
   /**
