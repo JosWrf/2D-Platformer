@@ -27,7 +27,7 @@ import { Decor } from './render/decor';
 import { Spores } from './render/atmosphere';
 import { LightPass, type Light } from './render/lighting';
 import { drawEdgeLight } from './render/rims';
-import { ART, ART_H, ART_W, PaletteMapper, makeCanvas } from './render/pixel';
+import { ART, ART_H, ART_W, PaletteMapper, abgrOf, makeCanvas, settleActors } from './render/pixel';
 import { Scatter } from './render/scatter';
 import { ART_PALETTE, PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
@@ -49,7 +49,26 @@ const NO_INPUT = new Input();
 export const VIEW_W = 960;
 export const VIEW_H = 540;
 /** The outline round everything the hero reads: a deep violet-black, not black. */
-const OUTLINE = '#120c24';
+const OUTLINE_ABGR = abgrOf('#120c24');
+
+/** "rgb(r,g,b)" or "#rrggbb" as numbers, for the actor pass's tint. */
+const rgbCache = new Map<string, [number, number, number]>();
+function rgbOf(color: string): [number, number, number] {
+  let out = rgbCache.get(color);
+  if (!out) {
+    const hex = /^#([0-9a-f]{6})$/i.exec(color.trim());
+    if (hex) {
+      const v = parseInt(hex[1], 16);
+      out = [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    } else {
+      const [r = 0, g = 0, b = 0] = (color.match(/\d+/g) ?? []).map(Number);
+      out = [r, g, b];
+    }
+    if (rgbCache.size > 256) rgbCache.clear();
+    rgbCache.set(color, out);
+  }
+  return out;
+}
 
 export type GameState = 'title' | 'playing' | 'paused' | 'dead' | 'victory';
 
@@ -319,8 +338,6 @@ export class Game implements World {
   private readonly art = makeCanvas(ART_W, ART_H);
   /** What the hero reads - himself, what he fights, what flies and what he picks up - drawn apart to be outlined. */
   private readonly actors = makeCanvas(ART_W, ART_H);
-  /** The readable layer's silhouette, in the outline colour. */
-  private readonly silhouette = makeCanvas(ART_W, ART_H);
   /** The palette every frame is mapped to, built on the first frame. */
   private paletteMapper: PaletteMapper | null = null;
 
@@ -1675,9 +1692,10 @@ export class Game implements World {
 
   /**
    * The hero, what he fights, what is thrown and what lies about to be picked
-   * up: on their own layer, laid over the darkness with only a breath of it,
-   * and outlined - the layer's silhouette in the outline colour, one art pixel
-   * out in each of the four directions, underneath it.
+   * up: on their own layer, settled onto the grid in one pass over its pixels
+   * (settleActors - bodies opaque, glows as an ordered pattern, a one-pixel
+   * outline round every body), and laid over the darkness with only a breath
+   * of it.
    */
   private drawActors(target: CanvasRenderingContext2D, ambient: number, tint: string): void {
     const c = this.actors.ctx;
@@ -1707,31 +1725,20 @@ export class Game implements World {
       if (this.isVisible(p.x, p.y, 120)) p.draw(c);
     }
     if (!this.player.dead || this.state === 'victory') this.player.draw(c, this);
+
     c.setTransform(1, 0, 0, 1, 0, 0);
-
-    const s = this.silhouette.ctx;
-    s.globalCompositeOperation = 'source-over';
-    s.clearRect(0, 0, ART_W, ART_H);
-    s.drawImage(this.actors.canvas, 0, 0);
-    s.globalCompositeOperation = 'source-in';
-    s.fillStyle = OUTLINE;
-    s.fillRect(0, 0, ART_W, ART_H);
-    s.globalCompositeOperation = 'source-over';
-
-    // Read first, but in the same night as everything else.
-    c.globalCompositeOperation = 'source-atop';
-    c.globalAlpha = Math.min(0.3, ambient * 0.22);
-    c.fillStyle = tint;
-    c.fillRect(0, 0, ART_W, ART_H);
-    c.globalAlpha = 1;
-    c.globalCompositeOperation = 'source-over';
-
+    const image = c.getImageData(0, 0, ART_W, ART_H);
+    settleActors(
+      image,
+      OUTLINE_ABGR,
+      rgbOf(tint),
+      Math.min(0.3, ambient * 0.22),
+      Math.round(this.camera.renderX / ART),
+      Math.round(this.camera.renderY / ART),
+    );
+    c.putImageData(image, 0, 0);
     target.save();
     target.setTransform(1, 0, 0, 1, 0, 0);
-    target.drawImage(this.silhouette.canvas, -1, 0);
-    target.drawImage(this.silhouette.canvas, 1, 0);
-    target.drawImage(this.silhouette.canvas, 0, -1);
-    target.drawImage(this.silhouette.canvas, 0, 1);
     target.drawImage(this.actors.canvas, 0, 0);
     target.restore();
   }

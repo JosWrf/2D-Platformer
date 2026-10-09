@@ -218,30 +218,80 @@ const SLACK = 64;
 /** A channel plus its dither (offset by SLACK), clamped to 0-255 and cut to five bits. */
 const FIVE_BITS = new Uint8Array(256 + SLACK * 2).map((_, v) => Math.max(0, Math.min(255, v - SLACK)) >> 3);
 
-/* ------------------------------------------------------------- outline */
+/* ------------------------------------------------------------- actors */
 
-let solidMask = new Uint8Array(0);
+/** Alpha from which an actor's pixel counts as body rather than glow. */
+const SOLID = 160;
+/** The 4×4 Bayer thresholds as alpha bytes. */
+const BAYER_ALPHA = new Uint8Array([0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => Math.round(((v + 0.5) / 16) * 255)));
+let actorMask = new Uint8Array(0);
 
 /**
- * Puts a one-pixel outline round what is solid in a layer: every pixel that is
- * not solid itself but touches a solid one, side by side, takes the outline's
- * colour. Solid means mostly opaque - a glow round a body stays a glow, and
- * only the body's own edge gets the line.
+ * The actor layer made pixel art, in one pass over its pixels:
+ *   - what is mostly opaque is body: made wholly opaque, and darkened a
+ *     breath towards the zone's night (tint by amount, 0..1);
+ *   - what is translucent - a glow, a trail, a ghost - becomes a pattern of
+ *     opaque pixels, as many as its alpha asks for, picked by the same 4×4
+ *     ordered pattern as the palette's dither and fixed to the world the same
+ *     way ((ox, oy): where the layer sits in the world, in art pixels);
+ *   - every pixel that is not body but touches body side by side takes the
+ *     outline colour.
+ * No pixel is left half transparent, so no edge is soft and nothing smears
+ * across two pixels; and only bodies are outlined, never their glows.
  */
-export function outlineLayer(image: ImageData, abgr: number, solid = 150): void {
+export function settleActors(
+  image: ImageData,
+  outline: number,
+  tint: readonly [number, number, number],
+  amount: number,
+  ox = 0,
+  oy = 0,
+): void {
   const w = image.width;
   const h = image.height;
   const n = w * h;
   const px = new Uint32Array(image.data.buffer, image.data.byteOffset, n);
-  if (solidMask.length < n) solidMask = new Uint8Array(n);
-  const mask = solidMask;
-  for (let i = 0; i < n; i++) mask[i] = px[i] >>> 24 >= solid ? 1 : 0;
+  if (actorMask.length < n) actorMask = new Uint8Array(n);
+  const mask = actorMask;
+  const k = Math.round(Math.max(0, Math.min(1, amount)) * 256);
+  const keep = 256 - k;
+  const tr = tint[0] * k;
+  const tg = tint[1] * k;
+  const tb = tint[2] * k;
+  for (let y = 0; y < h; y++) {
+    const row = ((y + oy) & 3) * 4;
+    let i = y * w;
+    for (let x = 0; x < w; x++, i++) {
+      const c = px[i];
+      const a = c >>> 24;
+      if (a === 0) {
+        mask[i] = 0;
+        continue;
+      }
+      if (a >= SOLID) mask[i] = 2;
+      else if (a > BAYER_ALPHA[row + ((x + ox) & 3)]) mask[i] = 1;
+      else {
+        px[i] = 0;
+        mask[i] = 0;
+        continue;
+      }
+      const r = ((c & 255) * keep + tr) >> 8;
+      const g = (((c >> 8) & 255) * keep + tg) >> 8;
+      const b = (((c >> 16) & 255) * keep + tb) >> 8;
+      px[i] = 0xff000000 | (b << 16) | (g << 8) | r;
+    }
+  }
   for (let y = 0; y < h; y++) {
     let i = y * w;
     for (let x = 0; x < w; x++, i++) {
-      if (mask[i]) continue;
-      if ((x > 0 && mask[i - 1]) || (x < w - 1 && mask[i + 1]) || (y > 0 && mask[i - w]) || (y < h - 1 && mask[i + w])) {
-        px[i] = abgr;
+      if (mask[i] === 2) continue;
+      if (
+        (x > 0 && mask[i - 1] === 2) ||
+        (x < w - 1 && mask[i + 1] === 2) ||
+        (y > 0 && mask[i - w] === 2) ||
+        (y < h - 1 && mask[i + w] === 2)
+      ) {
+        px[i] = outline;
       }
     }
   }
