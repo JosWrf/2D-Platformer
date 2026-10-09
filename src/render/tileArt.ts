@@ -543,6 +543,8 @@ interface Material {
   readonly shade: boolean;
   /** A seed of its own, so two materials side by side do not share their grain. */
   readonly seed: number;
+  /** Laid masonry sinks into the dark below its third band, a step a tile (see build). */
+  readonly sinks: boolean;
 }
 
 const materials = new Map<string, Material>();
@@ -572,6 +574,7 @@ function material(name: string): Material {
       accent: Uint32Array.from(def.accent, abgrOf),
       shade: def.top !== 'lip' && def.top !== 'gloss',
       seed: nameSeed(name),
+      sinks: def.pattern === 'bricks' || def.pattern === 'ashlar' || def.pattern === 'blocks' || def.pattern === 'slabs' || def.pattern === 'wet',
     };
     materials.set(name, m);
   }
@@ -1074,6 +1077,10 @@ export class TerrainArt {
   private readonly kinds: Uint8Array;
   /** Region tiles that are terrain or touch it: only there can an open pixel hold grass. */
   private readonly near: Uint8Array;
+  /** Tiles of a pit: open from above, with nothing under them but more pit, spikes or fire. */
+  private readonly pit: Uint8Array;
+  /** And the row of each one's rim, in the region's pixel rows. */
+  private readonly pitRim: Int16Array;
   private readonly mask: Uint8Array;
   private readonly dist: Uint16Array;
   private readonly up: Uint8Array;
@@ -1112,6 +1119,8 @@ export class TerrainArt {
     const n = RW * this.rh;
     this.kinds = new Uint8Array(RT_W * rtH);
     this.near = new Uint8Array(RT_W * rtH);
+    this.pit = new Uint8Array(RT_W * rtH);
+    this.pitRim = new Int16Array(RT_W * rtH);
     this.mask = new Uint8Array(n);
     this.dist = new Uint16Array(n);
     this.up = new Uint8Array(n);
@@ -1252,6 +1261,7 @@ export class TerrainArt {
     }
     const yA = Math.max(1, (jMin - 1) * TPX);
     const yB = Math.min(RH - 1, (jMax + 2) * TPX);
+    this.markPits(tx0, rtH);
 
     // The solid mask: whole tiles, then the corners chipped and filled.
     mask.fill(0);
@@ -1338,6 +1348,7 @@ export class TerrainArt {
 
     // And the pixels themselves.
     const out = new Uint32Array(this.image.data.buffer);
+    const pit = this.pit;
     const OW = CHUNK * TPX;
     const OH = H * TPX;
     const wx0 = tx0 * TPX;
@@ -1354,7 +1365,9 @@ export class TerrainArt {
         const i = y * RW + x;
         const o = oy * OW + ox;
         if (!mask[i]) {
-          out[o] = over[i] !== 0 ? over[i] : near[trow + (x >> 4)] ? this.openPixel(i, x, y, wx0 + x, wy) : 0;
+          let c = over[i] !== 0 ? over[i] : near[trow + (x >> 4)] ? this.openPixel(i, x, y, wx0 + x, wy) : 0;
+          if (c === 0 && pit[trow + (x >> 4)]) c = this.pitPixel(x, y, wx0 + x, wy, BAYER[brow + ((wx0 + x) & 3)]);
+          out[o] = c;
           continue;
         }
         const wx = wx0 + x;
@@ -1376,9 +1389,14 @@ export class TerrainArt {
             continue;
           }
         }
-        // The depth band, dithered where one meets the next.
+        // The depth band, dithered where one meets the next; and in laid
+        // masonry, from the third course of blocks down a ramp step darker
+        // for every tile further in, two at most, so a mass of brick sinks
+        // into the dark - its joints with it - instead of running at full
+        // brightness to the edge of the screen.
         const d = dist[i] + (BAYER[brow + (wx & 3)] - 7.5) * 0.7;
         const band = d < 22 ? 0 : d < 54 ? 1 : 2;
+        const deeper = !m.sinks || d < 40 ? 0 : d < 56 ? 16 : 32;
         const fc = featColor[i];
         if (fc !== 0) {
           out[o] = fc < 8 ? STONE_RAMP[band === 0 ? fc : fc - 1] : fc;
@@ -1393,7 +1411,7 @@ export class TerrainArt {
             continue;
           }
         }
-        let lv = m.bands[band] + m.level[pi] + ((m.grainMap[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
+        let lv = m.bands[band] - deeper + m.level[pi] + ((m.grainMap[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
         // Faces: lit on the left, in shade on the right and underneath.
         if (!mask[i - 1]) lv += 9;
         else if (!mask[i + 1]) lv -= 8;
@@ -1422,6 +1440,71 @@ export class TerrainArt {
    * grass standing on a surface below it, or hanging out past the edge beside
    * it; else nothing.
    */
+  /**
+   * Which tiles are a pit, and where its rim is: empty, open from above, with
+   * nothing under them to the bottom of the level but more of the same,
+   * spikes or fire, and ground either side within ten tiles. A hall's air has
+   * a floor under it; a pit does not. The rim is the top of the lower of its
+   * two sides, in the rows of the region, worked out from the level's tiles so
+   * a pit across two chunks is drawn the same in both.
+   */
+  private markPits(tx0: number, rtH: number): void {
+    const { kinds, pit, pitRim, level } = this;
+    pit.fill(0);
+    const mass = (tx: number, ty: number): boolean => {
+      const t = level.tileAt(tx, ty);
+      return t === Tile.Solid || t === Tile.Earth;
+    };
+    for (let i = 0; i < RT_W; i++) {
+      // From the bottom up: the column is a pit for as long as it stays open.
+      let open = true;
+      for (let j = rtH - 1; j >= 0 && open; j--) {
+        const k = kinds[j * RT_W + i];
+        if (k === K_SPIKE || k === K_LAVA || k === K_LAVA_TOP) continue;
+        if (k !== K_EMPTY) {
+          open = false;
+          continue;
+        }
+        const tx = tx0 + i;
+        const ty = j - MARGIN;
+        let rim = -1;
+        for (const dir of [-1, 1]) {
+          let d = 1;
+          while (d <= 10 && !mass(tx + dir * d, ty)) d++;
+          if (d > 10) {
+            rim = -2;
+            break;
+          }
+          // The top of that side: up its column while it stays solid.
+          let top = ty;
+          while (top > 0 && mass(tx + dir * d, top - 1)) top--;
+          rim = Math.max(rim, top);
+        }
+        if (rim < 0) continue;
+        pit[j * RT_W + i] = 1;
+        pitRim[j * RT_W + i] = (rim + MARGIN) * TPX;
+      }
+    }
+  }
+
+  /**
+   * A pixel down a pit: the far wall of the hole, the same stone as the
+   * ground there a ramp step darker, its rim catching the light, fading in
+   * three dithered bands into the dark below - where the pit used to be one
+   * flat rectangle of black.
+   */
+  private pitPixel(x: number, y: number, wx: number, wy: number, bayer: number): number {
+    const depth = y - this.pitRim[(y >> 4) * RT_W + (x >> 4)];
+    if (depth < 0 || depth >= 22) return 0;
+    const fade = depth < 10 ? 16 : depth < 14 ? 12 : depth < 18 ? 8 : 4;
+    if (bayer >= fade) return 0;
+    const m = this.colEarth[x];
+    if (depth === 0) return m.ramp[Math.min(m.last, 2)];
+    const lv = m.bands[2] - 16 + m.level[(wy % PH) * PW + (wx & PWM)];
+    const ri = lv >> 4;
+    return m.ramp[ri < 0 ? 0 : ri > m.last ? m.last : ri];
+  }
+
   private openPixel(i: number, x: number, y: number, wx: number, wy: number): number {
     const { mask, up, kinds, colEarth, colStone, coverE, coverS } = this;
     const tile = kinds[(y >> 4) * RT_W + (x >> 4)];
@@ -1492,14 +1575,18 @@ export class TerrainArt {
           let runEnd = tx;
           while (level.tileAt(runEnd + 1, ty) === Tile.Platform) runEnd++;
           drawPlank(over, x0, y0, tx, ty, style, leftEnd, rightEnd, runStart, runEnd);
-          // The supports: hung from whatever is above, or from above the sky.
+          // The supports: hung from the roof indoors, standing on posts under
+          // an open sky, none at all where the world has come apart.
+          const support = SUPPORT[area];
+          if (support === 'float') continue;
           const runW = (runEnd - runStart + 1) * TPX;
           const supports = runW >= 7 * TPX ? [4, runW >> 1, runW - 5] : [4, runW - 5];
           for (const s of supports) {
             const wx = runStart * TPX + s;
             const lx = wx - tx * TPX;
             if (lx < 0 || lx >= TPX) continue;
-            drawHanger(over, mask, kinds, x0 + lx, y0, style, wx);
+            if (support === 'hang') drawHanger(over, mask, kinds, x0 + lx, y0, style, wx);
+            else drawPost(over, mask, kinds, x0 + lx, y0, style, wx);
           }
         }
       }
@@ -2053,6 +2140,83 @@ function drawPlank(
       }
       over[(y0 + r) * RW + x0 + lx] = c;
     }
+  }
+}
+
+/**
+ * How each area holds its planks up: from the roof where there is one (the
+ * caves, the halls, the theatre's fly loft, the hoard's vault), on posts from
+ * below under an open sky - a rope running up into the sky would hang from
+ * nothing - and not at all in the rift, where slabs of the world drift.
+ */
+const SUPPORT: Record<Area, 'hang' | 'post' | 'float'> = {
+  forest: 'post',
+  den: 'post',
+  ruins: 'post',
+  vault: 'post',
+  theater: 'hang',
+  temple: 'post',
+  caverns: 'hang',
+  grotto: 'hang',
+  web: 'hang',
+  forge: 'hang',
+  drowned: 'hang',
+  altar: 'hang',
+  castle: 'post',
+  battlement: 'post',
+  clock: 'post',
+  keep: 'post',
+  throne: 'hang',
+  rift: 'float',
+  mirror: 'float',
+  lair: 'hang',
+  crystal: 'hang',
+};
+
+/**
+ * A post under a plank, standing on the rock or the plank below it: a beam of
+ * wood two pixels wide, lit on its left, on a broader foot - or an iron strut
+ * in the castle. Where there is nothing under it to stand on, or only spikes
+ * or fire, there is no post.
+ */
+function drawPost(
+  over: Uint32Array,
+  mask: Uint8Array,
+  kinds: Uint8Array,
+  x: number,
+  plankY: number,
+  style: MaterialDef['plank'],
+  wx: number,
+): void {
+  const rows = over.length / RW;
+  const top = plankY + 6;
+  let foot = -1;
+  for (let y = top; y < rows; y++) {
+    if (mask[y * RW + x]) {
+      foot = y;
+      break;
+    }
+    const k = kinds[(y >> 4) * RT_W + (x >> 4)];
+    if (y >> 4 > plankY >> 4 && k === K_PLANK) {
+      foot = y;
+      break;
+    }
+    if (k === K_SPIKE || k === K_LAVA || k === K_LAVA_TOP) return;
+  }
+  if (foot < 0) return;
+  const iron = style !== 'wood';
+  const lit = iron ? IRON.lit : WOOD.lit;
+  const dark = iron ? IRON.dark : WOOD.grain;
+  for (let y = top; y < foot; y++) {
+    const i = y * RW + x;
+    over[i] = lit;
+    // Grain down the beam now and then; bands round the strut.
+    over[i + 1] = !iron && (ihash(wx, y, 31) & 7) === 0 ? WOOD.dark : iron && (y - top) % 12 === 0 ? IRON.black : dark;
+  }
+  // A foot a pixel wider either side where it stands.
+  if (foot - 1 >= top) {
+    over[(foot - 1) * RW + x - 1] = dark;
+    over[(foot - 1) * RW + x + 2] = iron ? IRON.black : WOOD.dark;
   }
 }
 
