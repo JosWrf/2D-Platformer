@@ -766,6 +766,17 @@ await shot('40-maskarill');
 // light, and in reach.
 await open(`?x=${marken.gloom - 11}`);
 await arenaMoment('gloom', "boss.state === 'eat' && g.zoneBanner.timer <= 0", 60 * 40);
+// Turned to him, and a swing into the light he is eating.
+const toNyktos = await page.evaluate(() => {
+  const g = window.game;
+  const boss = g.enemies.find((e) => e.kind === 'gloom' && !e.dead);
+  return boss && boss.cx < g.player.cx ? 'left' : 'right';
+});
+await step(3, { [toNyktos]: true });
+await release(toNyktos);
+await step(1, { attack: true });
+await release('attack');
+await step(6);
 await shot('41-nyktos');
 
 // Grauwacht looked at: stone, and the blade ringing off him.
