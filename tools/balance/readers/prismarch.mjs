@@ -25,6 +25,7 @@
  */
 export default function reader(g, h) {
   const p = g.player;
+  const stoneGaze = p.relics?.has?.('steinblick') ?? false;
   const see = h.lag();
   const jump = h.jumper();
   const room = h.room;
@@ -175,14 +176,25 @@ export default function reader(g, h) {
     const inRoom = (x) => x > room.left + 14 && x < room.right - 14;
 
     /* ------------------------------------------------------------ shards */
-    // Each shard in view: when it gets down to his height, and where.
+    // Each shard in view: when it gets down to his height, and where. With
+    // the Steinblick, which every hero here carries, a shard coming down in
+    // front of him and not far off falls a third slower while he looks at it
+    // (game.ts, underGaze): he knows how it feels, and his eye leads it so.
+    const gazed = (x, y, vy) => {
+      if (!stoneGaze) return false;
+      const ddx = x - p.cx;
+      if (Math.abs(ddx) > 420 || Math.abs(y - p.cy) > 260) return false;
+      if (Math.sign(ddx) !== p.facing && Math.abs(ddx) > 10) return false;
+      return Math.abs(ddx) < 120 && vy > 0 && y < p.cy;
+    };
     const rocks = [];
     for (const q of v.rocks) {
       let y = q.y;
       let vy = q.vy;
       for (let k = -lagF + 1; k < 90; k++) {
-        vy += 900 / 60;
-        y += vy / 60;
+        const dt = gazed(q.x, y, vy) ? 2 / 3 / 60 : 1 / 60;
+        vy += 900 * dt;
+        y += vy * dt;
         if (y + q.h / 2 >= FLOOR) break;
         if (k >= 0 && y + q.h / 2 > p.y && y - q.h / 2 < p.y + p.h) {
           rocks.push({ x: q.x, k });

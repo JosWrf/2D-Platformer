@@ -411,29 +411,32 @@ eine Ankündigung, die er gesehen hat: Was der Leser verliert, ist der Boden
 dessen, was ein Mensch verliert, nicht der Durchschnitt.
 
 Gemessen mit derselben Bank vor den Änderungen und danach, je drei Kämpfe pro
-Held, Mediane (Leben = mit den Relikten bis dorthin; *—* = fällt nicht in zwei
-Minuten):
+Held — der Leser von Vesperon, Morvain und Umbra jetzt in sieben, denn ihre
+Kämpfe hängen an einer Handvoll Paraden, und ein schlechter von dreien
+verschiebt den Median um Herzen —, Mediane (Leben = mit den Relikten bis
+dorthin; Treffer = verlorene Herzen und was der Seidenmantel abfing; *—* = fällt
+nicht in zwei Minuten):
 
 | Boss | vorher: Leben | Leser | Draufhauer | jetzt: Leben | Leser | Draufhauer |
 | --- | --- | --- | --- | --- | --- | --- |
-| Gallert | 22 | 8 s, 0 ♥ | 7 s, 3 Treffer | 34 | 12 s, 0 ♥ | 11 s, 5 Treffer |
-| Grimmzahn | 62 | 34 s, 0 ♥ | 21 s, 5 | 62 | 32 s, 0 ♥ | 20 s, 5 |
-| Gierschlund | 32 | 18 s, 0 ♥ | 20 s, 6 | 40 | 27 s, 0 ♥ | 23 s, 7 |
-| **Maskarill** | — | — | — | 90 | 43 s, 2 ♥ | 59 s, 11 |
-| Ankhor | 55 | 30 s, 0 ♥ | 75 s, 32 | 58 | 39 s, 0 ♥ | 60 s, 24 |
-| **Nyktos** | — | — | — | 66 | 47 s, 1 ♥ | 61 s, 15 |
-| Arachna | 52 | 22 s, 2 ♥ | 48 s, 20 | 56 | 29 s, 0 ♥ | 58 s, 22 |
-| Ignivor | 49 | 39 s, 0 ♥ | 24 s, 6 | 52 | 36 s, 0 ♥ | 37 s, 10 |
-| Sol und Luna | 82 | 47 s, 1 ♥ | 19 s, **3** | 87 | 57 s, 1 ♥ | 30 s, 7 |
-| Thalassa | 82 | 26 s, 0 ♥ | 19 s, **4** | 104 | 34 s, 0 ♥ | 24 s, 7 |
-| **Grauwacht** | — | — | — | 133 | 45 s, 0 ♥ | —, 28 |
-| Tickmar | 303 | 53 s, 0 ♥ | 39 s, **4** | 386 | 65 s, 0 ♥ | 48 s, 8 |
-| Vesperon | 89 | 50 s, 3 ♥ | 37 s, **5** | 94 | 65 s, 3 ♥ | 59 s, 13 |
-| Morvain | 111 | 28 s, 0 ♥ | 21 s, 12 | 117 | 31 s, 2 ♥ | 24 s, 13 |
-| Umbra | 58 | 45 s, **6 ♥** | 16 s, 9 | 61 | 43 s, 1 ♥ | 19 s, 13 |
+| Gallert | 22 | 8 s, 0 ♥ | 7 s, 3 Treffer | 34 | 13 s, 2 ♥ | 11 s, 6 Treffer |
+| Grimmzahn | 62 | 34 s, 0 ♥ | 21 s, 5 | 62 | 42 s, 0 ♥ | 27 s, 7 |
+| Gierschlund | 32 | 18 s, 0 ♥ | 20 s, 6 | 40 | 26 s, 0 ♥ | 23 s, 7 |
+| **Maskarill** | — | — | — | 90 | 43 s, 1 ♥ | 57 s, 12 |
+| Ankhor | 55 | 30 s, 0 ♥ | 75 s, 32 | 58 | 38 s, 0 ♥ | 40 s, 16 |
+| **Nyktos** | — | — | — | 66 | 47 s, 1 ♥ | 60 s, 15 |
+| Arachna | 52 | 22 s, 2 ♥ | 48 s, 20 | 56 | 26 s, 0 ♥ | 46 s, 17 |
+| Ignivor | 49 | 39 s, 0 ♥ | 24 s, 6 | 52 | 46 s, 0 ♥ | 30 s, 7 |
+| Sol und Luna | 82 | 47 s, 1 ♥ | 19 s, **3** | 87 | 63 s, 1 ♥ | 22 s, 6 |
+| Thalassa | 82 | 26 s, 0 ♥ | 19 s, **4** | 104 | 34 s, 0 ♥ | 25 s, 8 |
+| **Grauwacht** | — | — | — | 133 | 47 s, 0 ♥ | —, 28 |
+| Tickmar | 303 | 53 s, 0 ♥ | 39 s, **4** | 386 | 72 s, 0 ♥ | 48 s, 7 |
+| Vesperon | 89 | 50 s, 3 ♥ | 37 s, **5** | 94 | 53 s, 0 ♥ | 54 s, 15 |
+| Morvain | 111 | 28 s, 0 ♥ | 21 s, 12 | 117 | 32 s, 0 ♥ | 22 s, 12 |
+| Umbra | 58 | 45 s, **6 ♥** | 16 s, 9 | 61 | 54 s, 3 ♥ | 21 s, 21 |
 | Splitterwächter | 27 | 12 s, 0 ♥ | 5 s, **0** | 99 | 39 s, 0 ♥ | 18 s, 5 |
-| Die Fünfkronige | 87 | 47 s, 0 ♥ | —, 76 | 91 | 51 s, 0 ♥ | —, 71 |
-| Prismarch | 124 | 45 s, 0 ♥ | 19 s, **1** | 130 | 48 s, 0 ♥ | 22 s, 7 |
+| Die Fünfkronige | 87 | 47 s, 0 ♥ | —, 76 | 91 | 52 s, 0 ♥ | —, 73 |
+| Prismarch | 124 | 45 s, 0 ♥ | 19 s, **1** | 130 | 45 s, 0 ♥ | 23 s, 7 |
 
 Fett, was die Messlatte verfehlte: Vorher fielen sieben von 46 Prüfungen durch,
 und fast alle in dieselbe Richtung — zu **schwach** gegen einen, der nicht liest.
@@ -1259,7 +1262,7 @@ der Reichweite einer Klinge an ihrem Saum heraus, und wer draufhielt, schickte
 alle fünfzehn eines Kampfes zurück. Jetzt gilt für sie dieselbe Regel wie für ihre
 Wellen — springen oder parieren. Dazu 72 statt 60 Leben, damit auch ein
 Draufhauer ihr ganzes Repertoire zu sehen bekommt: Der Leser braucht jetzt rund
-35 s und verliert nichts, der Draufhauer kassiert sieben Treffer in 25.
+35 s und verliert nichts, der Draufhauer kassiert sieben, acht Treffer in 25.
 
 Wer sie schlägt, nimmt mit, was sie gehalten hat: die **Flutklinge**, die erste
 Hälfte des Klingen-Upgrades.
@@ -1337,7 +1340,7 @@ aufziehen: Das Ticken stockt, das Glas klappt hoch, 2,5 s lang zählt jeder Tref
 doppelt. Ab der Hälfte tickt er alle 0,4 s, und jede Ansage dauert 1,6 s. Nach
 jedem Zug bleiben knapp 3 s Ruhe. Weil er immer zu treffen ist, hat er 230
 Trefferpunkte (mit den Relikten bis hierher rund 385): Der Bot, der ihn 0,3 s zu
-spät sieht, legt ihn in rund einer Minute um und verliert höchstens ein Herz; wer
+spät sieht, legt ihn in gut einer Minute um und verliert höchstens ein Herz; wer
 stehen bleibt, verliert 13 bis 16 Herzen in der Zeit, in der der Leser 0 bis 3
 verliert.
 
@@ -1389,7 +1392,7 @@ Fledermäuse, und lesen lohnte sich kaum mehr als draufhauen. Dazu traf ihn
 Vesperon selbst, wenn er sich vom Dach erhob, ohne jedes Zeichen außer dem
 Flügelschlag — das beendet jetzt das Fenster, statt den zu bestrafen, der es
 nutzt. Jetzt verliert der Leser null bis drei Herzen in knapp einer Minute; der
-Draufhauer nimmt zehn Treffer in gut einer. Wer ihn zerstieben lässt, bekommt
+Draufhauer nimmt zehn bis fünfzehn Treffer in derselben Zeit. Wer ihn zerstieben lässt, bekommt
 den **Blutdurst**.
 
 ### Im Spiegelgrund: Umbra, dein Schatten
@@ -1435,8 +1438,8 @@ Mittel und bis zu acht, und drei Viertel davon kamen von einem einzigen Hieb: De
 Ladeschlag des Helden beginnt mit einem gewöhnlichen Hieb auf den Tastendruck, und
 mit der Flutklinge wirft der seine Sichel — Umbras begann also mit einem Hieb samt
 Sichel aus dem Nichts, aus einer Klingenlänge, aus der die Sichel nicht vorbeigeht.
-Seit er vorher sichtbar ausholt, verliert derselbe Leser rund zwei Herzen in
-gut 50 Sekunden; wer nur draufhaut, nimmt in 18 Sekunden fünfzehn Treffer.
+Seit er vorher sichtbar ausholt, verliert derselbe Leser zwei, drei Herzen in gut
+50 Sekunden; wer nur draufhaut, nimmt in 20 Sekunden rund zwanzig Treffer.
 
 Wer ihn besiegt, bekommt den **Zweiten Atem**: Der Schatten steht jetzt hinter
 dem Helden, und einmal in jedem Leben fängt er auf, was ihn fällen würde.
