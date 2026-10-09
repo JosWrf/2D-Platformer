@@ -1331,14 +1331,16 @@ export class Player extends Body {
     // bottom of the row he stands on.
     const mid = snap(this.x) + 8;
     const feet = snap(this.bottom);
-    this.drawContact(ctx, world, mid);
-    if (this.trail.length) this.drawAfterimages(ctx);
 
     // Untouchable after a blow: there one moment and gone the next, three
-    // frames each, rather than half there all the time. Not while the blow
-    // still has him reeling - that he has to be seen taking. A slash stays:
-    // it shows what his blade reaches, blinking or not.
-    const hidden = this.invuln > 0 && this.hurtTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 1;
+    // frames each, rather than half there all the time - counted so that he
+    // is still there in the frame the stun lets go of him, whichever stun.
+    // Not while the blow still has him reeling - that he has to be seen
+    // taking - nor while he swings: a cut is drawn whole. And a slash outlives
+    // his blinking out: it shows what his blade reaches either way.
+    const hidden = this.invuln > 0 && this.hurtTimer <= 0 && this.attackTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 0;
+    if (!hidden) this.drawContact(ctx, world, mid);
+    if (this.trail.length) this.drawAfterimages(ctx);
     this.drawFigure(ctx, this.look(), mid, feet, hidden);
     this.drawGuard(ctx, mid, feet);
   }
