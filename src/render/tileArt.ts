@@ -29,7 +29,7 @@ import { ART, abgrOf, makeCanvas } from './pixel';
  *   - Colours are the palette's own, picked from ramps that cool towards their
  *     shadows: the frame's palette mapping lets them through untouched.
  *
- * None of that changes from frame to frame, so it is drawn once, sixteen
+ * None of that changes from frame to frame, so it is drawn once, eight
  * tiles at a time, into a canvas of its own (a chunk) and from then on simply
  * copied to the screen. Only what moves - the lava's surface, the doors of the
  * boss rooms - is drawn per frame (render/tilemap.ts).
@@ -72,7 +72,7 @@ const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
  * name for every room of the same place (the theatre is 'ruins'), and several
  * rooms dress their ground differently.
  */
-export type Area =
+type Area =
   | 'forest'
   | 'den'
   | 'ruins'
@@ -129,7 +129,7 @@ const AREA_STARTS: ReadonlyArray<readonly [number, Area]> = [
 ];
 
 /** The area a world x (logical pixels) lies in. */
-export function areaAt(x: number): Area {
+function areaAt(x: number): Area {
   let area: Area = 'forest';
   for (const [start, a] of AREA_STARTS) {
     if (x >= start) area = a;
@@ -141,11 +141,11 @@ export function areaAt(x: number): Area {
 /* ------------------------------------------------------------- materials */
 
 /**
- * How the body of a material is laid: loose soil, cut blocks of three sizes,
+ * How the body of a material is laid: loose soil, cut blocks of four sizes,
  * bricks, rock plates, glassy facets or crystal prisms. Each is a pattern of
  * light and shade worked out once, in world space, and repeated every 256 art
- * pixels - sixteen tiles, far enough apart that the eye does not find it
- * under the depth bands and the variants laid over it.
+ * pixels across and 240 down - fifteen tiles and more, far enough apart that
+ * the eye does not find it under the depth bands and the variants laid over it.
  */
 type Pattern = 'soil' | 'blocks' | 'wet' | 'ashlar' | 'bricks' | 'slabs' | 'rock' | 'facets' | 'prisms';
 
@@ -188,7 +188,10 @@ interface MaterialDef {
   accent: string[];
   /** Share of a top covered by its growth (grass, moss), 0..1. */
   cover: number;
-  /** The planks this place builds: wood hung on rope, or a stone slab on chains. */
+  /**
+   * The planks this place builds: boards hung on ropes in the open country;
+   * iron-bound boards, or slabs of its own stone, hung on chains anywhere built.
+   */
   plank: 'wood' | 'stone' | 'iron' | 'glass';
   /** A tide mark across every face, where the water stood for a long time. */
   tide?: boolean;
@@ -209,11 +212,11 @@ interface MaterialDef {
  * still comes out under the hero standing on it.
  */
 const DEFS: Record<string, MaterialDef> = {
-  // Nebelwald: warm earth under a lip of grass, cooling to violet with depth.
+  // Nebelwald: warm earth under a lip of grass, its cracks gone violet.
   earth: {
     ramp: ['#1a1932', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [2.75, 2.45, 2.15],
-    grain: 0.5,
+    bands: [2.95, 2.5, 2.0],
+    grain: 0.6,
     pattern: 'soil',
     top: 'grass',
     topColors: ['#1e6f50', '#134c4c', '#0c2e44'],
@@ -226,8 +229,8 @@ const DEFS: Record<string, MaterialDef> = {
   // Grimmzahn's den: the same earth, trampled bare in patches, bones in it.
   den: {
     ramp: ['#1a1932', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [2.75, 2.45, 2.15],
-    grain: 0.5,
+    bands: [2.95, 2.5, 2.0],
+    grain: 0.6,
     pattern: 'soil',
     top: 'grass',
     topColors: ['#1e6f50', '#134c4c', '#0c2e44'],
@@ -528,6 +531,8 @@ interface Material {
   readonly last: number;
   readonly bands: Int32Array;
   readonly grain: number;
+  /** Which grain: fine speckle for soil, coarse patches for stone. */
+  readonly grainMap: Int8Array;
   readonly level: Int8Array;
   readonly special: Uint8Array;
   readonly top: Uint32Array;
@@ -558,6 +563,7 @@ function material(name: string): Material {
       last: def.ramp.length - 1,
       bands: Int32Array.from(def.bands, (b) => Math.round(b * 16)),
       grain: Math.round(def.grain * 16),
+      grainMap: grain(def.pattern === 'soil'),
       level: pattern.level,
       special: pattern.special,
       top: Uint32Array.from(def.topColors, abgrOf),
@@ -597,7 +603,7 @@ const AREA_MATERIALS: Record<Area, readonly [string, string]> = {
 
 const AREAS = Object.keys(AREA_MATERIALS) as Area[];
 
-/** Whether an area's ground grows a lip of grass or moss that hangs over its ledges. */
+/** Whether an area's ground grows a lip of grass that hangs over its ledges (moss lies flat). */
 function overgrown(area: Area): boolean {
   const top = DEFS[AREA_MATERIALS[area][0]].top;
   return top === 'grass';
@@ -605,9 +611,17 @@ function overgrown(area: Area): boolean {
 
 /* ------------------------------------------------------------- patterns */
 
-/** Side of every repeating pattern, in art pixels. A power of two, so wrapping is a mask. */
-const P = 256;
-const PM = P - 1;
+/**
+ * Size of every repeating pattern, in art pixels. Its width is a power of two,
+ * so wrapping across is a mask; its height is 240 so that courses of 10, 12 or
+ * 20 pixels fit it - a course that does not divide the 16 pixels of a tile
+ * keeps its joints from lining up with the rows of tiles, which is what a
+ * course one tile high did: a joint and a bright bevel on every tile row, the
+ * venetian blinds again in stone.
+ */
+const PW = 256;
+const PWM = PW - 1;
+const PH = 240;
 
 /**
  * A pattern: per pixel, how far up or down the ramp it moves (in sixteenths
@@ -637,18 +651,18 @@ function patternMap(kind: Pattern): PatternMap {
 }
 
 function buildPattern(kind: Pattern): PatternMap {
-  const level = new Int8Array(P * P);
-  const special = new Uint8Array(P * P);
+  const level = new Int8Array(PW * PH);
+  const special = new Uint8Array(PW * PH);
   switch (kind) {
     case 'soil':
       break;
     case 'blocks':
-      // Big weathered blocks, a tile high, many of them split across: worn
-      // corners, the odd pit.
-      masonry(level, 16, 18, 34, 101, 0.75, 9, 0.45);
+      // Big weathered blocks, many of them split across: worn corners, the
+      // odd pit.
+      masonry(level, 12, 18, 34, 101, 0.75, 9, 0.35);
       break;
     case 'wet':
-      masonry(level, 8, 12, 30, 808, 0.6, 9, 0);
+      masonry(level, 10, 12, 30, 808, 0.6, 9, 0);
       break;
     case 'ashlar':
       masonry(level, 8, 14, 24, 202, 0.25, 8, 0);
@@ -657,16 +671,16 @@ function buildPattern(kind: Pattern): PatternMap {
       masonry(level, 8, 10, 15, 303, 0.1, 7, 0);
       break;
     case 'slabs':
-      masonry(level, 16, 22, 36, 404, 0.15, 10, 0.2);
+      masonry(level, 20, 22, 36, 404, 0.15, 10, 0.2);
       break;
     case 'rock':
-      cells(level, special, 21, 1, 505, 'rock');
+      cells(level, special, 21, 20, 1, 505, 'rock');
       break;
     case 'facets':
-      cells(level, special, 12, 1, 606, 'facets');
+      cells(level, special, 12, 11, 1, 606, 'facets');
       break;
     case 'prisms':
-      cells(level, special, 16, 0.3, 707, 'prisms');
+      cells(level, special, 16, 15, 0.3, 707, 'prisms');
       break;
   }
   return { level, special };
@@ -693,28 +707,28 @@ function masonry(
   bevel: number,
   split: number,
 ): void {
-  const courses = P / course;
-  const starts = new Int32Array(P + 1);
+  const courses = PH / course;
+  const starts = new Int32Array(PW + 1);
   for (let c = 0; c < courses; c++) {
-    // Lay the course: block starts from a random offset, wrapped round P.
+    // Lay the course: block starts from a random offset, wrapped round PW.
     let n = 0;
     let x = ihash(c, 0, seed) % maxW;
     const first = x;
-    while (x < first + P) {
+    while (x < first + PW) {
       starts[n++] = x;
       x += minW + (ihash(c, n, seed + 1) % (maxW - minW + 1));
     }
     // The last block takes up the slack, or joins the one before it.
-    if (first + P - starts[n - 1] < minW && n > 1) n--;
+    if (first + PW - starts[n - 1] < minW && n > 1) n--;
     for (let b = 0; b < n; b++) {
       const x0 = starts[b];
-      const x1 = b + 1 < n ? starts[b + 1] : first + P;
+      const x1 = b + 1 < n ? starts[b + 1] : first + PW;
       const tone = ((ihash(c, b, seed + 2) % 9) - 4) * 1.2;
-      const cut = (ihash(c, b, seed + 5) % 1000) / 1000 < split ? 5 + (ihash(c, b, seed + 6) % (course - 9)) : -1;
+      const cut = course >= 10 && (ihash(c, b, seed + 5) % 1000) / 1000 < split ? 4 + (ihash(c, b, seed + 6) % (course - 7)) : -1;
       for (let yy = 0; yy < course; yy++) {
         const y = c * course + yy;
         for (let xx = x0; xx < x1; xx++) {
-          const i = y * P + (xx & PM);
+          const i = y * PW + (xx & PWM);
           const lx = xx - x0;
           const w = x1 - x0;
           let v: number;
@@ -750,35 +764,37 @@ function masonry(
 function cells(
   level: Int8Array,
   special: Uint8Array,
-  count: number,
+  countX: number,
+  countY: number,
   stretch: number,
   seed: number,
   kind: 'rock' | 'facets' | 'prisms',
 ): void {
-  const size = P / count;
-  const px = new Float32Array(count * count);
-  const py = new Float32Array(count * count);
-  for (let j = 0; j < count; j++) {
-    for (let i = 0; i < count; i++) {
-      const k = j * count + i;
-      px[k] = (i + 0.15 + (ihash(i, j, seed) % 1000) / 1430) * size;
-      py[k] = (j + 0.15 + (ihash(i, j, seed + 1) % 1000) / 1430) * size;
+  const sizeX = PW / countX;
+  const sizeY = PH / countY;
+  const px = new Float32Array(countX * countY);
+  const py = new Float32Array(countX * countY);
+  for (let j = 0; j < countY; j++) {
+    for (let i = 0; i < countX; i++) {
+      const k = j * countX + i;
+      px[k] = (i + 0.15 + (ihash(i, j, seed) % 1000) / 1430) * sizeX;
+      py[k] = (j + 0.15 + (ihash(i, j, seed + 1) % 1000) / 1430) * sizeY;
     }
   }
-  const id = new Int32Array(P * P);
-  for (let y = 0; y < P; y++) {
-    const cj = Math.floor(y / size);
-    for (let x = 0; x < P; x++) {
-      const ci = Math.floor(x / size);
+  const id = new Int32Array(PW * PH);
+  for (let y = 0; y < PH; y++) {
+    const cj = Math.floor(y / sizeY);
+    for (let x = 0; x < PW; x++) {
+      const ci = Math.floor(x / sizeX);
       let best = Infinity;
       let bestK = 0;
       for (let dj = -1; dj <= 1; dj++) {
-        const j = (cj + dj + count) % count;
-        const oy = cj + dj < 0 ? -P : cj + dj >= count ? P : 0;
+        const j = (cj + dj + countY) % countY;
+        const oy = cj + dj < 0 ? -PH : cj + dj >= countY ? PH : 0;
         for (let di = -1; di <= 1; di++) {
-          const i = (ci + di + count) % count;
-          const ox = ci + di < 0 ? -P : ci + di >= count ? P : 0;
-          const k = j * count + i;
+          const i = (ci + di + countX) % countX;
+          const ox = ci + di < 0 ? -PW : ci + di >= countX ? PW : 0;
+          const k = j * countX + i;
           const dx = px[k] + ox - x;
           const dy = (py[k] + oy - y) * stretch;
           const d = dx * dx + dy * dy;
@@ -788,18 +804,19 @@ function cells(
           }
         }
       }
-      id[y * P + x] = bestK;
+      id[y * PW + x] = bestK;
     }
   }
-  const at = (x: number, y: number) => id[(y & PM) * P + (x & PM)];
-  for (let y = 0; y < P; y++) {
-    for (let x = 0; x < P; x++) {
+  const at = (x: number, y: number) => id[((y + PH) % PH) * PW + (x & PWM)];
+  for (let y = 0; y < PH; y++) {
+    for (let x = 0; x < PW; x++) {
       const k = at(x, y);
       const right = at(x + 1, y);
       const down = at(x, y + 1);
       const left = at(x - 1, y);
       const up = at(x, y - 1);
       const h = ihash(k, 0, seed + 2);
+      const i = y * PW + x;
       if (kind !== 'rock') {
         // Glass and crystal: every facet a flat tone of its own by the way it
         // faces, the edges between them thin - a gloss along the upper left,
@@ -811,10 +828,10 @@ function cells(
         if (kind === 'facets' && (right !== k || down !== k)) {
           // A few of the rift's edges still carry the light that split it.
           const n2 = right !== k ? right : down;
-          if (ihash(Math.min(k, n2), Math.max(k, n2), seed + 3) % 100 < 16) special[y * P + x] = SP_CORE;
+          if (ihash(Math.min(k, n2), Math.max(k, n2), seed + 3) % 100 < 16) special[i] = SP_CORE;
         }
-        if (kind === 'prisms' && h % 100 < 7) special[y * P + x] = left !== k || up !== k ? SP_PRISM_LIT : SP_PRISM;
-        level[y * P + x] = v;
+        if (kind === 'prisms' && h % 100 < 7) special[i] = left !== k || up !== k ? SP_PRISM_LIT : SP_PRISM;
+        level[i] = v;
         continue;
       }
       let v = ((h % 7) - 3) * 3;
@@ -823,21 +840,17 @@ function cells(
       } else if (left !== k || up !== k) {
         v += 9;
       }
-      level[y * P + x] = v;
+      level[i] = v;
     }
   }
   if (kind === 'facets') {
     // A seam's halo: the stone either side of it, warmed by its light.
-    for (let y = 0; y < P; y++) {
-      for (let x = 0; x < P; x++) {
-        const i = y * P + x;
+    const sp = (x: number, y: number) => special[((y + PH) % PH) * PW + (x & PWM)];
+    for (let y = 0; y < PH; y++) {
+      for (let x = 0; x < PW; x++) {
+        const i = y * PW + x;
         if (special[i] !== 0) continue;
-        if (
-          special[(y & PM) * P + ((x + 1) & PM)] === SP_CORE ||
-          special[(y & PM) * P + ((x - 1) & PM)] === SP_CORE ||
-          special[((y + 1) & PM) * P + x] === SP_CORE ||
-          special[((y - 1) & PM) * P + x] === SP_CORE
-        ) {
+        if (sp(x + 1, y) === SP_CORE || sp(x - 1, y) === SP_CORE || sp(x, y + 1) === SP_CORE || sp(x, y - 1) === SP_CORE) {
           special[i] = SP_HALO;
         }
       }
@@ -845,12 +858,22 @@ function cells(
   }
 }
 
-/** Grain: two octaves of value noise, -8..7 (half a ramp step either way at full strength). */
+/**
+ * Grain: octaves of value noise, -8..7 (half a ramp step either way at full
+ * strength), repeating every 64 pixels. The coarse grain clumps in patches a
+ * few pixels across, for stone; the fine grain is speckle, for soil, whose
+ * darker tone should read as grit rather than as blotches.
+ */
 const GRAIN_SIZE = 64;
-let grainMap: Int8Array | null = null;
+let coarseGrain: Int8Array | null = null;
+let fineGrain: Int8Array | null = null;
 
-function grain(): Int8Array {
-  if (grainMap) return grainMap;
+function grain(fine = false): Int8Array {
+  if (fine) return (fineGrain ??= makeGrain([[4, 0.35], [2, 0.4], [1, 0.25]]));
+  return (coarseGrain ??= makeGrain([[8, 0.25], [4, 0.45], [2, 0.3]]));
+}
+
+function makeGrain(octaves: ReadonlyArray<readonly [number, number]>): Int8Array {
   const g = new Int8Array(GRAIN_SIZE * GRAIN_SIZE);
   const octave = (cell: number, seed: number, x: number, y: number): number => {
     const n = GRAIN_SIZE / cell;
@@ -869,12 +892,12 @@ function grain(): Int8Array {
   };
   for (let y = 0; y < GRAIN_SIZE; y++) {
     for (let x = 0; x < GRAIN_SIZE; x++) {
-      const v = octave(8, 11, x, y) * 0.25 + octave(4, 12, x, y) * 0.45 + octave(2, 13, x, y) * 0.3;
+      let v = 0;
+      for (const [cell, weight] of octaves) v += octave(cell, 11 + cell, x, y) * weight;
       // Stretched so the clusters reach the ends of the range, then cut to -8..7.
       g[y * GRAIN_SIZE + x] = Math.max(-8, Math.min(7, Math.round((v - 0.5) * 30)));
     }
   }
-  grainMap = g;
   return g;
 }
 
@@ -1114,7 +1137,6 @@ export class TerrainArt {
     // Every material's pattern and the grain, made now rather than in the
     // middle of the first frame that needs them.
     for (const name of Object.keys(DEFS)) material(name);
-    grain();
   }
 
   /**
@@ -1316,7 +1338,6 @@ export class TerrainArt {
     const out = new Uint32Array(this.image.data.buffer);
     const OW = CHUNK * TPX;
     const OH = H * TPX;
-    const g = grain();
     const wx0 = tx0 * TPX;
     for (let oy = 0; oy < OH; oy++) {
       const y = oy + MARGIN * TPX;
@@ -1325,6 +1346,7 @@ export class TerrainArt {
       const jitter = (ihash(wy, 0, 77) % 9) - 4;
       const brow = (wy & 3) * 4;
       const trow = (y >> 4) * RT_W;
+      const prow = (wy % PH) * PW;
       for (let ox = 0; ox < OW; ox++) {
         const x = ox + MARGIN * TPX;
         const i = y * RW + x;
@@ -1360,7 +1382,7 @@ export class TerrainArt {
           out[o] = fc < 8 ? STONE_RAMP[band === 0 ? fc : fc - 1] : fc;
           continue;
         }
-        const pi = ((wy & PM) << 8) | (wx & PM);
+        const pi = prow + (wx & PWM);
         const sp = m.special[pi];
         if (sp !== 0 && band < 2) {
           const sc = specialPixel(m, sp, band);
@@ -1369,7 +1391,7 @@ export class TerrainArt {
             continue;
           }
         }
-        let lv = m.bands[band] + m.level[pi] + ((g[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
+        let lv = m.bands[band] + m.level[pi] + ((m.grainMap[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
         // Faces: lit on the left, in shade on the right and underneath.
         if (!mask[i - 1]) lv += 9;
         else if (!mask[i + 1]) lv -= 8;
