@@ -1,10 +1,14 @@
 import { audio } from '../core/audio';
 import { Rect, TAU, approach, clamp, damp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
-import { makeCanvas } from '../render/pixel';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { sector } from '../render/pen';
+import { ART, snap } from '../render/pixel';
+import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { TILE } from '../world/tiles';
+import { type PartSprite, angleStep, blit, dashedOval, ovalRing, solidFlash, stepAngle } from './boss-art';
 import { Enemy, type GlowLight } from './enemy';
+import { BONES, DIZZY_BELLS, FIG, type HeadLook, JUGGLED, type Look, type PartKind, headPart, knifeShadow, maskPart, part } from './jester-art';
 import { Projectile } from './projectile';
 
 /* --------------------------------------------------------------- numbers */
@@ -106,26 +110,11 @@ const WALL_SHIFT = 22;
  */
 const VIEW_REACH = 420;
 
-/* The cloth, the porcelain and the dark. */
-const VIOLET = '#5a3a8a';
-const VIOLET_DARK = '#38205c';
-const VIOLET_LIGHT = '#8a66c4';
-const GOLD = '#e8b84a';
-const GOLD_DARK = '#a3742a';
-const GOLD_LIGHT = '#ffe39a';
-const PORCELAIN = '#f4efe4';
-const PORCELAIN_SHADE = '#cbc2cf';
-const INK = '#160c20';
-/** The silhouette on the wall, before it is laid on at 0.55: rgba(10,4,20,0.55) in all. */
-const SIL = '#0a0414';
-const WALL_SHADOW_ALPHA = 0.55;
-
 /* His bones, in pixels: lanky. */
-const THIGH = 16;
-const SHIN = 15;
-const TORSO = 21;
-const UPPER = 12;
-const FORE = 11;
+const THIGH = BONES.thigh;
+const SHIN = BONES.shin;
+/** The confetti of his tricks, in the palette's own colours. */
+const CONFETTI = [RAMP.fire[3], RAMP.fire[4], RAMP.plum[3], RAMP.rose[5], RAMP.blue[6], RAMP.earth[7]];
 
 type JesterState =
   | 'dormant'
@@ -447,15 +436,8 @@ export class Jester extends Enemy {
   private stageLight = 0.3;
   /** Rings thrown out by landings. */
   private rings: { x: number; t: number }[] = [];
-  private silCanvas: HTMLCanvasElement | null = null;
-  private silCtx: CanvasRenderingContext2D | null = null;
   private allOf: Figure[] | null = null;
   private allList: Figure[] = [];
-  /**
-   * Gradients, made once: a canvas gradient lives in whatever transform it is
-   * filled under, so one serves every figure on every frame.
-   */
-  private paints: { fan: CanvasGradient; shade: CanvasGradient; face: CanvasGradient } | null = null;
 
   override castLight = false;
 
@@ -1640,7 +1622,7 @@ export class Jester extends Enemy {
   }
 
   private confetti(world: World, x: number, y: number, n: number): void {
-    const colours = [GOLD, GOLD_LIGHT, VIOLET_LIGHT, '#ff7aa8', '#7ad8ff', '#fff3d0'];
+    const colours = CONFETTI;
     for (let i = 0; i < n; i++) {
       const a = rand(0, TAU);
       const s = rand(80, 230);
@@ -1706,11 +1688,13 @@ export class Jester extends Enemy {
     if (this.dead || this.floorY === 0) return out;
     const F = this.floorY;
     const k = this.stageLight;
-    // The footlights wash the back wall: that is where the shadow has to read.
-    // Only the darkness is burnt away here - the warmth is in the wash drawStage
-    // lays under the shadow, so the light pass's own colour pass is skipped. The
-    // boards are lit already, by the lamps themselves: a light of his own on
-    // every figure cost a good part of a frame and showed nothing new.
+    // The footlights throw their light up the stage: the balconies over it come
+    // out of the dark. The back wall, where the shadow has to read, is painted
+    // at its own brightness and needs no help - the warm wash that used to be
+    // laid over it on the actor layer came out as a lattice of orange dots over
+    // the whole stage. The boards are lit already, by the lamps themselves: a
+    // light of his own on every figure cost a good part of a frame and showed
+    // nothing new.
     for (const x of this.footlights) out.push({ x, y: F - 172, radius: 158, rgb: '255,196,136', strength: 0.66 * k, tint: 0 });
     for (const f of this.all) {
       if (f.knives > 0 && f.fade > 0.05) out.push({ x: f.x, y: f.y - 86, radius: 46, rgb: '236,236,255', strength: 0.45 * f.fade, tint: 0.2 });
@@ -1722,61 +1706,25 @@ export class Jester extends Enemy {
 
   /* -------------------------------------------------------------- drawing */
 
+  /*
+   * He is drawn the way a sixteen-bit boss was: out of parts - doublet, head,
+   * sleeves, hose - each drawn at sixteen turns (jester-art.ts) and put down
+   * at whole art pixels where his skeleton has them this frame. Nothing is
+   * turned or scaled by the canvas; a wheel turns through the drawn angles.
+   */
+
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
-    this.drawStage(ctx);
     for (const f of this.all) if (f.casts) this.drawWallShadow(ctx, f);
     this.drawFloor(ctx);
     for (const f of this.order) {
-      if (f === this.me) withHitFlash(ctx, this.flash, (ctx) => this.drawFigure(ctx, f, false));
-      else this.drawFigure(ctx, f, false);
+      if (f === this.me) {
+        withHitFlash(ctx, solidFlash(this.flash), (c) => this.drawFigure(c, f), { x: f.x - 80, y: f.y - 150, w: 160, h: 160 });
+      } else {
+        this.drawFigure(ctx, f);
+      }
     }
     if (this.dropped) this.drawDroppedMask(ctx);
-  }
-
-  /**
-   * The footlights throw their light up the back wall: a warm pool above each
-   * lamp. Without it the wall is the night sky, and a dark shadow on a dark
-   * sky is no rule anybody can play by.
-   */
-  private drawStage(ctx: CanvasRenderingContext2D): void {
-    const k = this.stageLight;
-    if (k <= 0.02) return;
-    const F = this.floorY;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const fan = this.paint(ctx).fan;
-    for (const x of this.footlights) {
-      const flick = 0.88 + 0.12 * Math.sin(this.anim * 6.1 + x * 0.37) + Math.sin(this.anim * 13.7 + x) * 0.03;
-      ctx.save();
-      ctx.globalAlpha = 0.28 * k * flick;
-      ctx.translate(x, F - 150);
-      ctx.scale(1, 1.35);
-      ctx.fillStyle = fan;
-      ctx.beginPath();
-      ctx.arc(0, 0, 150, 0, TAU);
-      ctx.fill();
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-
-  private paint(ctx: CanvasRenderingContext2D): { fan: CanvasGradient; shade: CanvasGradient; face: CanvasGradient } {
-    if (this.paints) return this.paints;
-    const fan = ctx.createRadialGradient(0, 40, 6, 0, 0, 150);
-    fan.addColorStop(0, 'rgba(255,200,140,1)');
-    fan.addColorStop(0.45, 'rgba(255,170,120,0.55)');
-    fan.addColorStop(1, 'rgba(255,150,110,0)');
-    const shade = ctx.createLinearGradient(-9, 0, 9, 0);
-    shade.addColorStop(0, 'rgba(14,6,26,0.55)');
-    shade.addColorStop(0.55, 'rgba(14,6,26,0.1)');
-    shade.addColorStop(1, 'rgba(255,220,170,0.12)');
-    const face = ctx.createLinearGradient(-5, -14, 7, -3);
-    face.addColorStop(0, PORCELAIN_SHADE);
-    face.addColorStop(0.45, PORCELAIN);
-    face.addColorStop(1, '#fffaf0');
-    this.paints = { fan, shade, face };
-    return this.paints;
   }
 
   private nearestLamp(x: number): number {
@@ -1793,48 +1741,28 @@ export class Jester extends Enemy {
 
   /**
    * The rule, drawn: his silhouette, 1.8 times his size, up on the back wall
-   * and pushed a little away from the lamp nearest him. Drawn whole into a
-   * small canvas at half resolution and laid on in one go, so the limbs do not
-   * darken where they overlap and the edge comes out soft.
+   * and pushed a little away from the lamp nearest him - flat black, a shadow
+   * play on the lit wall. While the stage is dark it is a dim plum one step
+   * off the wall, and it goes out with the light.
    */
   private drawWallShadow(ctx: CanvasRenderingContext2D, f: Figure): void {
     const s = this.wallShadow;
     if (!s || f.fade <= 0) return;
-    const LW = 220;
-    const LH = 240;
-    const down = 2;
-    if (!this.silCanvas) ({ canvas: this.silCanvas, ctx: this.silCtx } = makeCanvas(LW / down, LH / down));
-    const sc = this.silCtx;
-    if (!sc) return;
-    sc.setTransform(1, 0, 0, 1, 0, 0);
-    sc.clearRect(0, 0, LW / down, LH / down);
-    const k = WALL_SCALE / down;
-    sc.setTransform(k, 0, 0, k, LW / 2 / down, (LH - 14) / down);
+    const lit = clamp(this.stageLight * 1.4, 0.4, 1);
     // The figure at its own height above the boards, as the wall sees it.
-    this.drawFigure(sc, { ...f, x: 0, y: (f.y - this.floorY) * 0.33 }, true);
-    // A breath of flicker from the flames that throw it.
-    const flick = 0.94 + Math.sin(this.anim * 7.3) * 0.04 + Math.sin(this.anim * 17.1) * 0.02;
-    ctx.save();
-    ctx.globalAlpha = WALL_SHADOW_ALPHA * flick * f.fade * clamp(this.stageLight * 1.4, 0.4, 1);
-    ctx.drawImage(this.silCanvas as HTMLCanvasElement, s.x - LW / 2, s.y - (LH - 14), LW, LH);
-    ctx.restore();
+    this.drawRig(ctx, f, this.poseOf(f), lit >= 0.95 ? 'sil' : 'dim', s.x, s.y + 0.594 * (f.y - this.floorY), WALL_SCALE);
   }
 
   /** What is on the boards: the shadow at his feet, the salto's mark, the rings. */
   private drawFloor(ctx: CanvasRenderingContext2D): void {
     const F = this.floorY;
     if (this.state === 'salto') {
-      // His shadow is down where he will land, and darker the nearer he comes.
+      // His shadow is down where he will land, and darker the nearer he comes;
+      // round it the reach of the ring, in dashes that close up as he falls.
       const k = clamp(this.saltoT / SALTO_TIME, 0, 1);
       shadow(ctx, this.landX, F + 1, 34 + k * 30, 0.18 + k * 0.32);
-      ctx.save();
-      ctx.strokeStyle = `rgba(255,214,150,${(0.12 + k * 0.3).toFixed(3)})`;
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.ellipse(this.landX, F - 1, RING, 8, 0, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
+      const late = k > 0.55;
+      dashedOval(ctx, this.landX, F - 1, RING, 8, late ? 4 : 2, late ? 2 : 4, late ? RAMP.fire[3] : RAMP.rust[3]);
     } else {
       // On the boards too, only the one who is there throws one.
       for (const f of this.all) {
@@ -1843,21 +1771,17 @@ export class Jester extends Enemy {
         shadow(ctx, f.x, F + 1, (f.act === 'split' ? 64 : f.act === 'slump' || f.act === 'collapse' ? 52 : 36) * (1 - up * 0.4), 0.36 * (1 - up * 0.5));
       }
     }
+    // The rings his landings throw out: a crest running out over the boards,
+    // cooling down the gold ramp as it goes.
     for (const r of this.rings) {
       const u = clamp(r.t / 0.5, 0, 1);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(255,220,160,${(0.75 * (1 - u)).toFixed(3)})`;
-      ctx.lineWidth = 3 * (1 - u) + 1;
-      ctx.beginPath();
-      ctx.ellipse(r.x, F - 2, RING * (0.3 + u * 0.8), 6 + u * 6, 0, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
+      const col = u < 0.34 ? RAMP.fire[3] : u < 0.67 ? RAMP.rust[3] : RAMP.earth[4];
+      ovalRing(ctx, r.x, F - 2, RING * (0.3 + u * 0.8), 6 + u * 6, u < 0.25 ? 2 : 1, col);
     }
   }
 
-  /** A figure, by its act: the real one, a copy, or the silhouette on the wall. */
-  private drawFigure(ctx: CanvasRenderingContext2D, f: Figure, sil: boolean): void {
+  /** A figure, by its act: the real one or a copy - they are drawn alike. */
+  private drawFigure(ctx: CanvasRenderingContext2D, f: Figure): void {
     if (f.fade <= 0.01) return;
     const pose = this.poseOf(f);
     if (f === this.me && this.dodge > 0) {
@@ -1866,57 +1790,44 @@ export class Jester extends Enemy {
       pose.tilt += this.dodgeDir * f.facing * 0.32 * k;
       pose.lean -= 0.25 * k * (this.dodgeDir === f.facing ? -1 : 1);
     }
-    const pelvis = pelvisOf(pose);
-    ctx.save();
-    if (!sil && f.fade < 1) ctx.globalAlpha *= f.fade;
-    ctx.translate(f.x, f.y);
-    ctx.scale(f.facing, 1);
-    if (pose.tilt) ctx.rotate(pose.tilt);
-    ctx.translate(0, -pelvis);
-    if (pose.rot) ctx.rotate(pose.rot);
-    if (pose.scale !== 1) ctx.scale(pose.scale, pose.scale);
-    // A wheel is a blur: two fainter copies of himself trail the turn.
-    if (!sil && f.act === 'wheel') {
-      const base = ctx.globalAlpha;
-      for (const [back, a] of [
-        [0.55, 0.22],
-        [1.1, 0.1],
-      ]) {
-        ctx.save();
-        ctx.rotate(-back);
-        ctx.globalAlpha = base * a;
-        this.drawBody(ctx, pose, f, false, true);
-        ctx.restore();
-      }
-      ctx.globalAlpha = base;
+    // A copy going back into him goes up in smoke: pale, then grey, then gone.
+    const look: Look = f.fade >= 0.66 ? 'body' : f.fade >= 0.33 ? 'smoke' : 'ash';
+    // A wheel is a blur: arcs of speed round him, the way the limbs went.
+    if (f.act === 'wheel') this.drawSpin(ctx, f);
+    this.drawRig(ctx, f, pose, look, f.x, f.y, 1);
+    if (f.act === 'dizzy') this.drawStars(ctx, f);
+  }
+
+  /**
+   * Arcs of speed behind a wheeling figure's boots and gloves: two pixels
+   * wide each, the length of the way the limb went in the last few frames.
+   */
+  private drawSpin(ctx: CanvasRenderingContext2D, f: Figure): void {
+    const cx = snap(f.x);
+    const cy = snap(f.y - WHEEL_H / 2);
+    // The star's four tips in its own turn: boots at 20 px, gloves at 25.
+    for (const [r, a] of [
+      [20, 0.75],
+      [20, 2.39],
+      [25, -1.13],
+      [25, -2.01],
+    ] as const) {
+      const phi = a + f.spin;
+      if (f.facing > 0) sector(ctx, cx, cy, r - 4, r, phi - 0.85, phi - 0.2, RAMP.plum[3]);
+      else sector(ctx, cx, cy, r - 4, r, Math.PI - phi + 0.2, Math.PI - phi + 0.85, RAMP.plum[3]);
     }
-    this.drawBody(ctx, pose, f, sil, false);
-    ctx.restore();
-    if (!sil && f.act === 'dizzy') this.drawStars(ctx, f);
   }
 
   /** Little bells going round the head of a dizzy jester, so the window reads from across the stage. */
   private drawStars(ctx: CanvasRenderingContext2D, f: Figure): void {
     const cx = f.x + f.facing * 2;
-    const cy = f.y - 84;
+    const cy = f.y - 80 * FIG;
     for (let i = 0; i < 3; i++) {
       const a = this.anim * 5 + (i * TAU) / 3;
-      const x = cx + Math.cos(a) * 14;
-      const y = cy + Math.sin(a) * 4;
-      const r = 2.2 + (Math.sin(a) > 0 ? 0.7 : 0);
-      ctx.fillStyle = i % 2 ? GOLD_LIGHT : '#fff4c4';
-      ctx.beginPath();
-      for (let k = 0; k < 8; k++) {
-        const rr = k % 2 ? r * 0.42 : r;
-        const aa = (k * Math.PI) / 4;
-        if (k === 0) ctx.moveTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
-        else ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
-      }
-      ctx.closePath();
-      ctx.fill();
+      const near = Math.sin(a) > 0;
+      DIZZY_BELLS.draw(ctx, near ? 'near' : 'far', cx + Math.cos(a) * 16, cy + Math.sin(a) * 5, near ? 2 : 1, near ? 2 : 1);
     }
   }
-
   /** The pose for what a figure is doing. See Pose for the angles. */
   private poseOf(f: Figure): Pose {
     const p = standPose();
@@ -2190,450 +2101,114 @@ export class Jester extends Enemy {
   }
 
   /**
-   * The jester himself, pelvis at the origin, facing +x: back arm, back leg,
-   * front leg, the doublet, the head with its mask and cap, the front arm, and
-   * whatever is in his hands. In the silhouette every part is one colour.
+   * The jester put together from his parts: back arm, back leg, front leg, the
+   * doublet, the head with its mask and cap, the front arm, and whatever is in
+   * his hands. (ox, oy) is where his boots are; `wall` is how much bigger than
+   * the man his shadow on the back wall is, or 1 for the man himself.
+   *
+   * Every limb is chained from the turns it is drawn at, not from the turns of
+   * the skeleton: a sleeve drawn at one of sixteen angles ends where the next
+   * part begins, and nothing comes apart at the joints.
    */
-  private drawBody(ctx: CanvasRenderingContext2D, p: Pose, f: Figure, sil: boolean, ghost: boolean): void {
-    const upX = Math.sin(p.lean);
-    const upY = -Math.cos(p.lean);
-    const sx = upX * (TORSO - 2.5);
-    const sy = upY * (TORSO - 2.5);
-    const ax = Math.cos(p.lean) * 1.3;
-    const ay = Math.sin(p.lean) * 1.3;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    this.drawArm(ctx, sx - ax, sy - ay, p.armB, p.elbowB, false, sil);
-    this.drawLeg(ctx, -1.6, 0, p.legB, p.kneeB, false, sil);
-    this.drawLeg(ctx, 1.6, 0, p.legF, p.kneeF, true, sil);
-    this.drawTorso(ctx, p.lean, sil);
-    if (!ghost) this.drawHead(ctx, upX * TORSO, upY * TORSO, p.lean + p.nod, f, sil);
-    else this.drawHeadBlob(ctx, upX * TORSO, upY * TORSO, p.lean + p.nod);
-    const hand = this.drawArm(ctx, sx + ax, sy + ay, p.armF, p.elbowF, true, sil);
-    if (ghost || f.knives <= 0) return;
+  private drawRig(ctx: CanvasRenderingContext2D, f: Figure, p: Pose, look: Look, ox: number, oy: number, wall: number): void {
+    const wheel = f.act === 'wheel';
+    // The wheel keeps the 48 px a jump is measured against.
+    const k = wall !== 1 ? wall : wheel ? 1 : FIG;
+    const s = k * p.scale;
+    const sk = Math.round(s * 1000) / 1000;
+    const rot = p.rot;
+    const cr = Math.cos(rot);
+    const sr = Math.sin(rot);
+    const ct = Math.cos(p.tilt);
+    const st = Math.sin(p.tilt);
+    const pel = pelvisOf(p) * k;
+    const fx = snap(ox);
+    const fy = snap(oy);
+    const dir = f.facing;
+    const mirrored = dir < 0;
+    /** A point of the body (pelvis at the origin, before scale) in the figure's frame, boots at the origin. */
+    const T = (x: number, y: number): [number, number] => {
+      const x1 = x * s;
+      const y1 = y * s;
+      const x2 = x1 * cr - y1 * sr;
+      const y2 = x1 * sr + y1 * cr - pel;
+      return [x2 * ct - y2 * st, x2 * st + y2 * ct];
+    };
+    const R = rot + p.tilt;
+    const put = (sprite: PartSprite, at: readonly [number, number]): void => blit(ctx, sprite, fx + dir * at[0], fy + at[1], mirrored);
+    /** Two segments from a joint, each at the drawn turn nearest its own: returns where the second ends. */
+    const limb = (a: PartKind, b: PartKind, at: [number, number], a1: number, a2: number, lenA: number, lenB: number): [number, number] => {
+      const s1 = angleStep(R - a1);
+      const t1 = stepAngle(s1);
+      const e: [number, number] = [at[0] - Math.sin(t1) * lenA * s, at[1] + Math.cos(t1) * lenA * s];
+      const s2 = angleStep(R - a1 - a2);
+      const t2 = stepAngle(s2);
+      put(part(a, s1, sk, look), at);
+      put(part(b, s2, sk, look), e);
+      return [e[0] - Math.sin(t2) * lenB * s, e[1] + Math.cos(t2) * lenB * s];
+    };
+
+    const pelvis = T(0, 0);
+    const ts = angleStep(R + p.lean);
+    const tt = stepAngle(ts);
+    const cos = Math.cos(tt);
+    const sin = Math.sin(tt);
+    const inTorso = (x: number, y: number): [number, number] => [pelvis[0] + (x * cos - y * sin) * s, pelvis[1] + (x * sin + y * cos) * s];
+    const neck = inTorso(0, -BONES.torso);
+    const shoulderB = inTorso(-1.3, -(BONES.torso - 2.5));
+    const shoulderF = inTorso(1.3, -(BONES.torso - 2.5));
+
+    limb('upperB', 'foreB', shoulderB, p.armB, p.elbowB, BONES.upper, BONES.fore);
+    limb('thighB', 'shinB', T(-1.6, 0), p.legB, p.kneeB, BONES.thigh, BONES.shin);
+    limb('thighF', 'shinF', T(1.6, 0), p.legF, p.kneeF, BONES.thigh, BONES.shin);
+    put(part('torso', ts, sk, look), pelvis);
+    const me = f === this.me;
+    const face: HeadLook = {
+      sway: clamp(Math.round(f.sway / 2.5), -2, 2),
+      jingle: f.act === 'crouch' ? (Math.sin(f.t * 50) > 0 ? 1 : -1) : 0,
+      off: me ? Math.round(this.maskOff * 2) : 0,
+      // The copies wear his face as it is: a crack once he has been found out.
+      cracked: this.cracked,
+      late: this.phaseTwo,
+    };
+    put(headPart(angleStep(R + p.lean + p.nod), sk, look, face), neck);
+    const hand = limb('upperF', 'foreF', shoulderF, p.armF, p.elbowF, BONES.upper, BONES.fore);
+
+    if (f.knives <= 0) return;
     if (f.act === 'juggle' || f.act === 'throw') {
       // The cascade over his head, every knife turning.
-      const cx = upX * (TORSO + 26) + 3;
-      const cy = upY * (TORSO + 26) - 6;
+      const upX = Math.sin(p.lean);
+      const upY = -Math.cos(p.lean);
+      const cx = upX * (BONES.torso + 26) + 3;
+      const cy = upY * (BONES.torso + 26) - 6;
       const tempo = f.act === 'juggle' ? 7 + f.k * 6 : 12;
       for (let i = 0; i < f.knives; i++) {
         const a = f.t * tempo + (i * TAU) / 3;
-        this.drawKnife(ctx, cx + Math.cos(a) * 11, cy + Math.sin(a) * 15, f.t * 15 + i * 2.1, sil);
+        const at = T(cx + Math.cos(a) * 11, cy + Math.sin(a) * 15);
+        this.drawKnife(ctx, fx + dir * at[0], fy + at[1], f.t * 15 + i * 2.1 + R, mirrored, look, s);
       }
     } else if (f.act === 'raise') {
-      // Held high and glinting: every figure that still stands has one.
-      if (!sil) glow(ctx, hand.x, hand.y - 8, 10, 'rgba(236,236,255,0.45)');
-      this.drawKnife(ctx, hand.x, hand.y - 4, -Math.PI / 2 - 0.35, sil, 1.35);
+      // Held high: every figure that still stands has one.
+      this.drawKnife(ctx, fx + dir * hand[0], fy + hand[1] - 5 * s, -Math.PI / 2 - 0.35 + R, mirrored, look, s);
     }
   }
 
-  /** An arm from the shoulder: a puffed sleeve, a forearm, a white glove. Returns where the hand is. */
-  private drawArm(ctx: CanvasRenderingContext2D, sx: number, sy: number, a1: number, a2: number, front: boolean, sil: boolean): { x: number; y: number } {
-    const ex = sx + UPPER * Math.sin(a1);
-    const ey = sy + UPPER * Math.cos(a1);
-    const hx = ex + FORE * Math.sin(a1 + a2);
-    const hy = ey + FORE * Math.cos(a1 + a2);
-    const cloth = sil ? SIL : front ? GOLD : VIOLET;
-    ctx.strokeStyle = cloth;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(ex, ey);
-    ctx.lineTo(hx, hy);
-    ctx.stroke();
-    if (!sil) {
-      // The shaded underside of the sleeve.
-      ctx.strokeStyle = front ? GOLD_DARK : VIOLET_DARK;
-      ctx.lineWidth = 1.4;
-      const nx = Math.cos(a1) * 1.6;
-      const ny = -Math.sin(a1) * 1.6;
-      ctx.beginPath();
-      ctx.moveTo(sx - nx, sy - ny);
-      ctx.lineTo(ex - nx, ey - ny);
-      ctx.stroke();
-    }
-    ctx.fillStyle = cloth;
-    ctx.beginPath();
-    ctx.arc(sx, sy, 4.4, 0, TAU);
-    ctx.fill();
-    if (!sil) {
-      ctx.fillStyle = front ? GOLD_LIGHT : VIOLET_LIGHT;
-      ctx.beginPath();
-      ctx.arc(sx - 0.8, sy - 1.6, 1.8, 0, TAU);
-      ctx.fill();
-      // A ruffled cuff in the other colour.
-      ctx.fillStyle = front ? VIOLET : GOLD;
-      ctx.beginPath();
-      ctx.arc(ex + (hx - ex) * 0.78, ey + (hy - ey) * 0.78, 2.6, 0, TAU);
-      ctx.fill();
-    }
-    ctx.fillStyle = sil ? SIL : '#f1ece2';
-    ctx.beginPath();
-    ctx.arc(hx, hy, 2.8, 0, TAU);
-    ctx.fill();
-    return { x: hx, y: hy };
-  }
-
-  /** A leg in hose - one violet, one gold - ending in a curled shoe with a bell on the toe. */
-  private drawLeg(ctx: CanvasRenderingContext2D, hx: number, hy: number, a1: number, a2: number, front: boolean, sil: boolean): void {
-    const kx = hx + THIGH * Math.sin(a1);
-    const ky = hy + THIGH * Math.cos(a1);
-    const fx = kx + SHIN * Math.sin(a1 + a2);
-    const fy = ky + SHIN * Math.cos(a1 + a2);
-    ctx.strokeStyle = sil ? SIL : front ? VIOLET : GOLD;
-    ctx.lineWidth = 5.6;
-    ctx.beginPath();
-    ctx.moveTo(hx, hy);
-    ctx.lineTo(kx, ky);
-    ctx.lineTo(fx, fy);
-    ctx.stroke();
-    if (!sil) {
-      // The footlights catch the front of the shin from below.
-      const a = a1 + a2;
-      const nx = Math.cos(a) * 2.2;
-      const ny = -Math.sin(a) * 2.2;
-      ctx.strokeStyle = front ? 'rgba(200,170,255,0.55)' : 'rgba(255,236,170,0.6)';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(kx + nx, ky + ny);
-      ctx.lineTo(fx + nx, fy + ny);
-      ctx.stroke();
-      ctx.fillStyle = front ? GOLD : VIOLET;
-      ctx.beginPath();
-      ctx.arc(kx, ky, 2.2, 0, TAU);
-      ctx.fill();
-    }
-    // The shoe points forward from the ankle and curls up into a bell.
-    const sa = a1 + a2 + Math.PI / 2;
-    ctx.save();
-    ctx.translate(fx, fy);
-    ctx.rotate(Math.PI / 2 - sa);
-    ctx.fillStyle = sil ? SIL : front ? GOLD_DARK : VIOLET_DARK;
-    ctx.beginPath();
-    ctx.moveTo(-3.5, -2.6);
-    ctx.quadraticCurveTo(4, -4.2, 8, -2.2);
-    ctx.quadraticCurveTo(11.5, -1.2, 12.5, -5.6);
-    ctx.quadraticCurveTo(11.5, 1.6, 6, 2);
-    ctx.lineTo(-3.5, 2);
-    ctx.closePath();
-    ctx.fill();
-    this.drawBell(ctx, 12.6, -6, 1.7, sil);
-    ctx.restore();
-  }
-
-  /** The doublet: harlequin diamonds, a dagged hem over the hips, a belt. */
-  private drawTorso(ctx: CanvasRenderingContext2D, lean: number, sil: boolean): void {
-    ctx.save();
-    ctx.rotate(lean);
-    const path = (): void => {
-      ctx.beginPath();
-      ctx.moveTo(-7.8, 3);
-      ctx.lineTo(-5.2, 7.4);
-      ctx.lineTo(-2.6, 3.6);
-      ctx.lineTo(0, 7.8);
-      ctx.lineTo(2.6, 3.6);
-      ctx.lineTo(5.2, 7.4);
-      ctx.lineTo(7.8, 3);
-      ctx.quadraticCurveTo(8.8, -4, 6.2, -9.5);
-      ctx.quadraticCurveTo(8.9, -15.5, 6.6, -21);
-      ctx.lineTo(-6.4, -21);
-      ctx.quadraticCurveTo(-8.4, -14, -5.6, -9.2);
-      ctx.quadraticCurveTo(-8.8, -3, -7.8, 3);
-      ctx.closePath();
-    };
-    path();
-    ctx.fillStyle = sil ? SIL : VIOLET;
-    ctx.fill();
-    if (!sil) {
-      ctx.save();
-      ctx.clip();
-      // Gold diamonds on violet, the harlequin's check.
-      ctx.fillStyle = GOLD;
-      ctx.beginPath();
-      for (let row = 0; row < 5; row++) {
-        const y = -21 + row * 7;
-        for (let col = -2; col <= 2; col++) {
-          const x = col * 7 + (row % 2 ? 3.5 : 0);
-          ctx.moveTo(x, y - 3.5);
-          ctx.lineTo(x + 3.5, y);
-          ctx.lineTo(x, y + 3.5);
-          ctx.lineTo(x - 3.5, y);
-          ctx.closePath();
-        }
-      }
-      ctx.fill();
-      // Light from in front and below; his back falls away into the dark.
-      ctx.fillStyle = this.paint(ctx).shade;
-      ctx.fillRect(-10, -24, 20, 34);
-      ctx.restore();
-      // The belt, and its buckle.
-      ctx.fillStyle = VIOLET_DARK;
-      ctx.fillRect(-7.2, -10.4, 14, 2.6);
-      ctx.fillStyle = GOLD_LIGHT;
-      ctx.fillRect(3.4, -10.8, 2.8, 3.4);
-      path();
-      ctx.strokeStyle = 'rgba(16,8,26,0.9)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      // A warm rim down the front, where the footlights find him.
-      ctx.strokeStyle = 'rgba(255,214,160,0.5)';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(7.6, 2);
-      ctx.quadraticCurveTo(8.4, -4, 6, -9.5);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  /** Just the round of a head, for the blurred copies of a wheel. */
-  private drawHeadBlob(ctx: CanvasRenderingContext2D, nx: number, ny: number, tilt: number): void {
-    ctx.save();
-    ctx.translate(nx, ny);
-    ctx.rotate(tilt);
-    ctx.fillStyle = PORCELAIN;
-    ctx.beginPath();
-    ctx.ellipse(1, -9, 6.4, 8, 0, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  /** The ruff, the head: a porcelain mask with a painted smile and a tear, under a cap with three bells. */
-  private drawHead(ctx: CanvasRenderingContext2D, nx: number, ny: number, tilt: number, f: Figure, sil: boolean): void {
-    ctx.save();
-    ctx.translate(nx, ny);
-    ctx.rotate(tilt);
-    // The ruff.
-    ctx.fillStyle = sil ? SIL : '#efe9f2';
-    ctx.beginPath();
-    for (let i = 0; i <= 14; i++) {
-      const a = (i / 14) * TAU;
-      const r = i % 2 ? 1 : 1.24;
-      const x = Math.cos(a) * 9.5 * r;
-      const y = 0.6 + Math.sin(a) * 3.4 * r;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fill();
-    if (!sil) {
-      ctx.strokeStyle = 'rgba(150,130,170,0.8)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-    }
-    // The hood under the cap, round the back of the head.
-    ctx.fillStyle = sil ? SIL : VIOLET_DARK;
-    ctx.beginPath();
-    ctx.ellipse(-1.8, -9.5, 7.2, 8.6, 0, 0, TAU);
-    ctx.fill();
-    const me = f === this.me;
-    const off = me ? this.maskOff : 0;
-    if (!sil && off > 0.02) {
-      // Behind the mask there is nothing: a dark hollow, two embers in it.
-      ctx.fillStyle = '#0b0612';
-      ctx.beginPath();
-      ctx.ellipse(1.2, -9, 6.2, 7.8, 0, 0, TAU);
-      ctx.fill();
-      glow(ctx, 0, -11, 6.5, `rgba(255,190,90,${(0.85 * off).toFixed(2)})`);
-      glow(ctx, 4.4, -11, 5.5, `rgba(255,190,90,${(0.85 * off).toFixed(2)})`);
-      ctx.fillStyle = '#ffe2a0';
-      ctx.fillRect(-0.8, -11.8, 1.8, 1.6);
-      ctx.fillRect(3.8, -11.8, 1.5, 1.5);
-    }
-    ctx.save();
-    if (off > 0) {
-      // Knocked askew: down and forward, turned on his chin.
-      ctx.translate(off * 6.5, off * 8.5);
-      ctx.rotate(off * 0.9);
-    }
-    this.drawMask(ctx, f, sil);
-    ctx.restore();
-    this.drawCap(ctx, f, sil);
-    ctx.restore();
-  }
-
-  private drawMask(ctx: CanvasRenderingContext2D, f: Figure, sil: boolean): void {
-    if (sil) {
-      ctx.fillStyle = SIL;
-      ctx.beginPath();
-      ctx.ellipse(1.2, -9, 6.4, 8, 0, 0, TAU);
-      ctx.fill();
+  /** A knife in the air: the thrown knife's own frames, or its shadow on the wall. */
+  private drawKnife(ctx: CanvasRenderingContext2D, x: number, y: number, angle: number, mirrored: boolean, look: Look, scale: number): void {
+    const a = mirrored ? Math.PI - angle : angle;
+    if (look !== 'body') {
+      blit(ctx, knifeShadow(angleStep(a), Math.round(scale * 1000) / 1000, look), x, y);
       return;
     }
-    ctx.fillStyle = this.paint(ctx).face;
-    ctx.beginPath();
-    ctx.ellipse(1.2, -9, 6.4, 8, 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(40,24,52,0.75)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-    // The eyes: two black almonds, the far one narrower; a glint deep in each.
-    ctx.fillStyle = INK;
-    ctx.beginPath();
-    ctx.ellipse(-0.6, -10.6, 1.8, 1.05, -0.25, 0, TAU);
-    ctx.ellipse(4.5, -10.6, 1.35, 1.0, 0.25, 0, TAU);
-    ctx.fill();
-    const eye = this.phaseTwo && f === this.me ? '#ff8aa8' : '#e8e0ff';
-    ctx.fillStyle = eye;
-    ctx.fillRect(-0.4, -11, 0.9, 0.9);
-    ctx.fillRect(4.5, -11, 0.8, 0.8);
-    // Brows painted high, as if everything amused him.
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 0.7;
-    ctx.beginPath();
-    ctx.moveTo(-2.6, -12.4);
-    ctx.quadraticCurveTo(-0.6, -14.6, 1.3, -12.9);
-    ctx.moveTo(3.4, -12.9);
-    ctx.quadraticCurveTo(4.8, -14.4, 6.2, -12.6);
-    ctx.stroke();
-    // The tear, under the near eye.
-    ctx.fillStyle = this.phaseTwo ? '#c8243c' : '#3a72d8';
-    ctx.beginPath();
-    ctx.moveTo(-1.1, -8.8);
-    ctx.quadraticCurveTo(0.1, -6.6, -0.9, -5.6);
-    ctx.quadraticCurveTo(-2.2, -6.4, -1.1, -8.8);
-    ctx.fill();
-    // The smile: wide, red, and painted on.
-    ctx.fillStyle = '#c42a44';
-    ctx.beginPath();
-    ctx.moveTo(-2.2, -5.6);
-    ctx.quadraticCurveTo(1.8, -1.6, 6.4, -5.8);
-    ctx.quadraticCurveTo(2, -3.6, -2.2, -5.6);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(60,10,24,0.85)';
-    ctx.lineWidth = 0.6;
-    ctx.stroke();
-    if (this.cracked && f === this.me) {
-      ctx.strokeStyle = 'rgba(40,24,52,0.9)';
-      ctx.lineWidth = 0.7;
-      ctx.beginPath();
-      ctx.moveTo(3.2, -16.6);
-      ctx.lineTo(2.2, -13.2);
-      ctx.lineTo(3.6, -11.6);
-      ctx.lineTo(2.4, -8.4);
-      ctx.lineTo(3.8, -5.2);
-      ctx.moveTo(2.2, -13.2);
-      ctx.lineTo(0.4, -12.6);
-      ctx.stroke();
-    }
-  }
-
-  /** The Schellenkappe: a gold band, and three points with a bell each, trailing behind his moves. */
-  private drawCap(ctx: CanvasRenderingContext2D, f: Figure, sil: boolean): void {
-    const s = f.sway;
-    const jingle = f.act === 'crouch' ? Math.sin(f.t * 50) * 1.2 : 0;
-    const points: [number, number, number, number, number, number, string, string][] = [
-      [-5.2, -15.2, -15 + s, -24, -17.5 + s * 1.5 + jingle, -9.5, VIOLET, VIOLET_DARK],
-      [-0.6, -17.6, 1.5 + s, -31, -7 + s * 1.9 - jingle, -33.5, GOLD, GOLD_DARK],
-      [3.8, -16.2, 13 + s, -25, 15.5 + s * 1.5 + jingle, -12.5, VIOLET, VIOLET_DARK],
-    ];
-    // The crown of the cap over the hood.
-    ctx.fillStyle = sil ? SIL : VIOLET;
-    ctx.beginPath();
-    ctx.ellipse(-0.6, -13.4, 7.8, 5.2, 0, Math.PI, TAU);
-    ctx.fill();
-    for (const [bx, by, cx, cy, tx, ty, colour, dark] of points) {
-      this.drawPoint(ctx, bx, by, cx, cy, tx, ty, 3.4, sil ? SIL : colour, sil ? SIL : dark);
-      this.drawBell(ctx, tx, ty, 2.4, sil);
-    }
-    if (!sil) {
-      // The band across the brow.
-      ctx.strokeStyle = GOLD;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(-7.4, -12.4);
-      ctx.quadraticCurveTo(0, -17.6, 7.2, -13.6);
-      ctx.stroke();
-      ctx.fillStyle = GOLD_LIGHT;
-      for (const [x, y] of [
-        [-4.4, -14.4],
-        [0, -15.6],
-        [4.4, -14.9],
-      ]) {
-        ctx.beginPath();
-        ctx.arc(x, y, 0.9, 0, TAU);
-        ctx.fill();
-      }
-    }
-  }
-
-  /** One point of the cap: a tapered horn of cloth from the band to its bell. */
-  private drawPoint(ctx: CanvasRenderingContext2D, bx: number, by: number, cx: number, cy: number, tx: number, ty: number, w: number, colour: string, dark: string): void {
-    const n0x = -(cy - by);
-    const n0y = cx - bx;
-    const l0 = Math.hypot(n0x, n0y) || 1;
-    const n1x = -(ty - by);
-    const n1y = tx - bx;
-    const l1 = Math.hypot(n1x, n1y) || 1;
-    const ux = n0x / l0;
-    const uy = n0y / l0;
-    const vx = n1x / l1;
-    const vy = n1y / l1;
-    ctx.fillStyle = colour;
-    ctx.beginPath();
-    ctx.moveTo(bx + ux * w, by + uy * w);
-    ctx.quadraticCurveTo(cx + vx * w * 0.55, cy + vy * w * 0.55, tx, ty);
-    ctx.quadraticCurveTo(cx - vx * w * 0.55, cy - vy * w * 0.55, bx - ux * w, by - uy * w);
-    ctx.closePath();
-    ctx.fill();
-    if (colour !== dark) {
-      // The fold down the middle of the cloth.
-      ctx.strokeStyle = dark;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(bx - ux * w * 0.3, by - uy * w * 0.3);
-      ctx.quadraticCurveTo(cx - vx * w * 0.3, cy - vy * w * 0.3, tx, ty);
-      ctx.stroke();
-    }
-  }
-
-  private drawBell(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, sil: boolean): void {
-    ctx.fillStyle = sil ? SIL : GOLD;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, TAU);
-    ctx.fill();
-    if (sil) return;
-    ctx.fillStyle = GOLD_DARK;
-    ctx.fillRect(x - r * 0.7, y + r * 0.15, r * 1.4, r * 0.32);
-    ctx.fillStyle = '#fff6d0';
-    ctx.beginPath();
-    ctx.arc(x - r * 0.35, y - r * 0.35, r * 0.34, 0, TAU);
-    ctx.fill();
-  }
-
-  /** A knife in the air over his head: a silver blade, a gold guard, a violet grip. */
-  private drawKnife(ctx: CanvasRenderingContext2D, x: number, y: number, rot: number, sil: boolean, size = 1): void {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rot);
-    if (size !== 1) ctx.scale(size, size);
-    ctx.fillStyle = sil ? SIL : '#e6eaf2';
-    ctx.beginPath();
-    ctx.moveTo(9, 0);
-    ctx.lineTo(0, -2.3);
-    ctx.lineTo(0, 2.3);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = sil ? SIL : GOLD;
-    ctx.fillRect(-1.4, -3.4, 2, 6.8);
-    ctx.fillStyle = sil ? SIL : '#7a3a8a';
-    ctx.fillRect(-6.6, -1.2, 5.4, 2.4);
-    if (!sil) {
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillRect(1.5, -0.6, 5, 0.9);
-    }
-    ctx.restore();
+    const d = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+    const sprite = JUGGLED.sprite(`k${d}`);
+    sprite.draw(ctx, x - Math.floor(sprite.w / 2) * ART, y - Math.floor(sprite.h / 2) * ART);
   }
 
   /** His mask, off his face and on the boards. */
   private drawDroppedMask(ctx: CanvasRenderingContext2D): void {
     const d = this.dropped;
     if (!d) return;
-    ctx.save();
-    ctx.translate(d.x, d.y);
-    ctx.rotate(d.rot);
-    ctx.translate(-1.2, 9);
-    this.drawMask(ctx, this.me, false);
-    ctx.restore();
+    blit(ctx, maskPart(angleStep(d.rot)), d.x, d.y);
   }
 }
