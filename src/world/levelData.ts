@@ -328,7 +328,9 @@ const RUINS_CLIMB = c(40, [
  * The theatre the temple kept for its feasts: a stage, footlights along the
  * front of it, and two balconies a jump up and two above them. Maskarill holds
  * it. The lamps throw whoever stands on the boards up onto the back wall, big -
- * and only one of him casts anything.
+ * and only one of him casts anything. Six of them, a sixth of the stage apart:
+ * with the middle of the stage unlit, a shadow thrown there fell on a dark
+ * wall, and his rule could not be seen where he likes to stand.
  */
 const RUINS_THEATER = warded(c(46, [
   '..............................................',
@@ -348,7 +350,7 @@ const RUINS_THEATER = warded(c(46, [
   '..............................................',
   '.............-----...............-----........',
   '..............................................',
-  '..C..H.T....T.....T.......j......T.....T..T...',
+  '..C..H.T...T.....T.....T..j..T.....T.....T....',
   '==============================================',
   '==============================================',
   '==============================================',
