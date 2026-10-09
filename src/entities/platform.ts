@@ -107,7 +107,7 @@ export class MovingPlatform {
 }
 
 /** The track's dots and brackets. */
-const TRACK = '#424c6e';
+const TRACK = '#657392';
 
 /** The platform, 40×7 art pixels: frame, inlay, rivets, and its runner's teeth below. */
 const SLAB = new PixelSprite(
@@ -120,5 +120,5 @@ const SLAB = new PixelSprite(
     'DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
     '..D...D...D...D...DKKD...D...D...D...D..',
   ],
-  { L: '#657392', M: '#424c6e', S: '#2a2f4e', s: '#1a1932', D: '#1a1932', K: '#0e071b', g: '#edab50', b: '#8a4836' },
+  { L: '#657392', M: '#657392', S: '#424c6e', s: '#2a2f4e', D: '#1a1932', K: '#0e071b', g: '#edab50', b: '#8a4836' },
 );

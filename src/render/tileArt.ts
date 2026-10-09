@@ -38,12 +38,19 @@ import { ART, abgrOf, makeCanvas } from './pixel';
 /** Art pixels per tile. */
 export const TPX = TILE / ART;
 
-/** Tiles per cached chunk, across; a chunk runs the full height of the level. */
-const CHUNK = 16;
-/** Tiles of neighbourhood read round a chunk: the depth of the bands and the reach of a feature. */
-const MARGIN = 3;
-/** Chunks kept at once - about four screens' worth; the rest are rebuilt on the way back. */
-const KEEP = 10;
+/**
+ * Tiles per cached chunk, across; a chunk runs the full height of the level.
+ * Small enough that drawing one costs a couple of milliseconds, so the one
+ * frame that draws the next chunk ahead does not stand out.
+ */
+const CHUNK = 8;
+/**
+ * Tiles of neighbourhood read round a chunk: as deep as the bands reach (the
+ * deepest band begins 27 pixels under a floor) and as far as a variant draws.
+ */
+const MARGIN = 2;
+/** Chunks kept at once - about five screens' worth; the rest are rebuilt on the way back. */
+const KEEP = 20;
 
 /* ------------------------------------------------------------- hashing */
 
@@ -194,18 +201,19 @@ interface MaterialDef {
 }
 
 /*
- * The values are measured, not guessed. The darkness laid over the world
- * after the terrain is drawn takes about half of what is drawn away from the
- * lights (render/lighting.ts), so a body drawn round L* 30-35 near its face
- * and 20-25 deep down comes out at 15-25 on screen, and the lit tops - 35 to
- * 45 drawn - stay under the hero standing on them, who is not darkened at all.
+ * The values are measured, not guessed: drawn, the body of every material sits
+ * at L* 25-28 in its surface band, 20-23 below it and 16-20 deep down, and a
+ * lit top at 30-42 - the value budget itself, because a colour of the palette
+ * now reaches the screen as it is drawn wherever the night is not darker than
+ * it. Under the hero's own lantern, which adds its tint to the floor, a top
+ * still comes out under the hero standing on it.
  */
 const DEFS: Record<string, MaterialDef> = {
   // Nebelwald: warm earth under a lip of grass, cooling to violet with depth.
   earth: {
-    ramp: ['#1a1932', '#3b1443', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.05, 2.75, 2.45],
-    grain: 0.6,
+    ramp: ['#1a1932', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
+    bands: [2.75, 2.45, 2.15],
+    grain: 0.5,
     pattern: 'soil',
     top: 'grass',
     topColors: ['#1e6f50', '#134c4c', '#0c2e44'],
@@ -217,9 +225,9 @@ const DEFS: Record<string, MaterialDef> = {
   },
   // Grimmzahn's den: the same earth, trampled bare in patches, bones in it.
   den: {
-    ramp: ['#1a1932', '#3b1443', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.05, 2.75, 2.45],
-    grain: 0.6,
+    ramp: ['#1a1932', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
+    bands: [2.75, 2.45, 2.15],
+    grain: 0.5,
     pattern: 'soil',
     top: 'grass',
     topColors: ['#1e6f50', '#134c4c', '#0c2e44'],
@@ -232,7 +240,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The ruins: weathered limestone blocks, moss in the joints at the top.
   ruins: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.75, 3.45, 3.15],
+    bands: [3.35, 3.05, 2.75],
     grain: 0.45,
     pattern: 'blocks',
     top: 'moss',
@@ -246,7 +254,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The ruins' standing stones: the same limestone, cut square.
   ashlar: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.8, 3.5, 3.2],
+    bands: [3.4, 3.1, 2.8],
     grain: 0.35,
     pattern: 'ashlar',
     top: 'moss',
@@ -260,7 +268,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The treasury: the ruins with what the chest has not eaten caught in the cracks.
   vault: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.75, 3.45, 3.15],
+    bands: [3.35, 3.05, 2.75],
     grain: 0.45,
     pattern: 'blocks',
     top: 'moss',
@@ -274,7 +282,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The theatre: the ruins' stone under a stage of boards.
   theater: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.65, 3.35, 3.05],
+    bands: [3.3, 3.0, 2.7],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'boards',
@@ -288,7 +296,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Ankhor's court: the ruins with his sun cut into the blocks.
   temple: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.75, 3.45, 3.15],
+    bands: [3.35, 3.05, 2.75],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'moss',
@@ -302,7 +310,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The caves: rough plates of slate, split by veins of crystal.
   cave: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.5, 3.2, 2.95],
+    bands: [2.95, 2.7, 2.45],
     grain: 0.5,
     pattern: 'rock',
     top: 'lip',
@@ -316,7 +324,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The grotto: the same rock with every light eaten out of its veins.
   grotto: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.35, 3.05, 2.8],
+    bands: [2.8, 2.55, 2.3],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
@@ -330,7 +338,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Arachna's chamber: cold rock with silk across it.
   web: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.5, 3.2, 2.95],
+    bands: [2.95, 2.7, 2.45],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
@@ -344,7 +352,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Ignivor's chamber: the rock with embers where the crystal was.
   forge: {
     ramp: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392'],
-    bands: [3.45, 3.15, 2.9],
+    bands: [2.9, 2.65, 2.4],
     grain: 0.45,
     pattern: 'rock',
     top: 'lip',
@@ -358,7 +366,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The drowned hall: wet blocks, algae on top, a tide mark down every face.
   drowned: {
     ramp: ['#0e071b', '#03193f', '#0c2e44', '#134c4c', '#0069aa'],
-    bands: [3.6, 3.3, 3.05],
+    bands: [3.15, 2.85, 2.55],
     grain: 0.45,
     pattern: 'wet',
     top: 'moss',
@@ -373,7 +381,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The star altar: the hall's stone with stars set into it.
   altar: {
     ramp: ['#0e071b', '#03193f', '#0c2e44', '#134c4c', '#0069aa'],
-    bands: [3.6, 3.3, 3.05],
+    bands: [3.15, 2.85, 2.55],
     grain: 0.4,
     pattern: 'ashlar',
     top: 'moss',
@@ -388,7 +396,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Burg Nachtfall: brick under a grey coping. Nothing grows here.
   castle: {
     ramp: ['#1c121c', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.1, 2.8, 2.5],
+    bands: [2.8, 2.5, 2.2],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
@@ -402,7 +410,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The battlements: grey ashlar, cold under the moon.
   battlement: {
     ramp: ['#0e071b', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585'],
-    bands: [3.75, 3.45, 3.15],
+    bands: [3.35, 3.05, 2.75],
     grain: 0.35,
     pattern: 'ashlar',
     top: 'coping',
@@ -416,7 +424,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The clock tower: brick, with brass plates riveted on.
   clock: {
     ramp: ['#1c121c', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a'],
-    bands: [3.1, 2.8, 2.5],
+    bands: [2.8, 2.5, 2.2],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
@@ -430,7 +438,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The blood tower: the brick gone dark red, and stained.
   keep: {
     ramp: ['#1c121c', '#391f21', '#571c27', '#891e2b', '#c42430'],
-    bands: [3.15, 2.85, 2.55],
+    bands: [2.85, 2.55, 2.25],
     grain: 0.35,
     pattern: 'bricks',
     top: 'coping',
@@ -444,7 +452,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The throne room: great slabs of black marble veined with red, edged in bronze.
   throne: {
     ramp: ['#0e071b', '#131313', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d'],
-    bands: [4.5, 4.2, 3.85],
+    bands: [4.2, 3.9, 3.6],
     grain: 0.2,
     pattern: 'slabs',
     top: 'lip',
@@ -458,7 +466,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The rift: violet obsidian in facets, a few of the seams still glowing.
   rift: {
     ramp: ['#0e071b', '#1a1932', '#3b1443', '#622461', '#93388f'],
-    bands: [3.6, 3.3, 3.0],
+    bands: [3.25, 2.95, 2.65],
     grain: 0.25,
     pattern: 'facets',
     top: 'gloss',
@@ -472,7 +480,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The mirror ground: the rift so still the stone is polished.
   mirror: {
     ramp: ['#0e071b', '#1a1932', '#3b1443', '#622461', '#93388f'],
-    bands: [3.55, 3.25, 2.95],
+    bands: [3.2, 2.9, 2.6],
     grain: 0.1,
     pattern: 'facets',
     top: 'gloss',
@@ -486,7 +494,7 @@ const DEFS: Record<string, MaterialDef> = {
   // Her lair: rift stone grown over, and bones.
   lair: {
     ramp: ['#0e071b', '#0c2e44', '#134c4c', '#1e6f50', '#33984b'],
-    bands: [3.2, 2.9, 2.55],
+    bands: [2.75, 2.45, 2.15],
     grain: 0.35,
     pattern: 'facets',
     top: 'moss',
@@ -500,7 +508,7 @@ const DEFS: Record<string, MaterialDef> = {
   // The crystal hoard: blue rock grown through with prisms.
   crystal: {
     ramp: ['#0e071b', '#03193f', '#00396d', '#0069aa', '#0098dc'],
-    bands: [2.95, 2.65, 2.35],
+    bands: [2.65, 2.35, 2.05],
     grain: 0.3,
     pattern: 'prisms',
     top: 'gloss',
@@ -517,11 +525,15 @@ const DEFS: Record<string, MaterialDef> = {
 interface Material {
   readonly def: MaterialDef;
   readonly ramp: Uint32Array;
+  readonly last: number;
   readonly bands: Int32Array;
   readonly grain: number;
-  readonly pattern: PatternMap;
+  readonly level: Int8Array;
+  readonly special: Uint8Array;
   readonly top: Uint32Array;
   readonly accent: Uint32Array;
+  /** Whether the top casts a shadow under itself: grass, moss, coping and boards do. */
+  readonly shade: boolean;
   /** A seed of its own, so two materials side by side do not share their grain. */
   readonly seed: number;
 }
@@ -539,14 +551,18 @@ function material(name: string): Material {
   let m = materials.get(name);
   if (!m) {
     const def = DEFS[name];
+    const pattern = patternMap(def.pattern);
     m = {
       def,
       ramp: Uint32Array.from(def.ramp, abgrOf),
+      last: def.ramp.length - 1,
       bands: Int32Array.from(def.bands, (b) => Math.round(b * 16)),
       grain: Math.round(def.grain * 16),
-      pattern: patternMap(def.pattern),
+      level: pattern.level,
+      special: pattern.special,
       top: Uint32Array.from(def.topColors, abgrOf),
       accent: Uint32Array.from(def.accent, abgrOf),
+      shade: def.top !== 'lip' && def.top !== 'gloss',
       seed: nameSeed(name),
     };
     materials.set(name, m);
@@ -1031,6 +1047,8 @@ export class TerrainArt {
   // Scratch for building a chunk, shared by all of them.
   private readonly rh: number;
   private readonly kinds: Uint8Array;
+  /** Region tiles that are terrain or touch it: only there can an open pixel hold grass. */
+  private readonly near: Uint8Array;
   private readonly mask: Uint8Array;
   private readonly dist: Uint16Array;
   private readonly up: Uint8Array;
@@ -1041,6 +1059,11 @@ export class TerrainArt {
   /** The ground's and the cut stone's material of every pixel column of the region. */
   private readonly colEarth: Material[] = [];
   private readonly colStone: Material[] = [];
+  /** And how deep their top layers run there, and whether their growth covers it. */
+  private readonly depthE = new Uint8Array(RW);
+  private readonly depthS = new Uint8Array(RW);
+  private readonly coverE = new Uint8Array(RW);
+  private readonly coverS = new Uint8Array(RW);
   private readonly image: ImageData;
   /** Canvases of chunks that were let go, for the next chunk to draw into. */
   private readonly spare: HTMLCanvasElement[] = [];
@@ -1063,6 +1086,7 @@ export class TerrainArt {
     this.rh = rtH * TPX;
     const n = RW * this.rh;
     this.kinds = new Uint8Array(RT_W * rtH);
+    this.near = new Uint8Array(RT_W * rtH);
     this.mask = new Uint8Array(n);
     this.dist = new Uint16Array(n);
     this.up = new Uint8Array(n);
@@ -1087,6 +1111,10 @@ export class TerrainArt {
     }
     this.lavaRuns.sort((a, b) => a.tx0 - b.tx0);
     this.doors.sort((a, b) => a.tx - b.tx);
+    // Every material's pattern and the grain, made now rather than in the
+    // middle of the first frame that needs them.
+    for (const name of Object.keys(DEFS)) material(name);
+    grain();
   }
 
   /**
@@ -1153,20 +1181,53 @@ export class TerrainArt {
     const RH = this.rh;
     const rtH = H + MARGIN * 2;
     const tx0 = c * CHUNK - MARGIN;
-    const { kinds, mask, dist, up, over, feat, featColor, colArea } = this;
+    const { kinds, mask, dist, up, over, feat, featColor, colArea, colEarth, colStone } = this;
+    const { depthE, depthS, coverE, coverS } = this;
 
-    // Tiles of the region, and the area of every pixel column.
+    // Tiles of the region, and the materials of every pixel column.
     for (let j = 0; j < rtH; j++) {
       for (let i = 0; i < RT_W; i++) kinds[j * RT_W + i] = artKind(level, tx0 + i, j - MARGIN);
     }
-    for (let x = 0; x < RW; x++) {
-      const area = areaAt(((tx0 * TPX + x) * ART) | 0);
-      colArea[x] = AREAS.indexOf(area);
-      this.colEarth[x] = material(AREA_MATERIALS[area][0]);
-      this.colStone[x] = material(AREA_MATERIALS[area][1]);
+    for (let i = 0; i < RT_W; i++) {
+      const area = areaAt((tx0 + i) * TILE);
+      const index = AREAS.indexOf(area);
+      const earth = material(AREA_MATERIALS[area][0]);
+      const stone = material(AREA_MATERIALS[area][1]);
+      for (let x = i * TPX; x < (i + 1) * TPX; x++) {
+        const wx = tx0 * TPX + x;
+        colArea[x] = index;
+        colEarth[x] = earth;
+        colStone[x] = stone;
+        depthE[x] = topDepth(earth, wx);
+        depthS[x] = topDepth(stone, wx);
+        coverE[x] = covered(earth, wx) ? 1 : 0;
+        coverS[x] = covered(stone, wx) ? 1 : 0;
+      }
     }
     const kindAt = (i: number, j: number): number =>
       i < 0 || j < 0 || i >= RT_W || j >= rtH ? artKind(level, tx0 + i, j - MARGIN) : kinds[j * RT_W + i];
+    // Which tiles are terrain or next to it, and the rows terrain is found in:
+    // the air of a chunk is most of it, and none of the work below is needed there.
+    const near = this.near;
+    near.fill(0);
+    let jMin = rtH;
+    let jMax = -1;
+    for (let j = 0; j < rtH; j++) {
+      for (let i = 0; i < RT_W; i++) {
+        if (!isMass(kinds[j * RT_W + i])) continue;
+        if (j < jMin) jMin = j;
+        if (j > jMax) jMax = j;
+        for (let dj = -1; dj <= 1; dj++) {
+          for (let di = -1; di <= 1; di++) {
+            const ii = i + di;
+            const jj = j + dj;
+            if (ii >= 0 && jj >= 0 && ii < RT_W && jj < rtH) near[jj * RT_W + ii] = 1;
+          }
+        }
+      }
+    }
+    const yA = Math.max(1, (jMin - 1) * TPX);
+    const yB = Math.min(RH - 1, (jMax + 2) * TPX);
 
     // The solid mask: whole tiles, then the corners chipped and filled.
     mask.fill(0);
@@ -1177,6 +1238,7 @@ export class TerrainArt {
     for (let j = 0; j < rtH; j++) {
       for (let i = 0; i < RT_W; i++) {
         const k = kinds[j * RT_W + i];
+        if (!near[j * RT_W + i]) continue;
         const x0 = i * TPX;
         const y0 = j * TPX;
         if (isMass(k)) {
@@ -1188,7 +1250,7 @@ export class TerrainArt {
           chip(mask, x0 + TPX - 1, y0 + TPX - 1, shape.br, -1, -1);
         } else if (k === K_EMPTY || k === K_DOOR) {
           // Inner corners: where a floor meets a wall, the corner is filled.
-          const h = ihash(tx0 + i, j, 43);
+          const h = ihash(tx0 + i, j - MARGIN, 43);
           const s = isMass(kindAt(i, j + 1));
           const w = isMass(kindAt(i - 1, j));
           const e = isMass(kindAt(i + 1, j));
@@ -1204,13 +1266,18 @@ export class TerrainArt {
 
     // Distance from the nearest open pixel, weighted so that it grows
     // fastest upwards: the lit band is deep under a floor, thinner along a
-    // wall and thinnest under a ceiling, which no light reaches.
-    const n = RW * RH;
-    for (let i = 0; i < n; i++) dist[i] = mask[i] ? 4000 : 0;
-    for (let y = 1; y < RH; y++) {
+    // wall and thinnest under a ceiling, which no light reaches. The forward
+    // pass also counts the rows of solid down from the open pixel above
+    // (1 = the surface row), which is what the top layers are measured in.
+    dist.fill(0);
+    up.fill(0);
+    for (let i = yA * RW; i < yB * RW; i++) if (mask[i]) dist[i] = 4000;
+    for (let y = yA; y < yB; y++) {
       let i = y * RW + 1;
       for (let x = 1; x < RW - 1; x++, i++) {
         if (!mask[i]) continue;
+        const u = up[i - RW];
+        up[i] = u < 255 ? u + 1 : 255;
         let d = dist[i];
         const a = dist[i - 1] + 3;
         if (a < d) d = a;
@@ -1223,7 +1290,7 @@ export class TerrainArt {
         dist[i] = d;
       }
     }
-    for (let y = RH - 2; y >= 0; y--) {
+    for (let y = yB - 1; y >= yA; y--) {
       let i = y * RW + RW - 2;
       for (let x = RW - 2; x >= 1; x--, i--) {
         if (!mask[i]) continue;
@@ -1239,20 +1306,6 @@ export class TerrainArt {
         dist[i] = d;
       }
     }
-    // Rows of solid down from the open pixel above (1 = the surface row).
-    for (let x = 0; x < RW; x++) {
-      let run = mask[x] ? 60 : 0;
-      for (let y = 0; y < RH; y++) {
-        const i = y * RW + x;
-        if (mask[i]) {
-          if (run < 255) run++;
-          up[i] = run;
-        } else {
-          run = 0;
-          up[i] = 0;
-        }
-      }
-    }
 
     // What stands in the open: planks and what holds them, spikes, lava.
     this.dressOpen(tx0, rtH);
@@ -1264,7 +1317,6 @@ export class TerrainArt {
     const OW = CHUNK * TPX;
     const OH = H * TPX;
     const g = grain();
-    const { colEarth, colStone } = this;
     const wx0 = tx0 * TPX;
     for (let oy = 0; oy < OH; oy++) {
       const y = oy + MARGIN * TPX;
@@ -1272,60 +1324,66 @@ export class TerrainArt {
       // Areas meet along a ragged line rather than a ruled one.
       const jitter = (ihash(wy, 0, 77) % 9) - 4;
       const brow = (wy & 3) * 4;
+      const trow = (y >> 4) * RT_W;
       for (let ox = 0; ox < OW; ox++) {
         const x = ox + MARGIN * TPX;
         const i = y * RW + x;
         const o = oy * OW + ox;
         if (!mask[i]) {
-          out[o] = over[i] !== 0 ? over[i] : this.openPixel(i, x, y, wx0 + x, wy);
+          out[o] = over[i] !== 0 ? over[i] : near[trow + (x >> 4)] ? this.openPixel(i, x, y, wx0 + x, wy) : 0;
           continue;
         }
         const wx = wx0 + x;
         const ax = x + jitter < 0 ? 0 : x + jitter >= RW ? RW - 1 : x + jitter;
-        const tile = kinds[(y >> 4) * RT_W + (x >> 4)];
-        const m = tile === K_STONE ? colStone[ax] : colEarth[ax];
+        const stone = kinds[trow + (x >> 4)] === K_STONE;
+        const cols = stone ? colStone : colEarth;
+        const m = cols[ax];
+        // The column's own top layer, unless a neighbouring area reaches in here.
+        const own = m === cols[x];
+        const depth = own ? (stone ? depthS[x] : depthE[x]) : topDepth(m, wx);
         const du = up[i];
         // The open top first: grass, moss, a lip of stone, boards.
         if (du <= 7) {
           const aboveKind = kinds[((y - du) >> 4) * RT_W + (x >> 4)];
-          const top = topPixel(m, wx, wy, du, aboveKind === K_EMPTY || aboveKind === K_DOOR);
+          const cover = own ? (stone ? coverS[x] : coverE[x]) === 1 : covered(m, wx);
+          const top = topPixel(m, wx, wy, du, aboveKind === K_EMPTY || aboveKind === K_DOOR, depth, cover);
           if (top !== 0) {
             out[o] = top;
             continue;
           }
         }
         // The depth band, dithered where one meets the next.
-        const d = dist[i] + ((BAYER[brow + (wx & 3)] - 7.5) * 0.7);
+        const d = dist[i] + (BAYER[brow + (wx & 3)] - 7.5) * 0.7;
         const band = d < 22 ? 0 : d < 54 ? 1 : 2;
         const fc = featColor[i];
         if (fc !== 0) {
-          out[o] = isTone(fc) ? STONE_RAMP[band === 0 ? fc : fc - 1] : fc;
+          out[o] = fc < 8 ? STONE_RAMP[band === 0 ? fc : fc - 1] : fc;
           continue;
         }
         const pi = ((wy & PM) << 8) | (wx & PM);
-        const sp = m.pattern.special[pi];
+        const sp = m.special[pi];
         if (sp !== 0 && band < 2) {
-          const c = specialPixel(m, sp, band);
-          if (c !== 0) {
-            out[o] = c;
+          const sc = specialPixel(m, sp, band);
+          if (sc !== 0) {
+            out[o] = sc;
             continue;
           }
         }
-        let lv = m.bands[band] + m.pattern.level[pi] + ((g[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
+        let lv = m.bands[band] + m.level[pi] + ((g[((wy + m.seed) & 63) * 64 + ((wx + m.seed * 7) & 63)] * m.grain) >> 4) + feat[i];
         // Faces: lit on the left, in shade on the right and underneath.
         if (!mask[i - 1]) lv += 9;
         else if (!mask[i + 1]) lv -= 8;
         if (!mask[i + RW]) lv -= 12;
         else if (!mask[i + RW * 2]) lv -= 5;
         // A shadow under a lip of grass or coping.
-        if (du <= 9 && m.def.top !== 'lip' && m.def.top !== 'gloss' && du === topDepth(m, wx) + 1) lv -= 10;
+        if (m.shade && du === depth + 1) lv -= 10;
         // The tide mark of the drowned hall, on every face it crosses.
         if (m.def.tide && wy % 48 === 27 && (!mask[i - 1] || !mask[i + 1] || !mask[i - 2] || !mask[i + 2])) {
           out[o] = TIDE;
           continue;
         }
         const ri = lv >> 4;
-        out[o] = m.ramp[ri < 0 ? 0 : ri >= m.ramp.length ? m.ramp.length - 1 : ri];
+        out[o] = m.ramp[ri < 0 ? 0 : ri > m.last ? m.last : ri];
       }
     }
     const canvas = this.spare.pop() ?? makeCanvas(OW, OH).canvas;
@@ -1336,11 +1394,12 @@ export class TerrainArt {
   }
 
   /**
-   * A pixel in the open that nothing was stamped on: the grass standing on a
-   * surface below it, or hanging out past the edge beside it; else nothing.
+   * A pixel in the open, next to terrain, that nothing was stamped on: the
+   * grass standing on a surface below it, or hanging out past the edge beside
+   * it; else nothing.
    */
   private openPixel(i: number, x: number, y: number, wx: number, wy: number): number {
-    const { mask, up, kinds, colEarth, colStone } = this;
+    const { mask, up, kinds, colEarth, colStone, coverE, coverS } = this;
     const tile = kinds[(y >> 4) * RT_W + (x >> 4)];
     if (tile !== K_EMPTY && tile !== K_DOOR) return 0;
     // Blades: on a grass surface one to three pixels below.
@@ -1348,28 +1407,25 @@ export class TerrainArt {
     if (mask[i + RW]) below = 1;
     else if (mask[i + RW * 2]) below = 2;
     else if (mask[i + RW * 3]) below = 3;
-    if (below > 0) {
-      const si = i + RW * below;
-      if (up[si] === 1) {
-        const surfaceKind = kinds[((y + below) >> 4) * RT_W + (x >> 4)];
-        const m = surfaceKind === K_STONE ? colStone[x] : colEarth[x];
-        if (m.def.top === 'grass' && covered(m, wx)) {
-          const h = bladeHeight(wx, m.seed);
-          if (h >= below) return below === h ? m.top[0] : m.top[1];
-        }
+    if (below > 0 && up[i + RW * below] === 1) {
+      const stone = kinds[((y + below) >> 4) * RT_W + (x >> 4)] === K_STONE;
+      const m = stone ? colStone[x] : colEarth[x];
+      if (m.def.top === 'grass' && (stone ? coverS[x] : coverE[x]) === 1) {
+        const h = bladeHeight(wx, m.seed);
+        if (h >= below) return below === h ? m.top[0] : m.top[1];
       }
     }
     // Overhang: the top of the ground beside, carried one pixel out.
-    for (const side of [1, -1]) {
+    for (let side = 1; side >= -1; side -= 2) {
       const si = i + side;
       if (!mask[si]) continue;
       const du = up[si];
       if (du < 1 || du > 3) continue;
-      const sk = kinds[(y >> 4) * RT_W + ((x + side) >> 4)];
-      const m = sk === K_STONE ? colStone[x + side] : colEarth[x + side];
+      const stone = kinds[(y >> 4) * RT_W + ((x + side) >> 4)] === K_STONE;
+      const m = stone ? colStone[x + side] : colEarth[x + side];
       const top = m.def.top;
       if (top === 'grass') {
-        if (!covered(m, wx + side)) continue;
+        if ((stone ? coverS[x + side] : coverE[x + side]) !== 1) continue;
         if (du === 1) return m.top[0];
         if (du === 2) return m.top[1];
         // A strand of it hangs down a pixel further now and then.
@@ -1436,7 +1492,7 @@ export class TerrainArt {
         const tx = tx0 + i;
         const area = areaAt(tx * TILE);
         const m = material(AREA_MATERIALS[area][k === K_STONE ? 1 : 0]);
-        const h = ihash(tx, j, m.seed + 3);
+        const h = ihash(tx, j - MARGIN, m.seed + 3);
         const variant = h & 3;
         if (variant === 0) continue;
         const kind = m.def.features[variant - 1];
@@ -1445,7 +1501,7 @@ export class TerrainArt {
         // Anywhere in the tile; what it draws may reach into the next one.
         const x = i * TPX + ((h >>> 4) & 15);
         const y = j * TPX + ((h >>> 8) & 15);
-        stampFeature(kind, m, x, y, h >>> 12, mask, up, feat, featColor);
+        stampFeature(kind, m, x, y, h >>> 12, tx0 * TPX, -MARGIN * TPX, mask, up, feat, featColor);
       }
     }
   }
@@ -1517,14 +1573,15 @@ function bladeHeight(wx: number, seed: number): number {
  * The top layer of a material, `du` rows down from the open pixel above
  * (1 = the surface row). 0 means "body": the layer has ended here. `open` is
  * false under spikes and lava, where nothing grows and only a bare lip shows.
+ * `depth` and `cover` are the column's topDepth() and covered(), worked out
+ * once per column rather than once per pixel.
  */
-function topPixel(m: Material, wx: number, wy: number, du: number, open: boolean): number {
+function topPixel(m: Material, wx: number, wy: number, du: number, open: boolean, depth: number, cover: boolean): number {
   const t = m.top;
   const h = ihash(wx, wy, m.seed + 21);
   switch (open ? m.def.top : 'bare') {
     case 'grass': {
-      if (!covered(m, wx)) return du === 1 ? m.ramp[3] : 0;
-      const depth = topDepth(m, wx);
+      if (!cover) return du === 1 ? m.ramp[3] : 0;
       if (du > depth) return 0;
       if (du === 1) return (h & 1) === 0 ? t[1] : t[0];
       if (du === 2) return (h & 7) === 0 ? t[0] : t[1];
@@ -1533,7 +1590,7 @@ function topPixel(m: Material, wx: number, wy: number, du: number, open: boolean
     }
     case 'moss': {
       if (du > 2) return 0;
-      if (covered(m, wx)) {
+      if (cover) {
         // Moss over the edge, a strand of it hanging now and then.
         return du === 1 ? t[2] : t[3];
       }
@@ -1628,9 +1685,6 @@ const STEP: Record<string, number> = {
 const STONE_RAMP = Uint32Array.from(['#1a1932', '#272727', '#3d3d3d', '#5d5d5d', '#858585'], abgrOf);
 const STONE_TONE: Record<string, number> = { o: 1, d: 2, b: 3, h: 4 };
 
-/** Whether a feature colour is a stone's tone rather than a colour of its own. */
-const isTone = (c: number): boolean => c > 0 && c < 8;
-
 const PEBBLES: Stamp[] = [
   { rows: ['.oo.', 'ohbo', '.oo.'] },
   { rows: ['.ooo.', 'ohbbo', 'obbdo', '.ooo.'] },
@@ -1650,11 +1704,17 @@ function stampFeature(
   x: number,
   y: number,
   h: number,
+  wx: number,
+  wy: number,
   mask: Uint8Array,
   up: Uint8Array,
   feat: Int8Array,
   featColor: Uint32Array,
 ): void {
+  // Random turns are taken from world coordinates (region + (wx, wy)), never
+  // the region's own: a feature that reaches over a chunk's edge is stamped by
+  // both chunks, and must take the same path in each.
+  const at = (px: number, py: number, seed: number): number => ihash(px + wx, py + wy, seed);
   const RH = mask.length / RW;
   const put = (px: number, py: number, step: number): void => {
     if (px < 0 || py < 0 || px >= RW || py >= RH) return;
@@ -1693,7 +1753,7 @@ function stampFeature(
       const len = 6 + (h % 9);
       for (let s = 0; s < len; s++) {
         put(rx, ry, -22);
-        const t = ihash(rx, ry, 9) % 100;
+        const t = at(rx, ry, 9) % 100;
         if (t < 22) rx--;
         else if (t > 78) rx++;
         if (t > 92) put(rx + 1, ry, -16);
@@ -1709,7 +1769,7 @@ function stampFeature(
       for (let s = 0; s < len; s++) {
         put(cx, cy, STEP.c);
         put(cx, cy + 1, STEP.l);
-        const t = ihash(cx, cy, 10) % 3;
+        const t = at(cx, cy, 10) % 3;
         cx += dir;
         if (t === 0) cy++;
         else if (t === 1 && s > 1) cy--;
@@ -1752,10 +1812,10 @@ function stampFeature(
       let vx = x;
       let vy = y;
       for (let s = 0; s < len; s++) {
-        const core = s > 1 && s < len - 2 && (ihash(vx, vy, 13) & 3) === 0;
+        const core = s > 1 && s < len - 2 && (at(vx, vy, 13) & 3) === 0;
         paint(vx, vy, core ? a[1] : a[0]);
-        if (core && (ihash(vx, vy, 14) & 3) === 0) paint(vx, vy - 1, a[2]);
-        const t = ihash(vx, vy, 15) % 3;
+        if (core && (at(vx, vy, 14) & 3) === 0) paint(vx, vy - 1, a[2]);
+        const t = at(vx, vy, 15) % 3;
         vx += t === 0 ? 0 : dir;
         vy += t === 2 ? 0 : 1;
       }
@@ -1821,7 +1881,7 @@ function stampFeature(
       const len = 3 + (h % 6);
       for (let r = 0; r < len; r++) {
         paint(x, y + r, r === 0 ? a[1] : a[0]);
-        if (r < len - 2 && (ihash(x, y + r, 16) & 1) === 0) paint(x + 1, y + r, a[0]);
+        if (r < len - 2 && (at(x, y + r, 16) & 1) === 0) paint(x + 1, y + r, a[0]);
       }
       break;
     }
@@ -1832,7 +1892,7 @@ function stampFeature(
       const top = y - (y % TPX) + 2;
       const w = 3 + (h % 5);
       for (let q = 0; q < w; q++) {
-        const len = 1 + (ihash(x + q, top, 17) % 3);
+        const len = 1 + (at(x + q, top, 17) % 3);
         for (let r = 0; r < len; r++) paint(x + q - (w >> 1), top + r, r === 0 ? a[1] : a[0], 1);
       }
       break;
