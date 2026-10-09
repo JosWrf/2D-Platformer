@@ -1,12 +1,15 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
-import { PALETTE } from '../render/palette';
-import { ring as pixelRing } from '../render/pen';
+import { PALETTE, RAMP } from '../render/palette';
+import { ring as pixelRing, rect, sector } from '../render/pen';
 import { ART, snap } from '../render/pixel';
+import { hash2 } from '../render/sheet';
 import { glow, shadow, withHitFlash } from '../render/sprites';
 import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
+import { angleStep, blit, ovalRing, quad } from './boss-art';
 import { Body } from './entity';
+import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
 import {
   BAT,
   type BatFrame,
@@ -3952,27 +3955,71 @@ export class Hydra extends Enemy {
 
   /* ------------------------------------------------------------- drawing */
 
+  /**
+   * Her lights: the head winding up glows in its own colour, an open stump
+   * beats, the coals in the fire's mouth never quite go out. They light the
+   * ledges of her tower round them; she herself is drawn as she is.
+   */
+  override lights(): GlowLight[] {
+    const out: GlowLight[] = [];
+    if (this.dead || !this.engaged) return out;
+    const acting = this.necks[this.acting];
+    if (acting && acting.state === 'head' && this.glow > 0.05) {
+      const c = this.headCentre(acting);
+      out.push({ x: c.x, y: c.y, radius: 70 + this.glow * 40, rgb: HEAD_LIGHT[acting.kind], strength: 0.4 + this.glow * 0.4, tint: 0.3 });
+    }
+    for (const neck of this.necks) {
+      if (neck.state === 'stump') {
+        const c = this.stumpCentre(neck);
+        out.push({ x: c.x, y: c.y, radius: 64, rgb: '190,255,140', strength: 0.55, tint: 0.3 });
+      } else if (neck.kind === 'flame' && neck.state === 'head') {
+        const c = this.headCentre(neck);
+        out.push({ x: c.x + this.facing * 20, y: c.y, radius: 40, rgb: '255,170,90', strength: 0.4, tint: 0.25 });
+      }
+    }
+    return out;
+  }
+
+  /*
+   * Drawn the way a sixteen-bit boss was (hydra-art.ts): her body a sprite made
+   * once, every neck a chain of segment sprites at sixteen angles laid from the
+   * root up, every head a sprite of its own with three openings of the jaw.
+   * Nothing is turned, scaled or faded by the canvas; a struck head and neck go
+   * white for a moment, and only they.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
     this.drawPools(ctx);
     this.drawDrops(ctx);
     this.drawBreath(ctx);
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      shadow(ctx, this.cx, this.bottom, this.w * 0.62);
-      /*
-       * Back to front by how far the neck leans out: the ones reaching across
-       * her pass behind the ones on the near side, so five necks read as depth
-       * instead of as a tangle. Her body goes over all of their roots.
-       */
-      const order = [...this.necks].sort((a, b) => this.lean(b) - this.lean(a));
-      const behind = order.filter((n) => this.lean(n) >= 0);
-      const infront = order.filter((n) => this.lean(n) < 0);
-      for (const neck of behind) this.drawNeck(ctx, neck);
-      this.drawBody(ctx);
-      for (const neck of infront) this.drawNeck(ctx, neck);
-      for (const neck of order) this.drawCrest(ctx, neck);
-      ctx.restore();
-    });
+    shadow(ctx, this.cx, this.bottom, this.w * 0.62);
+    /*
+     * Back to front by how far the neck leans out: the ones reaching across
+     * her pass behind the ones on the near side, so five necks read as depth
+     * instead of as a tangle. Her body goes over all of their roots.
+     */
+    const order = [...this.necks].sort((a, b) => this.lean(b) - this.lean(a));
+    for (const neck of order) if (this.lean(neck) >= 0) this.drawNeck(ctx, neck);
+    this.drawCoils(ctx);
+    blit(ctx, bodyPart(Math.sin(this.sway * 1.3) > 0.2 ? 1 : 0), this.cx, this.bottom);
+    for (const neck of order) if (this.lean(neck) < 0) this.drawNeck(ctx, neck);
+  }
+
+  /**
+   * Her tail, in two coils either side of her on the floor: the plates of a
+   * neck lying down, belly to the boards - the mass of her wider than the box
+   * she is walked round on.
+   */
+  private drawCoils(ctx: CanvasRenderingContext2D): void {
+    for (const side of [-1, 1] as const) {
+      const pts = quad(this.cx + side * 40, this.bottom - 14, this.cx + side * 92, this.bottom - 4, this.cx + side * 122, this.bottom - 16, 9);
+      const n = pts.length / 2;
+      for (let i = 0; i < n; i++) {
+        const a = Math.max(0, i - 1) * 2;
+        const b = Math.min(n - 1, i + 1) * 2;
+        const rq = Math.max(2, Math.round((13 - 8 * (i / (n - 1))) / 2));
+        blit(ctx, segmentPart(rq, angleStep(Math.atan2(pts[b + 1] - pts[a + 1], pts[b] - pts[a])), side, 'plain'), pts[i * 2], pts[i * 2 + 1]);
+      }
+    }
   }
 
   /** How far out the neck reaches, used only to decide painting order. */
@@ -3987,10 +4034,11 @@ export class Hydra extends Enemy {
 
   /**
    * The spine of a neck, as points along a quadratic curve with a radius that
-   * tapers from the root to the far end.
+   * tapers from the root to the far end - a point every six pixels or so,
+   * where a segment of it is laid.
    */
   private neckSpine(neck: Neck): { x: number; y: number; r: number }[] {
-    const root = { x: this.cx + neck.rootX * 1.5, y: this.bottom - this.bulk.h * 0.5 };
+    const root = { x: this.cx + neck.rootX * 1.5, y: this.bottom - BULK_H * 0.5 };
     const end = this.endOf(neck);
     const span = Math.hypot(end.x - root.x, end.y - root.y);
     const alive = neck.state === 'head';
@@ -3999,9 +4047,7 @@ export class Hydra extends Enemy {
       x: (root.x + end.x) / 2 + bow - (end.x - root.x) * 0.2,
       y: (root.y + end.y) / 2 - Math.min(78, span * 0.32),
     };
-    // Enough samples that the neck reads as a body: the storm head hangs 430 px
-    // up, and a fixed count leaves that one a dotted line.
-    const steps = Math.max(18, Math.min(96, Math.round(span / 8)));
+    const steps = Math.max(6, Math.min(60, Math.round(span / 9)));
     const out: { x: number; y: number; r: number }[] = [];
     const thick = neck.state === 'sealed' ? 0.82 : 1;
     for (let i = 0; i <= steps; i++) {
@@ -4016,509 +4062,83 @@ export class Hydra extends Enemy {
     return out;
   }
 
+  /** How a neck and its head are drawn this frame. */
+  private toneOf(neck: Neck): Tone {
+    if (neck.state === 'sealed') return 'sealed';
+    if (neck.sting > 0.72) return 'struck';
+    return this.necks[this.acting] === neck && neck.state === 'head' && this.glow > 0.4 ? 'hot' : 'plain';
+  }
+
   /**
-   * One neck: a tapered tube with a lit top, a dark underside and scale plates
-   * laid down its length, plus whatever is on the end of it.
+   * One neck: segment after segment from the root to the end, each at the
+   * drawn angle nearest the curve's and as thick as the neck is there, its
+   * belly stripe on the side that faces down and towards the hero all the way
+   * along - then whatever is on the end of it.
    */
   private drawNeck(ctx: CanvasRenderingContext2D, neck: Neck): void {
     const spine = this.neckSpine(neck);
-    const normals: { nx: number; ny: number }[] = [];
+    const tone = this.toneOf(neck);
+    const first = spine[0];
+    const last = spine[spine.length - 1];
+    // Which side the belly is on, once for the whole neck: the side of its
+    // general run that faces down and towards whoever she is watching.
+    const ax = last.x - first.x;
+    const ay = last.y - first.y;
+    const len = Math.hypot(ax, ay) || 1;
+    const belly: 1 | -1 = (-ay / len) * this.facing * 0.45 + (ax / len) * 0.9 >= 0 ? 1 : -1;
     for (let i = 0; i < spine.length; i++) {
       const a = spine[Math.max(0, i - 1)];
       const b = spine[Math.min(spine.length - 1, i + 1)];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      normals.push({ nx: -dy / len, ny: dx / len });
-    }
-
-    const acting = this.necks[this.acting] === neck && neck.state === 'head';
-    const heat = acting ? this.glow : 0;
-    const dark = neck.state === 'sealed' ? '#1f2a1b' : '#24421f';
-    const skin =
-      neck.state === 'sealed'
-        ? '#3c4a33'
-        : `rgb(${74 + heat * 90},${132 + heat * 60},${68 + neck.sting * 90})`;
-
-    // The tube, as a single outline so nothing seams.
-    ctx.beginPath();
-    for (let i = 0; i < spine.length; i++) {
       const p = spine[i];
-      const n = normals[i];
-      const x = p.x + n.nx * p.r;
-      const y = p.y + n.ny * p.r;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      const rq = Math.max(2, Math.min(9, Math.round(p.r / 2)));
+      blit(ctx, segmentPart(rq, angleStep(Math.atan2(b.y - a.y, b.x - a.x)), belly, tone), p.x, p.y);
     }
-    for (let i = spine.length - 1; i >= 0; i--) {
-      const p = spine[i];
-      const n = normals[i];
-      ctx.lineTo(p.x - n.nx * p.r, p.y - n.ny * p.r);
-    }
-    ctx.closePath();
-    ctx.fillStyle = dark;
-    ctx.fill();
-
-    // Lit side: a narrower tube laid off-centre towards the light, so the neck
-    // has a top and an underside rather than reading as a flat pipe.
-    ctx.fillStyle = skin;
-    for (let i = 0; i < spine.length; i++) {
-      const p = spine[i];
-      const n = normals[i];
-      ctx.beginPath();
-      ctx.arc(p.x - n.nx * p.r * 0.36, p.y - n.ny * p.r * 0.36, p.r * 0.54, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Scale plates: short arcs across the tube, tightening towards the head.
-    ctx.strokeStyle = neck.state === 'sealed' ? 'rgba(14,20,12,0.6)' : 'rgba(18,38,18,0.55)';
-    ctx.lineCap = 'round';
-    for (let i = 4; i < spine.length - 2; i += 5) {
-      const p = spine[i];
-      const n = normals[i];
-      ctx.lineWidth = Math.max(1.2, p.r * 0.16);
-      ctx.beginPath();
-      ctx.moveTo(p.x + n.nx * p.r * 0.86, p.y + n.ny * p.r * 0.86);
-      ctx.lineTo(p.x - n.nx * p.r * 0.18, p.y - n.ny * p.r * 0.18);
-      ctx.stroke();
-    }
-
-    if (neck.state === 'head') this.drawHead(ctx, neck);
+    if (neck.state === 'head') this.drawHead(ctx, neck, tone);
     else if (neck.state === 'stump') this.drawStump(ctx, neck);
-    else this.drawSeal(ctx, neck);
+    else blit(ctx, sealPart(Math.sin(this.sway * 1.6 + neck.phase) > 0.3 ? 1 : 0), this.stumpCentre(neck).x, this.stumpCentre(neck).y);
   }
 
   /**
-   * How big she is drawn. Her hit box is what the physics walks her around on;
-   * nothing is ever hit on it - only a head is a target - so the body she is
-   * painted as can be the size she ought to look.
+   * A serpent skull with a hinged jaw that opens while the head winds up -
+   * half the tell: a head about to breathe is a head with its mouth open, its
+   * throat and its eye gone white-hot. Every head watches the hero once she is
+   * awake; five skulls turning with him is most of what makes her one animal.
    */
-  private get bulk(): { w: number; h: number } {
-    return { w: this.w * 1.4, h: this.h * 1.55 };
-  }
-
-  private drawBody(ctx: CanvasRenderingContext2D): void {
-    const cx = this.cx;
-    const base = this.bottom;
-    const { w, h } = this.bulk;
-
-    // Coils behind her, so the silhouette is wider than the hit box suggests.
-    ctx.fillStyle = '#16301b';
-    for (const side of [1, -1]) {
-      ctx.beginPath();
-      ctx.ellipse(cx + side * w * 0.53, base - 15, w * 0.36, 16, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    const body = ctx.createLinearGradient(0, base - h, 0, base);
-    body.addColorStop(0, '#6fb262');
-    body.addColorStop(0.4, '#3f7a42');
-    body.addColorStop(1, '#132a17');
-    ctx.fillStyle = body;
-    ctx.beginPath();
-    ctx.ellipse(cx, base - h * 0.44, w * 0.5, h * 0.56, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Belly: a band of pale scutes rather than a lit blob.
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, base - h * 0.44, w * 0.5, h * 0.56, 0, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.strokeStyle = 'rgba(200,222,156,0.3)';
-    ctx.lineWidth = 6;
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath();
-      ctx.ellipse(cx, base - 2 - i * 9, w * (0.3 - i * 0.02), 8, 0, Math.PI * 1.05, Math.PI * 1.95, true);
-      ctx.stroke();
-    }
-    // Carapace: overlapping plates sweeping up her back.
-    ctx.strokeStyle = 'rgba(16,34,18,0.7)';
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath();
-      ctx.ellipse(cx, base - h * (0.26 + i * 0.15), w * (0.46 - i * 0.05), 11, 0, Math.PI * 1.04, Math.PI * 1.96);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Rim light along her back, so she is not a dark mass on a dark wall.
-    ctx.save();
-    ctx.strokeStyle = 'rgba(178,232,146,0.38)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.ellipse(cx, base - h * 0.44, w * 0.5 - 1, h * 0.56 - 1, 0, Math.PI * 1.1, Math.PI * 1.9);
-    ctx.stroke();
-    ctx.restore();
-
-    // Spines along the ridge, tallest in the middle.
-    const ridge = base - h * 0.82;
-    for (let i = -4; i <= 4; i++) {
-      const x = cx + i * 14;
-      const tall = 18 - Math.abs(i) * 2.4;
-      const droop = Math.abs(i) * 2.8;
-      ctx.fillStyle = i % 2 === 0 ? '#cfdfa8' : '#9fb682';
-      ctx.beginPath();
-      ctx.moveTo(x - 5.5, ridge + droop);
-      ctx.lineTo(x, ridge + droop - tall);
-      ctx.lineTo(x + 5.5, ridge + droop);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Forelimbs, dug in.
-    for (const side of [-1, 1]) {
-      const lx = cx + side * w * 0.34;
-      ctx.fillStyle = '#2a5430';
-      ctx.beginPath();
-      ctx.moveTo(lx - side * 9, base - 32);
-      ctx.quadraticCurveTo(lx + side * 13, base - 23, lx + side * 11, base - 2);
-      ctx.lineTo(lx - side * 7, base - 2);
-      ctx.quadraticCurveTo(lx - side * 2, base - 19, lx - side * 13, base - 27);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#dcebbf';
-      for (let c = 0; c < 3; c++) {
-        const clawX = lx + side * (4 + c * 5);
-        ctx.beginPath();
-        ctx.moveTo(clawX, base - 7);
-        ctx.lineTo(clawX + side * 6, base - 1);
-        ctx.lineTo(clawX, base - 1);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-  }
-
-  private neckColours(kind: NeckKind): [string, string, string] {
-    switch (kind) {
-      case 'venom':
-        return ['#7fd45c', '#d8ff9f', '#2f5a25'];
-      case 'flame':
-        return ['#e07a3a', '#ffd39a', '#5f2a12'];
-      case 'storm':
-        return ['#79b8e0', '#dff1ff', '#22465f'];
-      case 'stone':
-        return ['#9a9384', '#e6e0d2', '#3f3b33'];
-      case 'crown':
-        return ['#d9b84a', '#fff0b8', '#5d4712'];
-    }
-  }
-
-  /**
-   * A serpent skull: a long snout on a hinged jaw that opens while the head is
-   * winding up, a brow over a slit eye, teeth, and a frill. The jaw is half the
-   * tell - a head about to breathe is a head with its mouth open.
-   */
-  private drawHead(ctx: CanvasRenderingContext2D, neck: Neck): void {
+  private drawHead(ctx: CanvasRenderingContext2D, neck: Neck, tone: Tone): void {
     const at = this.headCentre(neck);
-    const [skin, bright, shade] = this.neckColours(neck.kind);
-    const acting = this.necks[this.acting] === neck;
-    const heat = acting ? 0.25 + this.glow * 0.75 : 0.12;
-    // Every head watches the hero once she is awake. Five skulls turning with
-    // him is most of what makes her read as one animal rather than five props.
     const toward = this.engaged ? this.facing : neck.hx > 0 ? 1 : -1;
-    const lean = Math.sin(this.sway * 1.15 + neck.phase) * 0.08;
-
-    ctx.save();
-    ctx.translate(at.x, at.y);
-    ctx.scale(toward, 1);
-    ctx.rotate(lean);
-
-    if (this.glow > 0.05 && acting) {
-      const halo = ctx.createRadialGradient(6, 0, 0, 6, 0, 58 * heat);
-      halo.addColorStop(0, `rgba(255,255,226,${(0.32 * heat).toFixed(2)})`);
-      halo.addColorStop(1, 'rgba(255,255,220,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(-58, -58, 116, 116);
-    }
-    if (neck.sting > 0.02) {
-      ctx.fillStyle = `rgba(255,240,220,${(neck.sting * 0.35).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(4, 0, 30, 22, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Frill behind the skull, so the head does not sit flush on the neck.
-    ctx.fillStyle = shade;
-    ctx.beginPath();
-    ctx.moveTo(-12, -18);
-    ctx.lineTo(-31, -27);
-    ctx.lineTo(-26, 0);
-    ctx.lineTo(-31, 25);
-    ctx.lineTo(-12, 16);
-    ctx.closePath();
-    ctx.fill();
-
-    // Lower jaw, hinged at the back and swinging open on the wind-up.
-    ctx.save();
-    ctx.translate(-8, 4);
-    ctx.rotate(neck.jaw * 0.5);
-    ctx.fillStyle = shade;
-    ctx.beginPath();
-    ctx.moveTo(0, -4);
-    ctx.quadraticCurveTo(16, 2, 30, 3);
-    ctx.quadraticCurveTo(16, 12, 0, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#f2f7de';
-    for (let i = 0; i < 4; i++) {
-      const x = 6 + i * 6;
-      ctx.beginPath();
-      ctx.moveTo(x, 1);
-      ctx.lineTo(x + 2.2, -4);
-      ctx.lineTo(x + 4.4, 1);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // The throat, lit by whatever the head is about to do.
-    if (neck.jaw > 0.05) {
-      ctx.fillStyle = `rgba(255,${160 + heat * 70},${90},${(0.35 + heat * 0.5).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(6, 2, 14 * neck.jaw, 7 * neck.jaw, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Cranium and upper snout.
-    ctx.fillStyle = skin;
-    ctx.beginPath();
-    ctx.moveTo(-15, -15);
-    ctx.quadraticCurveTo(4, -20, 20, -12);
-    ctx.quadraticCurveTo(33, -7, 34, -1);
-    ctx.quadraticCurveTo(30, 3, 16, 4);
-    ctx.quadraticCurveTo(0, 6, -15, 8);
-    ctx.quadraticCurveTo(-21, -4, -15, -15);
-    ctx.closePath();
-    ctx.fill();
-
-    // Brow ridge and upper teeth.
-    ctx.fillStyle = shade;
-    ctx.beginPath();
-    ctx.moveTo(-14, -14);
-    ctx.quadraticCurveTo(3, -19, 18, -11);
-    ctx.quadraticCurveTo(3, -10, -13, -8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#f2f7de';
-    for (let i = 0; i < 4; i++) {
-      const x = 8 + i * 6;
-      const y = 3 - i * 0.8;
-      ctx.beginPath();
-      ctx.moveTo(x, y - 1);
-      ctx.lineTo(x + 2.2, y + 5);
-      ctx.lineTo(x + 4.4, y - 1);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Eye: a slit under the brow.
-    ctx.fillStyle = `rgba(255,252,226,${(0.55 + heat * 0.45).toFixed(2)})`;
-    ctx.beginPath();
-    ctx.ellipse(5, -6, 6, 3.8, -0.18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(14,22,12,0.92)';
-    ctx.beginPath();
-    ctx.ellipse(6.6, -6, 1.6, 3.4, -0.18, 0, Math.PI * 2);
-    ctx.fill();
-
-    this.drawHeadMark(ctx, neck, bright, heat);
-    ctx.restore();
-  }
-
-  /** What tells the five heads apart in silhouette. */
-  private drawHeadMark(ctx: CanvasRenderingContext2D, neck: Neck, bright: string, heat: number): void {
-    ctx.fillStyle = bright;
-    ctx.strokeStyle = bright;
-    switch (neck.kind) {
-      case 'crown': {
-        // A circlet of points, the only gold on her.
-        ctx.beginPath();
-        ctx.moveTo(-12, -15);
-        ctx.lineTo(12, -15);
-        ctx.lineTo(12, -19);
-        ctx.closePath();
-        ctx.fill();
-        for (let i = -1; i <= 1; i++) {
-          ctx.beginPath();
-          ctx.moveTo(i * 9 - 3, -17);
-          ctx.lineTo(i * 9, -31);
-          ctx.lineTo(i * 9 + 3, -17);
-          ctx.closePath();
-          ctx.fill();
-        }
-        break;
-      }
-      case 'storm': {
-        ctx.lineWidth = 3;
-        for (const s of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(-7, -12 + s * 2);
-          ctx.quadraticCurveTo(-20, -23 + s * 6, -29, -16 + s * 13);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = 0.4 + heat * 0.6;
-        ctx.beginPath();
-        ctx.moveTo(-15, -21);
-        ctx.lineTo(-10, -11);
-        ctx.lineTo(-14, -11);
-        ctx.lineTo(-9, 0);
-        ctx.lineTo(-21, -10);
-        ctx.lineTo(-15, -10);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        break;
-      }
-      case 'flame': {
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-8, -13);
-        ctx.quadraticCurveTo(-15, -30, -4, -36);
-        ctx.stroke();
-        // Coals banked at the corners of the mouth, always lit: this is the
-        // head the whole fight is fetched from, so it has to look like fire
-        // even when it is not its turn.
-        ctx.globalAlpha = 0.45 + heat * 0.55;
-        for (const [x, y, r] of [[20, -2, 4.4], [13, 2, 3], [26, -3, 2.4]] as const) {
-          ctx.beginPath();
-          ctx.ellipse(x, y, r, r * 0.72, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        break;
-      }
-      case 'stone': {
-        for (let i = 0; i < 3; i++) {
-          ctx.beginPath();
-          ctx.moveTo(-5 - i * 6, -14 - i * 2);
-          ctx.lineTo(-11 - i * 6, -23 - i * 3);
-          ctx.lineTo(-16 - i * 6, -12 - i * 2);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.lineWidth = 1.4;
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(-3, -13);
-        ctx.lineTo(4, -6);
-        ctx.lineTo(1, 0);
-        ctx.lineTo(10, 5);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-        break;
-      }
-      case 'venom': {
-        ctx.lineWidth = 2.6;
-        ctx.beginPath();
-        ctx.moveTo(-8, -13);
-        ctx.quadraticCurveTo(-19, -22, -25, -14);
-        ctx.stroke();
-        ctx.globalAlpha = 0.4 + heat * 0.6;
-        for (const x of [13, 20]) {
-          ctx.beginPath();
-          ctx.moveTo(x, 5);
-          ctx.lineTo(x + 1.6, 14);
-          ctx.lineTo(x + 3.2, 5);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-        break;
-      }
-    }
+    const jaw = neck.jaw < 0.2 ? 0 : neck.jaw < 0.7 ? 1 : 2;
+    blit(ctx, headPart(neck.kind, jaw, tone), at.x, at.y, toward < 0);
   }
 
   /**
-   * A cut neck: an open wound that thrashes, with the seconds left drawn round
-   * it as a closing ring. It is the one thing in the fight the hero has to read
-   * at a glance from the other end of the room, so it is loud on purpose.
+   * A cut neck: an open wound that beats, and the seconds left drawn round it
+   * as a ring that closes - pale green while there is time, beating orange
+   * when there is not. The one thing in the fight the hero has to read at a
+   * glance from the other end of the room, so it is loud on purpose.
    */
   private drawStump(ctx: CanvasRenderingContext2D, neck: Neck): void {
     const c = this.stumpCentre(neck);
     const left = clamp(neck.regrow / REGROW, 0, 1);
     const urgent = left < 0.34;
-    const pulse = 0.6 + Math.sin(this.sway * (urgent ? 11 : 6) + neck.phase) * 0.4;
-
-    ctx.save();
-    ctx.translate(c.x, c.y);
-    const halo = ctx.createRadialGradient(0, 0, 2, 0, 0, 34);
-    halo.addColorStop(0, `rgba(190,255,140,${(0.3 + pulse * 0.3).toFixed(2)})`);
-    halo.addColorStop(1, 'rgba(150,230,110,0)');
-    ctx.fillStyle = halo;
-    ctx.fillRect(-34, -34, 68, 68);
-
-    // The cut face itself: a pale ring of bone round raw green.
-    ctx.fillStyle = '#2b4a24';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 12, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = `rgba(190,255,150,${(0.55 + pulse * 0.45).toFixed(2)})`;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 10, 7.5, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#d8e6bb';
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 12, 0.2, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // The clock: an arc that closes as the head comes back.
-    ctx.strokeStyle = urgent ? `rgba(255,150,110,${(0.6 + pulse * 0.4).toFixed(2)})` : 'rgba(200,255,160,0.75)';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    ctx.arc(0, 0, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
-    ctx.stroke();
-    ctx.restore();
+    const beat = Math.sin(this.sway * (urgent ? 11 : 6) + neck.phase) > 0.2 ? 1 : 0;
+    blit(ctx, stumpPart(beat, neck.sting > 0.72 ? 'struck' : 'plain'), c.x, c.y);
+    const colour = urgent ? (beat ? RAMP.fire[2] : RAMP.fire[1]) : RAMP.green[6];
+    if (left > 0.01) sector(ctx, snap(c.x), snap(c.y), 20, 25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left, colour);
   }
 
-  /** A neck that has been burned shut: charred, cracked, and finished. */
-  private drawSeal(ctx: CanvasRenderingContext2D, neck: Neck): void {
-    const c = this.stumpCentre(neck);
-    const ember = 0.25 + Math.sin(this.sway * 1.6 + neck.phase) * 0.12;
-    ctx.save();
-    ctx.translate(c.x, c.y);
-    ctx.fillStyle = '#171c13';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 11, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,150,70,${ember.toFixed(2)})`;
-    ctx.lineWidth = 1.6;
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + 0.4;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 3, Math.sin(a) * 2.5);
-      ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 10);
-      ctx.stroke();
-    }
-    ctx.fillStyle = `rgba(60,70,52,0.9)`;
-    ctx.beginPath();
-    ctx.ellipse(0, -2, 9, 5, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  /** Nothing yet - kept so the draw pass reads top to bottom. */
-  private drawCrest(ctx: CanvasRenderingContext2D, neck: Neck): void {
-    void ctx;
-    void neck;
-  }
-
+  /** Her venom on the floor: a flat puddle in bands, shrinking as it dries. */
   private drawPools(ctx: CanvasRenderingContext2D): void {
+    const F = snap(this.floorY);
     for (const pool of this.pools) {
       if (pool.wait > 0) continue;
-      const fade = Math.min(1, pool.life / 1.2);
-      ctx.save();
-      ctx.globalAlpha = 0.55 * fade;
-      const g = ctx.createLinearGradient(0, this.floorY - 12, 0, this.floorY);
-      g.addColorStop(0, 'rgba(180,245,130,0.9)');
-      g.addColorStop(1, 'rgba(70,140,60,0.7)');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.ellipse(pool.x, this.floorY - 3, 28, 7, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      const k = Math.min(1, pool.life / 1.2);
+      const half = 28 * (0.45 + 0.55 * k);
+      const x = snap(pool.x);
+      rect(ctx, x - half, F - 4, half * 2, 2, RAMP.green[3]);
+      rect(ctx, x - half * 0.72, F - 6, half * 1.44, 2, RAMP.green[4]);
+      rect(ctx, x - half * 0.3 - 4, F - 6, half * 0.36, 2, RAMP.green[5]);
+      rect(ctx, x - half * 0.86, F - 2, half * 1.72, 2, RAMP.green[2]);
     }
   }
 
@@ -4526,52 +4146,55 @@ export class Hydra extends Enemy {
    * Where the ceiling is about to let go. The ring on the floor is the part a
    * player reads, but half of this fight happens on the steps, where the floor
    * is off the bottom of the screen - so the column it falls down is marked
-   * too, and that mark is visible from whatever height he is standing at.
+   * too, as grit trickling down it, thicker as the rock comes loose.
    */
   private drawDrops(ctx: CanvasRenderingContext2D): void {
     for (const drop of this.drops) {
       if (drop.fired) continue;
       const p = clamp(drop.t / drop.wind, 0, 1);
-      ctx.save();
-      const top = this.ceilingY;
-      const glow = ctx.createLinearGradient(drop.x, top, drop.x, this.floorY);
-      glow.addColorStop(0, `rgba(235,215,175,${(0.05 + p * 0.1).toFixed(2)})`);
-      glow.addColorStop(1, `rgba(235,215,175,${(0.16 + p * 0.34).toFixed(2)})`);
-      ctx.fillStyle = glow;
-      ctx.fillRect(drop.x - 11, top, 22, this.floorY - top);
-      ctx.strokeStyle = `rgba(230,210,170,${(0.25 + p * 0.5).toFixed(2)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(drop.x, this.floorY - 2, 20 * (1 - p * 0.35), 5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      const colour = p < 0.5 ? RAMP.slate[4] : RAMP.slate[6];
+      const x = snap(drop.x);
+      const gap = p < 0.5 ? 40 : 24;
+      const fall = (drop.t * 140) % gap;
+      for (let y = this.ceilingY + fall, k = 0; y < this.floorY - 8; y += gap, k++) {
+        rect(ctx, x + (k & 1 ? 4 : -6), snap(y), 4, 4, colour);
+      }
+      ovalRing(ctx, x, this.floorY - 2, 20 * (1 - p * 0.35), 5, 1, colour);
     }
   }
 
+  /**
+   * The stone breath, pouring along the floor from her mouth outwards: a
+   * ragged bank of grit in three greys, highest at her and lower as it runs
+   * out. The box that hurts is the full 40 px either way - see updateBreath.
+   */
   private drawBreath(ctx: CanvasRenderingContext2D): void {
     if (this.breath <= 0) return;
     const reach = 340 * this.breath;
-    const x0 = this.breathDir > 0 ? this.cx : this.cx - reach;
-    // From her mouth outwards, not from the leading edge: anchored at x0 the
-    // gradient ran the wrong way whenever she breathed to the left, and the
-    // whole sweep came out at full brightness with a hard edge at the far end.
-    const g = ctx.createLinearGradient(this.cx, 0, this.cx + reach * this.breathDir, 0);
-    g.addColorStop(0, 'rgba(214,206,186,0.75)');
-    g.addColorStop(1, 'rgba(150,140,125,0.05)');
-    // Laid down in bands that thin out towards the top, so it reads as
-    // something pouring along the floor rather than a bar painted on it. The
-    // box that hurts is the full 38 px either way - see updateBreath.
-    ctx.save();
-    ctx.fillStyle = g;
-    const bands = 6;
-    for (let i = 0; i < bands; i++) {
-      const h = 38 / bands;
-      ctx.globalAlpha = 0.18 + (i / (bands - 1)) * 0.82;
-      ctx.fillRect(x0, this.floorY - 38 + i * h, reach, h + 0.5);
+    const F = snap(this.floorY);
+    const x0 = snap(this.cx);
+    const roll = Math.floor(this.anim * 20);
+    for (let d = 0; d < reach; d += 4) {
+      const fall = 1 - (d / 340) * 0.65;
+      const n = hash2(Math.floor(d / 4) - roll * this.breathDir, 7);
+      const h = Math.max(4, Math.round((38 * fall * (0.7 + n * 0.3)) / 2) * 2);
+      const x = this.breathDir > 0 ? x0 + d : x0 - d - 4;
+      rect(ctx, x, F - h, 4, Math.min(h, 10), RAMP.grey[6]);
+      if (h > 10) rect(ctx, x, F - h + 10, 4, Math.min(h - 10, 14), RAMP.grey[5]);
+      if (h > 24) rect(ctx, x, F - h + 24, 4, h - 24, RAMP.grey[4]);
     }
-    ctx.restore();
   }
 }
+
+/** The colour of each head's light, for the ledges round it. */
+const HEAD_LIGHT: Record<NeckKind, string> = {
+  venom: '170,240,110',
+  flame: '255,160,80',
+  storm: '140,210,255',
+  stone: '220,214,200',
+  crown: '255,214,110',
+};
+
 
 /**
  * The roster in this file. The bosses that live in files of their own are

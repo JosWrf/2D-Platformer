@@ -126,6 +126,30 @@ export function buildPart(
 }
 
 /**
+ * A part that is never turned, rasterised over just the box it fills
+ * (logical px round its pivot, which sits on the centre of an art pixel) -
+ * for a big, wide body, a square round its pivot would be mostly air.
+ */
+export function buildUpright(
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  mats: readonly Mat[],
+  paint: (x: number, y: number) => number,
+): PartSprite {
+  const px = Math.ceil(-left / ART) + 1;
+  const py = Math.ceil(-top / ART) + 1;
+  const w = px + Math.ceil(right / ART) + 2;
+  const h = py + Math.ceil(bottom / ART) + 2;
+  const cells = new Int32Array(w * h);
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) cells[j * w + i] = paint((i - px) * ART, (j - py) * ART);
+  }
+  return finish(cells, w, h, px, py, mats);
+}
+
+/**
  * Shades cells by their place in the shape and draws them. A cell whose
  * neighbour above or to the left is empty catches the light (one tone up);
  * one whose neighbour below or to the right is empty, or is another shaded
