@@ -1639,6 +1639,9 @@ export class Game implements World {
     drawEdgeLight(a, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb, lights);
 
     this.drawActors(a);
+    // The backdrop's sparse foreground strip, in front of the actors and below
+    // the floor's surface: it frames the play without hiding any of it.
+    this.background.drawFront(a, this.camera);
 
     a.save();
     a.translate(-this.camera.renderX, -this.camera.renderY);

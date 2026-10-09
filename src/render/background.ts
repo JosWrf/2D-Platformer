@@ -1,374 +1,358 @@
 import { Camera } from '../core/camera';
-import { Rng } from '../core/math';
-import { Zone, mixHex, zoneBlend } from './palette';
+import { type Art, type Ink, type Look, type Painting, type Strip, paintBackdrop } from './backdrops';
+import { LightPass } from './lighting';
+import { ZONES, type Zone, zoneBlend } from './palette';
+import { ART, ART_H, ART_W, makeCanvas } from './pixel';
+import type { Abgr } from './pixpaint';
 
-/** Procedural parallax backdrop: near-black sky, two hill layers and motes. */
-/** Which hall the interior backdrop should paint. */
-type InteriorKind = 'throne' | 'lair' | 'cave';
-
-function interiorKind(zone: Zone): InteriorKind {
-  if (zone.name === 'throne') return 'throne';
-  if (zone.name === 'lair') return 'lair';
-  return 'cave';
+/** A strip of a built backdrop, ready to blit. */
+interface Layer {
+  canvas: HTMLCanvasElement;
+  w: number;
+  h: number;
+  k: number;
+  ky: number;
+  y: number;
+  below: string | null;
+  above: string | null;
+  drift: number;
+  sparks: { x: number; y: number; css: string; period: number; on: number; phase: number }[];
+  drips: { x: number; top: number; bottom: number; period: number; phase: number; css: string }[];
 }
 
+interface Built {
+  layers: Layer[];
+  /** The strip in front of everything, if the zone has one (a list of none or one). */
+  front: Layer[];
+}
+
+/** How many zones' backdrops are kept painted at once. */
+const KEEP = 5;
+/** How fast a drop falls, in art pixels a second squared. */
+const GRAVITY = 260;
+/** Where in a zone blend (0-1) the backdrops' dissolve starts, and how long it takes. */
+const DISSOLVE_FROM = 0.35;
+const DISSOLVE_SPAN = 0.3;
+/** The order rows join the dissolve in, sixteen to a cycle, spread as evenly as can be. */
+const ROW_ORDER = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
+
+/**
+ * The parallax backdrop: a sky (or a hall's far wall) and five or more strips
+ * of scenery at their own depths, painted once per zone into wide canvases of
+ * art pixels (render/backdrops.ts) and slid past at whole-pixel offsets - a
+ * handful of blits a frame instead of the gradients and paths it used to
+ * redraw every time.
+ *
+ * Two zones meet over the last 700 pixels before the next one starts. In the
+ * middle of that stretch the coming backdrop is laid over the going one a row
+ * at a time - one row in sixteen, then two, then every other row, in an
+ * ordered sequence - so every pixel on screen is still one backdrop's own
+ * colour, never a blend of two, and the rows stay put on the screen while
+ * the layers slide past behind them.
+ */
 export class Background {
+  private readonly cache = new Map<string, Built>();
+  private readonly keys = new Map<Zone, string>();
+  /** A light pass of our own, to measure what the real one does to a colour. */
+  private readonly probe = new LightPass(PROBE_W, 4);
+  private readonly inks = new Map<string, { ink: Ink; factorKey: string }>();
+  /** Backdrops being painted ahead of time, a step a frame. */
+  private readonly jobs = new Map<string, { ink: Ink; painting: Painting; art: Art | null; layers: Layer[] }>();
+  /** The rows of the dissolve at each of its levels, made once. */
+  private readonly rows: Path2D[] = [];
 
   constructor(
     private readonly viewW: number,
     private readonly viewH: number,
-  ) {
-  }
+  ) {}
 
-  private static hills(
-    ctx: CanvasRenderingContext2D,
-    color: string,
-    scrollX: number,
-    baseY: number,
-    amplitude: number,
-    frequency: number,
-    seed: number,
-    viewW: number,
-    viewH: number,
-  ): void {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(0, viewH);
-    const step = 8;
-    for (let sx = 0; sx <= viewW + step; sx += step) {
-      const wx = (sx + scrollX) * frequency;
-      const h =
-        Math.sin(wx * 0.008 + seed) * amplitude +
-        Math.sin(wx * 0.021 + seed * 2.3) * amplitude * 0.45 +
-        Math.sin(wx * 0.005 + seed * 0.7) * amplitude * 0.8;
-      ctx.lineTo(sx, baseY - h);
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
+    const focusX = camera.x + this.viewW / 2;
+    const { from, to, t } = zoneBlend(focusX);
+    const camX = camera.renderX / ART;
+    const camY = camera.renderY / ART;
+    // Where the camera rests on the main floor: every strip is placed for that
+    // and drifts down from there, at its own depth, as the camera climbs.
+    const restY = Math.max(0, camera.worldBounds.h - this.viewH) / ART;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.imageSmoothingEnabled = false;
+
+    const going = this.built(from);
+    const coming = t > 0 ? this.built(to) : going;
+    // The dissolve takes the middle of the blend, about two hundred pixels
+    // of walking: a crossing, not a long stretch of two backdrops at once.
+    const d = Math.min(1, Math.max(0, (t - DISSOLVE_FROM) / DISSOLVE_SPAN));
+    const level = coming === going ? 0 : Math.round(d * 16);
+    // Each backdrop is laid out from where its zone begins, so a set piece -
+    // a moon, a clock face - is where it was placed whichever way the hero
+    // came in.
+    if (level < 16) this.paint(ctx, going.layers, camX - from.start / ART, camY, restY, time);
+    if (level >= 16) {
+      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time);
+    } else if (level > 0) {
+      // Painted straight over the going backdrop, clipped to its rows: no
+      // second canvas, no mask pass.
+      ctx.save();
+      ctx.clip(this.rowsAt(level));
+      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time);
+      ctx.restore();
     }
-    ctx.lineTo(viewW, viewH);
-    ctx.closePath();
-    ctx.fill();
-  }
+    ctx.restore();
 
-  /** Dark stone hall / cavern backdrop used instead of the sky indoors. */
-  private drawInterior(
-    ctx: CanvasRenderingContext2D,
-    camera: Camera,
-    time: number,
-    variant: InteriorKind,
-  ): void {
-    const { viewW, viewH } = this;
-    const throne = variant === 'throne';
-    const lair = variant === 'lair';
-    const base = ctx.createLinearGradient(0, 0, 0, viewH);
-    if (throne) {
-      base.addColorStop(0, '#120610');
-      base.addColorStop(0.55, '#2a0a14');
-      base.addColorStop(1, '#160610');
-    } else if (lair) {
-      base.addColorStop(0, '#060d07');
-      base.addColorStop(0.55, '#11220f');
-      base.addColorStop(1, '#050b06');
-    } else {
-      base.addColorStop(0, '#06101a');
-      base.addColorStop(0.55, '#0d2233');
-      base.addColorStop(1, '#050d16');
-    }
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, viewW, viewH);
-
-    // Far masonry wall.
-    const brickW = 96;
-    const brickH = 48;
-    const scroll = camera.x * 0.18;
-    const scrollY = camera.y * 0.1;
-    ctx.strokeStyle = throne
-      ? 'rgba(255,150,150,0.05)'
-      : lair
-        ? 'rgba(180,235,150,0.05)'
-        : 'rgba(150,210,255,0.05)';
-    ctx.lineWidth = 2;
-    for (let row = -1; row * brickH - scrollY < viewH + brickH; row++) {
-      const y = row * brickH - (scrollY % brickH);
-      const offset = row % 2 === 0 ? 0 : brickW / 2;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(viewW, y);
-      ctx.stroke();
-      for (let col = -1; col * brickW < viewW + brickW; col++) {
-        const x = col * brickW + offset - (scroll % brickW);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x, y + brickH);
-        ctx.stroke();
-      }
-    }
-
-    // Colonnade: pillars / stalagmite columns at a nearer parallax.
-    const pillarScroll = camera.x * 0.4;
-    const spacing = 220;
-    const shaftColor = throne ? 'rgba(28,8,14,0.85)' : lair ? 'rgba(10,22,12,0.85)' : 'rgba(6,20,30,0.85)';
-    const litColor = throne ? 'rgba(60,16,26,0.7)' : lair ? 'rgba(46,74,42,0.7)' : 'rgba(16,44,60,0.7)';
-    ctx.fillStyle = shaftColor;
-    for (let i = -1; i * spacing < viewW + spacing; i++) {
-      const x = i * spacing - (pillarScroll % spacing);
-      const w = 46;
-      ctx.fillRect(x, -20 - camera.y * 0.12, w, viewH + 80);
-      ctx.fillStyle = litColor;
-      ctx.fillRect(x, -20 - camera.y * 0.12, 8, viewH + 80);
-      // Capital + base. In her lair the columns are ribs, so they get knuckles
-      // down their length instead of one capital near the ceiling.
-      if (lair) {
-        for (let k = -1; k * 90 < viewH + 180; k++) {
-          const y = k * 90 - ((camera.y * 0.12) % 90);
-          ctx.fillRect(x - 7, y, w + 14, 12);
-        }
-      } else {
-        ctx.fillRect(x - 8, 40 - camera.y * 0.12, w + 16, 16);
-      }
-      ctx.fillStyle = shaftColor;
-    }
-
-    if (throne) {
-      // Hanging banners between the pillars.
-      for (let i = -1; i * spacing < viewW + spacing; i++) {
-        const x = i * spacing - (pillarScroll % spacing) + spacing / 2;
-        const y = 30 - camera.y * 0.12;
-        const wob = Math.sin(time * 0.9 + i) * 3;
-        ctx.fillStyle = 'rgba(96,18,26,0.55)';
-        ctx.beginPath();
-        ctx.moveTo(x - 26, y);
-        ctx.lineTo(x + 26, y);
-        ctx.lineTo(x + 22 + wob, y + 180);
-        ctx.lineTo(x, y + 200);
-        ctx.lineTo(x - 22 + wob, y + 180);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = 'rgba(210,60,50,0.25)';
-        ctx.fillRect(x - 4, y + 40, 8, 8);
-        ctx.fillRect(x - 12, y + 56, 24, 6);
-      }
-      // Embers rising from the floor of the hall.
-      for (let i = 0; i < 18; i++) {
-        const px = ((i * 137 + time * 22) % (viewW + 60)) - 30;
-        const py = viewH - ((i * 91 + time * 46) % (viewH + 100));
-        ctx.globalAlpha *= 1;
-        ctx.fillStyle = `rgba(255,${110 + (i % 5) * 12},60,0.35)`;
-        ctx.fillRect(px, py, 2.5, 2.5);
-      }
-    } else if (lair) {
-      // Roots hanging between the ribs, and a low green glow behind them. A
-      // calm zone, so they hang still rather than swaying - see Zone.calm.
-      for (let i = -1; i * spacing < viewW + spacing; i++) {
-        const x = i * spacing - (pillarScroll % spacing) + spacing / 2;
-        const top = -20 - camera.y * 0.12;
-        ctx.strokeStyle = 'rgba(30,52,28,0.75)';
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        ctx.moveTo(x, top);
-        ctx.quadraticCurveTo(x + 18, top + 110, x + 4, top + 230);
-        ctx.stroke();
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(x + 34, top);
-        ctx.quadraticCurveTo(x + 18, top + 90, x + 30, top + 170);
-        ctx.stroke();
-      }
-      for (let i = -1; i * 300 < viewW + 300; i++) {
-        const x = i * 300 - ((camera.x * 0.35) % 300);
-        const y = viewH * 0.58 - camera.y * 0.1 + Math.sin(i * 1.7) * 70;
-        const g = ctx.createRadialGradient(x, y, 4, x, y, 140);
-        g.addColorStop(0, 'rgba(120,215,95,0.12)');
-        g.addColorStop(1, 'rgba(120,215,95,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(x - 140, y - 140, 280, 280);
-      }
-    } else {
-      // Cave glow pockets.
-      for (let i = -1; i * 340 < viewW + 340; i++) {
-        const x = i * 340 - ((camera.x * 0.35) % 340);
-        const y = viewH * 0.62 - camera.y * 0.1 + Math.sin(i * 2.1) * 60;
-        const g = ctx.createRadialGradient(x, y, 4, x, y, 130);
-        g.addColorStop(0, 'rgba(70,190,225,0.13)');
-        g.addColorStop(1, 'rgba(70,190,225,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(x - 130, y - 130, 260, 260);
-      }
-    }
-
-    // Depth haze towards the bottom.
-    const haze = ctx.createLinearGradient(0, viewH * 0.5, 0, viewH);
-    haze.addColorStop(0, 'rgba(0,0,0,0)');
-    haze.addColorStop(1, throne ? 'rgba(40,4,10,0.55)' : lair ? 'rgba(6,18,8,0.6)' : 'rgba(2,10,18,0.6)');
-    ctx.fillStyle = haze;
-    ctx.fillRect(0, 0, viewW, viewH);
+    this.prepareNeighbours(focusX);
   }
 
   /**
-   * Silhouettes between the hills and the play field: trees, broken columns,
-   * rock spires. Without them the middle of the screen is empty black and the
-   * level reads as a strip of tiles floating in the void.
+   * The sparse strip in front of everything, at 1.25 - a few dark clumps
+   * along the bottom edge. Drawn after the actors and the light pass, so it
+   * is painted in the palette's own colours. Between two zones each shows
+   * the clumps of whichever zone is nearer.
    */
-  private drawSkyline(
-    ctx: CanvasRenderingContext2D,
-    camera: Camera,
-    time: number,
-    zone: Zone,
-    hillColor: string,
-  ): void {
-    const { viewW, viewH } = this;
-    const spacing = 152;
-    const scroll = camera.x * 0.34;
-    const baseY = viewH * 1.02 - camera.y * 0.2;
-    // Etwas heller als die Hügel dahinter, nicht dunkler: gegen einen fast
-    // schwarzen Himmel verschwindet eine noch dunklere Silhouette einfach.
-    const near = mixHex(hillColor, '#ffffff', 0.06);
-    const dark = mixHex(hillColor, '#000000', 0.25);
+  drawFront(ctx: CanvasRenderingContext2D, camera: Camera): void {
+    const focusX = camera.x + this.viewW / 2;
+    const { from, to, t } = zoneBlend(focusX);
+    const zone = t > 0.5 ? to : from;
+    const front = this.built(zone).front;
+    if (front.length === 0) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.imageSmoothingEnabled = false;
+    const restY = Math.max(0, camera.worldBounds.h - this.viewH) / ART;
+    this.paint(ctx, front, camera.renderX / ART - zone.start / ART, camera.renderY / ART, restY, 0);
+    ctx.restore();
+  }
 
-    const first = Math.floor(scroll / spacing) - 1;
-    for (let i = first; i * spacing - scroll < viewW + spacing; i++) {
-      const x = i * spacing - scroll;
-      const rng = new Rng(i * 7717 + 13);
-      if (rng.next() > 0.82) continue;
-      const scale = rng.range(0.7, 1.35);
-      const sway = zone.calm ? 0 : Math.sin(time * 0.5 + i) * 1.6;
-
-      switch (zone.name) {
-        case 'forest': {
-          // Trunk, then a few overlapping crowns.
-          const h = 210 * scale;
-          ctx.fillStyle = dark;
-          ctx.fillRect(x - 5 * scale, baseY - h, 10 * scale, h);
-          ctx.fillStyle = near;
-          for (let c = 0; c < 4; c++) {
-            const cx = x + rng.range(-44, 44) * scale + sway;
-            const cy = baseY - h - rng.range(-20, 40) * scale;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, rng.range(34, 60) * scale, rng.range(24, 42) * scale, 0, 0, Math.PI * 2);
-            ctx.fill();
+  /** Strips, far to near; camX is measured from where their zone begins. */
+  private paint(ctx: CanvasRenderingContext2D, layers: readonly Layer[], camX: number, camY: number, restY: number, time: number): void {
+    for (const layer of layers) {
+      const shift = Math.round(camX * layer.k + time * layer.drift);
+      const ox = ((shift % layer.w) + layer.w) % layer.w;
+      const y = layer.y + Math.round((restY - camY) * layer.ky);
+      if (layer.above && y > 0) {
+        ctx.fillStyle = layer.above;
+        ctx.fillRect(0, 0, ART_W, y);
+      }
+      for (let x = -ox; x < ART_W; x += layer.w) ctx.drawImage(layer.canvas, x, y);
+      if (layer.below && y + layer.h < ART_H) {
+        ctx.fillStyle = layer.below;
+        ctx.fillRect(0, y + layer.h, ART_W, ART_H - (y + layer.h));
+      }
+      for (const s of layer.sparks) {
+        if ((time + s.phase) % s.period >= s.on) continue;
+        ctx.fillStyle = s.css;
+        for (let x = s.x - ox; x < ART_W; x += layer.w) if (x >= 0) ctx.fillRect(x, y + s.y, 1, 1);
+      }
+      for (const d of layer.drips) {
+        // A drop falls, and for a moment after it lands two pixels splash.
+        const age = (time + d.phase) % d.period;
+        const fall = Math.sqrt((2 * (d.bottom - d.top)) / GRAVITY);
+        ctx.fillStyle = d.css;
+        for (let x = d.x - ox; x < ART_W; x += layer.w) {
+          if (x < 1) continue;
+          if (age < fall) {
+            const dy = Math.round(d.top + 0.5 * GRAVITY * age * age);
+            ctx.fillRect(x, y + dy, 1, age > fall * 0.5 ? 2 : 1);
+          } else if (age < fall + 0.2) {
+            ctx.fillRect(x - 1, y + d.bottom - 1, 1, 1);
+            ctx.fillRect(x + 1, y + d.bottom - 1, 1, 1);
           }
-          break;
         }
-        case 'ruins': {
-          const h = rng.range(120, 235) * scale;
-          ctx.fillStyle = dark;
-          ctx.fillRect(x - 11 * scale, baseY - h, 22 * scale, h);
-          ctx.fillStyle = near;
-          ctx.fillRect(x - 16 * scale, baseY - h - 9 * scale, 32 * scale, 9 * scale);
-          // Broken top edge.
-          ctx.fillStyle = dark;
-          ctx.fillRect(x - 16 * scale, baseY - h - 9 * scale, 9 * scale, 4 * scale);
-          break;
-        }
-        case 'caverns': {
-          const h = rng.range(110, 240) * scale;
-          ctx.fillStyle = dark;
-          ctx.beginPath();
-          ctx.moveTo(x - 26 * scale, baseY);
-          ctx.lineTo(x + rng.range(-8, 8), baseY - h);
-          ctx.lineTo(x + 26 * scale, baseY);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        case 'castle': {
-          const h = rng.range(130, 250) * scale;
-          ctx.fillStyle = dark;
-          ctx.fillRect(x - 20 * scale, baseY - h, 40 * scale, h);
-          ctx.fillStyle = near;
-          for (let c = 0; c < 4; c++) {
-            ctx.fillRect(x - 20 * scale + c * 11 * scale, baseY - h - 7 * scale, 7 * scale, 7 * scale);
-          }
-          break;
-        }
-        case 'riftend':
-        case 'rift': {
-          // Torn slabs of rock standing on end, with a piece of one already
-          // adrift above it - the zone's whole idea in a silhouette.
-          const h = rng.range(120, 250) * scale;
-          const lean = rng.range(-10, 10);
-          ctx.fillStyle = dark;
-          ctx.beginPath();
-          ctx.moveTo(x - 18 * scale, baseY);
-          ctx.lineTo(x - 12 * scale + lean, baseY - h);
-          ctx.lineTo(x + 6 * scale + lean, baseY - h * 0.82);
-          ctx.lineTo(x + 20 * scale, baseY);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = near;
-          ctx.fillRect(x - 12 * scale + lean, baseY - h, 18 * scale, 3 * scale);
-          // The shard hangs still. It looked better bobbing, but a row of
-          // them across the horizon is a row of things twitching.
-          const sy = baseY - h - rng.range(30, 80) * scale;
-          ctx.fillStyle = near;
-          ctx.beginPath();
-          ctx.moveTo(x + lean, sy - 16 * scale);
-          ctx.lineTo(x + 13 * scale + lean, sy);
-          ctx.lineTo(x + lean, sy + 11 * scale);
-          ctx.lineTo(x - 11 * scale + lean, sy);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        case 'crystalworld': {
-          // Crystal columns growing out of the floor of the world, and one
-          // hanging point-down above them.
-          const h = rng.range(150, 300) * scale;
-          const w = rng.range(14, 30) * scale;
-          ctx.fillStyle = dark;
-          ctx.beginPath();
-          ctx.moveTo(x, baseY - h);
-          ctx.lineTo(x + w, baseY - h * 0.62);
-          ctx.lineTo(x + w * 0.7, baseY);
-          ctx.lineTo(x - w * 0.7, baseY);
-          ctx.lineTo(x - w, baseY - h * 0.62);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = near;
-          ctx.beginPath();
-          ctx.moveTo(x, baseY - h);
-          ctx.lineTo(x + w, baseY - h * 0.62);
-          ctx.lineTo(x, baseY - h * 0.3);
-          ctx.closePath();
-          ctx.fill();
-          break;
-        }
-        default:
-          break;
       }
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
-    const { viewW, viewH } = this;
-    const focusX = camera.x + viewW / 2;
-    const { from, to, t } = zoneBlend(focusX);
-    const zone: Zone = t > 0 ? { ...from, ...to } : from;
-    const skyTop = mixHex(from.skyTop, to.skyTop, t);
-    const skyBottom = mixHex(from.skyBottom, to.skyBottom, t);
-    const hillFar = mixHex(from.hillFar, to.hillFar, t);
-    const hillNear = mixHex(from.hillNear, to.hillNear, t);
-
-    const sky = ctx.createLinearGradient(0, 0, 0, viewH);
-    sky.addColorStop(0, skyTop);
-    sky.addColorStop(1, skyBottom);
-    ctx.fillStyle = sky;
-    ctx.fillRect(0, 0, viewW, viewH);
-
-    Background.hills(ctx, hillFar, camera.x * 0.12, viewH * 0.74 - camera.y * 0.06, 46, 1, 1.7, viewW, viewH);
-    Background.hills(ctx, hillNear, camera.x * 0.28, viewH * 0.88 - camera.y * 0.12, 62, 1.4, 4.1, viewW, viewH);
-    this.drawSkyline(ctx, camera, time, t > 0.5 ? to : from, hillNear);
-
-    // Interior zones (caves, throne hall) replace the sky with walls.
-    const interiorAmount = (from.interior ? 1 - t : 0) + (to.interior ? t : 0);
-    if (interiorAmount > 0.002) {
-      ctx.globalAlpha = Math.min(1, interiorAmount);
-      const nearer = t < 0.5 ? from : to;
-      this.drawInterior(ctx, camera, time, interiorKind(nearer.interior ? nearer : to.interior ? to : from));
-      ctx.globalAlpha = 1;
+  /** The rows the coming backdrop shows through at a level of 0-16. */
+  private rowsAt(level: number): Path2D {
+    let path = this.rows[level];
+    if (!path) {
+      path = new Path2D();
+      for (let y = 0; y < ART_H; y++) if (ROW_ORDER[y & 15] < level) path.rect(0, y, ART_W, 1);
+      this.rows[level] = path;
     }
-
-    // Ambient colour wash for the current zone.
-    ctx.fillStyle = t > 0 ? to.ambient : zone.ambient;
-    ctx.fillRect(0, 0, viewW, viewH);
-
+    return path;
   }
+
+  /**
+   * Paints the next zone's backdrop a little before the blend into it begins,
+   * and the last one's while the hero is still near the door he came in by -
+   * a strip a frame, so that crossing over never waits on a painting and no
+   * single frame pays for a whole one.
+   */
+  private prepareNeighbours(focusX: number): void {
+    let i = 0;
+    while (i < ZONES.length - 1 && ZONES[i + 1].start <= focusX) i++;
+    const next = ZONES[i + 1];
+    if (next && next.start - focusX < 2400 && this.step(next)) return;
+    const prev = ZONES[i - 1];
+    if (prev && focusX - ZONES[i].start < 900) this.step(prev);
+  }
+
+  /** The key a zone's backdrop is kept under: zones that look alike share one. */
+  private keyOf(zone: Zone): string {
+    let key = this.keys.get(zone);
+    if (key === undefined) {
+      const ink = this.inkFor(zone);
+      key = `${zone.backdrop}|${zone.skyTop}|${zone.skyBottom}|${zone.hillFar}|${zone.hillNear}|${zone.ambient}|${zone.calm}|${ink.factorKey}`;
+      this.keys.set(zone, key);
+    }
+    return key;
+  }
+
+  /** A zone's backdrop, finished now if it has to be: it is wanted this frame. */
+  private built(zone: Zone): Built {
+    const key = this.keyOf(zone);
+    const built = this.cache.get(key);
+    if (built) {
+      if (this.cache.size > 1) {
+        // Most recently used last, so the oldest is the one let go.
+        this.cache.delete(key);
+        this.cache.set(key, built);
+      }
+      return built;
+    }
+    let done: Built | null = null;
+    while (!done) done = this.advance(zone, key);
+    return done;
+  }
+
+  /** One step towards a zone's backdrop; true if there was one to take. */
+  private step(zone: Zone): boolean {
+    const key = this.keyOf(zone);
+    if (this.cache.has(key)) return false;
+    this.advance(zone, key);
+    return true;
+  }
+
+  /**
+   * One step of painting: a strip of the recipe, or turning one painted strip
+   * into a canvas. Returns the backdrop once it is whole.
+   */
+  private advance(zone: Zone, key: string): Built | null {
+    let job = this.jobs.get(key);
+    if (!job) {
+      const look: Look = {
+        top: zone.skyTop,
+        horizon: zone.skyBottom,
+        far: zone.hillFar,
+        near: zone.hillNear,
+        accent: zone.ambient,
+        calm: zone.calm,
+      };
+      const { ink } = this.inkFor(zone);
+      job = { ink, painting: paintBackdrop(zone.backdrop, look, ink), art: null, layers: [] };
+      this.jobs.set(key, job);
+    }
+    if (!job.art) {
+      const r = job.painting.next();
+      if (r.done) job.art = r.value;
+      return null;
+    }
+    if (job.layers.length < job.art.strips.length) {
+      job.layers.push(layerOf(job.art.strips[job.layers.length], job.ink));
+      return null;
+    }
+    const built: Built = { layers: job.layers, front: job.art.front ? [layerOf(job.art.front, plain)] : [] };
+    this.jobs.delete(key);
+    this.cache.set(key, built);
+    while (this.cache.size > KEEP) this.cache.delete(this.cache.keys().next().value as string);
+    return built;
+  }
+
+  /**
+   * The ink for a zone: each palette colour painted as whatever the light
+   * pass turns into that colour away from any light, so that it comes out of
+   * the darkness as the colour it was chosen as - and, being one of the
+   * palette's own, untouched by the dither the palette pass lays over the
+   * world. Colours the darkness leaves alone are painted as they are.
+   *
+   * What the darkness does is measured, not worked out here: a ramp of greys
+   * goes through a light pass of our own, and each channel's curve is read
+   * off and turned round. So the ink follows the lighting, whether its
+   * darkness multiplies a colour down or pulls it under a ceiling.
+   */
+  private inkFor(zone: Zone): { ink: Ink; factorKey: string } {
+    const dkey = `${zone.darkness}|${zone.darkTint}`;
+    let found = this.inks.get(dkey);
+    if (found) return found;
+    const { ctx } = makeCanvas(PROBE_W, 4);
+    for (let v = 0; v < 256; v++) {
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(v * 4, 0, 4, 4);
+    }
+    this.probe.draw(ctx, PROBE_CAMERA, [], zone.darkness, zone.darkTint);
+    const d = ctx.getImageData(0, 1, PROBE_W, 1).data;
+    // For each channel and each wanted value, the painted value that comes
+    // out nearest to it; of equals, the one nearest the value itself.
+    const turn = [0, 1, 2].map((ch) => {
+      const out = new Uint8Array(256);
+      for (let want = 0; want < 256; want++) {
+        let best = want;
+        let miss = Infinity;
+        for (let v = 0; v < 256; v++) {
+          const m = Math.abs(d[v * 16 + 4 + ch] - want) * 1024 + Math.abs(v - want);
+          if (m < miss) {
+            miss = m;
+            best = v;
+          }
+        }
+        out[want] = best;
+      }
+      return out;
+    });
+    const memo = new Map<string, Abgr>();
+    const ink: Ink = (hex) => {
+      let v = memo.get(hex);
+      if (v === undefined) {
+        const n = parseInt(hex.slice(1), 16);
+        const r = turn[0][(n >> 16) & 255];
+        const g = turn[1][(n >> 8) & 255];
+        const b = turn[2][n & 255];
+        v = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+        memo.set(hex, v);
+      }
+      return v;
+    };
+    // Backdrops painted for one darkness are not shared with another.
+    found = { ink, factorKey: [64, 128, 192].map((v) => `${d[v * 16 + 4]},${d[v * 16 + 5]},${d[v * 16 + 6]}`).join('/') };
+    this.inks.set(dkey, found);
+    return found;
+  }
+}
+
+/** The probe: 256 greys, four pixels each, so every one fills a mask pixel of its own. */
+const PROBE_W = 1024;
+
+/** All the light pass reads of a camera is where it is. */
+const PROBE_CAMERA = { renderX: 0, renderY: 0 } as unknown as Camera;
+
+/** The palette's colours as they are, for what is drawn after the light pass. */
+const plain: Ink = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return ((255 << 24) | ((n & 255) << 16) | (n & 0xff00) | ((n >> 16) & 255)) >>> 0;
+};
+
+function layerOf(s: Strip, ink: Ink): Layer {
+  return {
+    canvas: s.pix.canvas(),
+    w: s.pix.w,
+    h: s.pix.h,
+    k: s.k,
+    ky: s.ky ?? s.k,
+    y: s.y,
+    below: s.below ? css(ink(s.below)) : null,
+    above: s.above ? css(ink(s.above)) : null,
+    drift: s.drift ?? 0,
+    sparks: (s.sparks ?? []).map((sp) => ({ ...sp, css: css(ink(sp.hex)) })),
+    drips: (s.drips ?? []).map((d) => ({ ...d, css: css(ink(d.hex)) })),
+  };
+}
+
+function css(c: Abgr): string {
+  return `rgb(${c & 255},${(c >>> 8) & 255},${(c >>> 16) & 255})`;
 }

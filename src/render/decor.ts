@@ -1,11 +1,59 @@
 import { Rng } from '../core/math';
 import type { Particles } from '../fx/particles';
-import { PALETTE } from './palette';
-import { glow } from './sprites';
+import { ART, PixelSprite } from './pixel';
 
 export type DecorKind = 'torch' | 'crystal';
 
 export type DecorMount = 'ground' | 'hanging';
+
+/*
+ * Torches and crystal clusters, drawn for the grid. A torch is iron and fire:
+ * its stand or its chain, a bowl, and a flame in three hand-drawn frames - no
+ * soft glow round it, the light pass gives it its pool of light. A crystal
+ * cluster is three prisms lit from the upper left, standing on a ledge or
+ * hanging point-down from a roof.
+ */
+const KEY = {
+  /** Iron: shadow, body, lit edge. */
+  i: '#0e071b',
+  I: '#2a2f4e',
+  l: '#424c6e',
+  /** Fire, from its edge to its heart. */
+  r: '#c64524',
+  f: '#ed7614',
+  F: '#ffa214',
+  y: '#ffc825',
+  /** Crystal: deep, body, lit face, edge. */
+  d: '#03193f',
+  q: '#00396d',
+  Q: '#0069aa',
+  e: '#0098dc',
+} as const;
+
+const FLAMES = [
+  ['...f...', '..fFf..', '..fFf..', '.fFyFf.', '.fFyFr.', '..ryr..'],
+  ['....f..', '..fF...', '.fFFf..', '.fFyFf.', '.rFyFf.', '..ryr..'],
+  ['..f....', '...Ff..', '..fFFf.', '.fFyFf.', '.fFyFr.', '..ryr..'],
+].map((rows) => new PixelSprite(rows, KEY));
+
+const BOWL = new PixelSprite(['lIIIIIIII', '.iIIIIIi.', '..iiiii..'], KEY);
+const FOOT = new PixelSprite(['.lIIIIi.', 'lIIIIIIi'], KEY);
+const LINK = new PixelSprite(['.l.', 'I.I', '.i.', '.I.'], KEY);
+
+const CLUSTER_ROWS = [
+  '.......e.......',
+  '......Qe.......',
+  '......Qeq......',
+  '..e...Qeq......',
+  '.Qe..QQeq...e..',
+  '.Qeq.QQeqq.Qe..',
+  'QQeq.QQeqqQQeq.',
+  'QQeqqQQeqqQQeq.',
+  'QQeqqQQeqqQQeqd',
+  'dQeqqdQeqqdQeqd',
+];
+const CLUSTER = new PixelSprite(CLUSTER_ROWS, KEY);
+const CLUSTER_HANGING = new PixelSprite([...CLUSTER_ROWS].reverse(), KEY);
 
 export class Decor {
   private readonly seed: number;
@@ -34,108 +82,39 @@ export class Decor {
         y: this.y + 4,
         vx: (Math.random() - 0.5) * 12,
         vy: -Math.random() * 34 - 12,
-        color: Math.random() < 0.5 ? 'rgba(255,180,80,0.85)' : 'rgba(255,110,40,0.7)',
+        color: Math.random() < 0.5 ? '#ffa214' : '#ed7614',
         gravity: -30,
-        size: 2 + Math.random() * 2,
+        size: 2,
         life: 0.5 + Math.random() * 0.4,
-        shape: 'circle',
         drag: 0.98,
       });
     }
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
+    const cx = this.x + 8;
     if (this.kind === 'torch') {
-      const flicker = 0.8 + Math.sin(this.anim * 9 + this.seed * 6) * 0.12 + Math.random() * 0.06;
       if (this.mount === 'hanging') {
-        // Chain up to the ceiling.
-        ctx.strokeStyle = '#39323f';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(this.x + 8, this.y - this.hangLength);
-        ctx.lineTo(this.x + 8, this.y + 4);
-        ctx.stroke();
-        ctx.fillStyle = '#4a4652';
-        for (let i = 0; i < Math.floor(this.hangLength / 8); i++) {
-          ctx.fillRect(this.x + 6, this.y - this.hangLength + i * 8, 4, 4);
-        }
-        // Brazier bowl.
-        ctx.fillStyle = '#2b2a33';
-        ctx.beginPath();
-        ctx.moveTo(this.x - 2, this.y + 4);
-        ctx.lineTo(this.x + 18, this.y + 4);
-        ctx.lineTo(this.x + 14, this.y + 13);
-        ctx.lineTo(this.x + 2, this.y + 13);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#57505f';
-        ctx.fillRect(this.x - 2, this.y + 4, 20, 3);
+        // A chain up to the ceiling, link under link.
+        for (let y = this.y - this.hangLength; y < this.y; y += LINK.h * ART) LINK.draw(ctx, cx - LINK.w, y);
       } else {
-        // Iron stand rising from the floor.
-        ctx.fillStyle = '#2b2a33';
-        ctx.fillRect(this.x + 5, this.y + 8, 6, this.hangLength);
-        ctx.fillRect(this.x, this.y + 6 + this.hangLength, 16, 4);
-        ctx.fillStyle = '#4a4652';
-        ctx.beginPath();
-        ctx.moveTo(this.x - 1, this.y + 3);
-        ctx.lineTo(this.x + 17, this.y + 3);
-        ctx.lineTo(this.x + 13, this.y + 11);
-        ctx.lineTo(this.x + 3, this.y + 11);
-        ctx.closePath();
-        ctx.fill();
+        // An iron stand rising from the floor.
+        ctx.fillStyle = KEY.I;
+        const top = this.y + 8;
+        const bottom = this.y + 6 + this.hangLength;
+        ctx.fillRect(Math.round(cx / ART) * ART - ART, Math.round(top / ART) * ART, ART * 2, Math.max(ART, Math.round((bottom - top) / ART) * ART));
+        ctx.fillStyle = KEY.l;
+        ctx.fillRect(Math.round(cx / ART) * ART - ART, Math.round(top / ART) * ART, ART, Math.max(ART, Math.round((bottom - top) / ART) * ART));
+        FOOT.draw(ctx, cx - FOOT.w, bottom);
       }
-      glow(ctx, this.x + 8, this.y + 2, 62 * flicker, 'rgba(255,150,60,0.30)');
-      // Flame.
-      ctx.fillStyle = '#ff8a2b';
-      ctx.beginPath();
-      ctx.moveTo(this.x + 8, this.y - 12 * flicker);
-      ctx.quadraticCurveTo(this.x + 15, this.y + 2, this.x + 8, this.y + 7);
-      ctx.quadraticCurveTo(this.x + 1, this.y + 2, this.x + 8, this.y - 12 * flicker);
-      ctx.fill();
-      ctx.fillStyle = '#ffdf7a';
-      ctx.beginPath();
-      ctx.moveTo(this.x + 8, this.y - 5 * flicker);
-      ctx.quadraticCurveTo(this.x + 12, this.y + 2, this.x + 8, this.y + 5);
-      ctx.quadraticCurveTo(this.x + 4, this.y + 2, this.x + 8, this.y - 5 * flicker);
-      ctx.fill();
-    } else {
-      const pulse = 0.75 + Math.sin(this.anim * 2 + this.seed * 8) * 0.25;
-      const flip = this.mount === 'hanging' ? -1 : 1;
-      // Dimmed for the lit scene: a landmark, not the brightest thing on
-      // screen. Anything that outshines an enemy pulls the eye off the fight.
-      glow(ctx, this.x + 16, this.y + 16 * flip, 46 * pulse, 'rgba(99,230,255,0.13)');
-      ctx.save();
-      if (flip < 0) {
-        ctx.translate(0, this.y * 2 + 30);
-        ctx.scale(1, -1);
-      }
-      const shards: [number, number, number][] = [
-        [16, 30, 26],
-        [7, 30, 16],
-        [25, 30, 12],
-      ];
-      for (const [cx, base, height] of shards) {
-        ctx.fillStyle = PALETTE.crystalDeep;
-        ctx.beginPath();
-        ctx.moveTo(this.x + cx, this.y + base - height);
-        ctx.lineTo(this.x + cx + 5, this.y + base - height * 0.4);
-        ctx.lineTo(this.x + cx + 3, this.y + base);
-        ctx.lineTo(this.x + cx - 3, this.y + base);
-        ctx.lineTo(this.x + cx - 5, this.y + base - height * 0.4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = PALETTE.crystal;
-        ctx.globalAlpha = 0.5;
-        ctx.beginPath();
-        ctx.moveTo(this.x + cx, this.y + base - height);
-        ctx.lineTo(this.x + cx + 2, this.y + base - height * 0.35);
-        ctx.lineTo(this.x + cx, this.y + base);
-        ctx.lineTo(this.x + cx - 2, this.y + base - height * 0.35);
-        ctx.closePath();
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-      ctx.restore();
+      BOWL.draw(ctx, cx - BOWL.w, this.y + 2);
+      // The flame: three frames, each torch on its own clock.
+      const flame = FLAMES[Math.floor(this.anim * 9 + this.seed * 7) % FLAMES.length];
+      flame.draw(ctx, cx - flame.w, this.y + 2 - flame.h * ART);
+      return;
     }
+    // A cluster of crystals; hung from a roof it points down.
+    if (this.mount === 'hanging') CLUSTER_HANGING.draw(ctx, this.x + 16 - CLUSTER.w, this.y);
+    else CLUSTER.draw(ctx, this.x + 16 - CLUSTER.w, this.y + 30 - CLUSTER.h * ART);
   }
 }

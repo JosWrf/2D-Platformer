@@ -4,6 +4,7 @@ import { Level } from '../world/level';
 import { TILE, Tile } from '../world/tiles';
 import type { Light } from './lighting';
 import { zoneAt } from './palette';
+import { ART, PixelSprite } from './pixel';
 
 type PropKind =
   | 'tuft'
@@ -25,8 +26,12 @@ interface Prop {
   kind: PropKind;
   x: number;
   y: number;
-  /** 0..1, fixed per prop: drives size, tilt and animation offset. */
+  /** 0..1, fixed per prop: picks its variant, its facing and its timing. */
   seed: number;
+  /** Hangs from a ceiling rather than standing on a floor. */
+  hanging: boolean;
+  /** In a calm zone nothing sways and nothing flickers. */
+  calm: boolean;
 }
 
 /** Props that light their surroundings, and the colour they cast. */
@@ -37,6 +42,95 @@ const GLOWING: Partial<Record<PropKind, { rgb: string; radius: number }>> = {
   candle: { rgb: '255,178,96', radius: 82 },
 };
 
+/*
+ * The props, drawn for the grid: rows of characters, one per art pixel, in
+ * the palette's colours. Each kind has a few variants (picked per prop, and
+ * mirrored for half of them); what sways or flickers has a second frame.
+ * Light falls on them from the upper left like on everything else, and none
+ * is brighter than the hero - they dress the floor, they do not compete with
+ * what moves on it.
+ */
+const K = {
+  /** Leaf: deep, mid, tip. */
+  g: '#134c4c',
+  G: '#1e6f50',
+  t: '#33984b',
+  /** Stone: shadow, body, lit edge. */
+  s: '#1a1932',
+  S: '#2a2f4e',
+  l: '#424c6e',
+  /** Clay and wood. */
+  c: '#391f21',
+  C: '#5d2c28',
+  w: '#8a4836',
+  /** Bone, pale. */
+  b: '#424c6e',
+  B: '#657392',
+  /** Crystal of the caves. */
+  q: '#00396d',
+  Q: '#0069aa',
+  e: '#0098dc',
+  /** Crystal of the rift. */
+  v: '#3b1443',
+  V: '#622461',
+  u: '#93388f',
+  /** Flame. */
+  f: '#ed7614',
+  F: '#ffa214',
+  /** Iron. */
+  i: '#1a1932',
+  I: '#424c6e',
+  /** Petals. */
+  p: '#657392',
+  o: '#8a4836',
+} as const;
+
+function sprites(...variants: string[][]): PixelSprite[] {
+  return variants.map((rows) => new PixelSprite(rows, K));
+}
+
+/** Every kind: its variants, each [rest, moved] - the second frame equal to the first where nothing moves. */
+const ART_OF: Record<PropKind, PixelSprite[][]> = {
+  tuft: [
+    sprites(['..t..', 't.G.t', '.GGG.', 'gGgGg'], ['.t...', '.tG.t', '.GGG.', 'gGgGg']),
+    sprites(['.t...t.', '.G.t.G.', '.GGGGG.', 'gGgGgGg'], ['t...t..', '.G.t.G.', '.GGGGG.', 'gGgGgGg']),
+    sprites(['t..', 'G.t', 'GG.', 'gGg'], ['.t.', 'G.t', 'GG.', 'gGg']),
+  ],
+  fern: [
+    sprites(
+      ['...t.....', 't..G..t..', '.G.G.G...', '..GGG..t.', 'G..G..G..', '.GGgGG...', '..ggg....'],
+      ['....t....', '.t.G..t..', '.G.G.G...', '..GGG.t..', '.G.G..G..', '.GGgGG...', '..ggg....'],
+    ),
+  ],
+  flower: [
+    sprites(['.p.', 'pop', '.p.', '.G.', 'gG.', '.g.'], ['.p.', 'pop', '.p.', '.G.', '.Gg', '.g.']),
+    sprites(['o.o', '.o.', '.G.', 'GG.', '.g.'], ['o.o', '.o.', '.G.', '.GG', '.g.']),
+  ],
+  shroom: [
+    sprites(['.tGG.', 'tGGGG', '..g..', '..g..']),
+    sprites(['..tG..', '.tGGG.', 'GGGGGG', '...g..', '...g..', '...g..']),
+  ],
+  rubble: [sprites(['..ll...', '.lSSl..', 'sSSSs.l', 'ssSssSs']), sprites(['.l..', 'lSS.', 'sSs.']), sprites(['...ll.', 'l.lSSl', 'SsSSss'])],
+  urn: [sprites(['.cCc.', '..C..', '.wCC.', 'wCCCc', 'wCCCc', '.CCc.', '..c..']), sprites(['CcC', '.w.', 'wCc', 'wCc', '.c.'])],
+  stalagmite: [
+    sprites(['..l..', '..lS.', '.lSS.', '.lSSs', 'lSSSs', 'lSSSs']),
+    sprites(['...l...', '...lS..', '..lSS..', '..lSSs.', '.lSSSs.', '.lSSSSs', 'lSSSSSs', 'lSSSSSs']),
+  ],
+  shard: [sprites(['..e..', '.Qe..', '.Qeq.', 'QQeq.', 'QQeqq', 'QQeqq']), sprites(['.e.', 'Qe.', 'Qeq', 'Qeq', 'Qeq'])],
+  riftshard: [
+    sprites(['..u....', '.Vu....', '.Vuv...', 'VVuv.u.', 'VVuvVuv', 'VVuvVuv']),
+    sprites(['.u.', 'Vu.', 'Vuv', 'Vuv', 'Vuv']),
+  ],
+  bones: [sprites(['B.....B', 'BBBBBBB', 'b.....b']), sprites(['.BB..', 'BbbBB', '..b..'])],
+  candle: [sprites(['.F.', '.f.', 'BB.', 'Bb.', 'Bb.', 'bb.'], ['.f.', '.F.', 'BB.', 'Bb.', 'Bb.', 'bb.'])],
+  vine: [
+    sprites(['.g.', '.G.', 'tG.', '.G.', '.Gt', '.g.', 'tg.', '.g.', '.G.'], ['.g.', '.G.', '.Gt', '.G.', 'tG.', '.g.', '.gt', '.g.', '.G.']),
+    sprites(['g.', 'G.', 'Gt', 'G.', 'g.', 'tG', '.g'], ['g.', 'G.', 'tG', 'G.', '.g', 'Gt', 'g.']),
+  ],
+  stalactite: [sprites(['lSSSs', 'lSSs.', '.lSs.', '.lS..', '..S..']), sprites(['lSSSSs', 'lSSSs.', '.lSSs.', '.lSs..', '..lS..', '..S...', '..S...'])],
+  chain: [sprites(['.I.', 'I.I', '.I.', '.i.', '.I.', 'I.I', '.I.', '.i.', '.I.', 'I.I', '.I.'])],
+};
+
 /**
  * Scatters the level with the small things that make a place look inhabited:
  * grass and ferns in the forest, rubble in the ruins, glowing mushrooms and
@@ -44,7 +138,8 @@ const GLOWING: Partial<Record<PropKind, { rgb: string; radius: number }>> = {
  *
  * Everything is derived from the tile map with a per-tile seed, so no level
  * data has to be maintained by hand and the result is identical on every run.
- * The throne room is left bare on purpose - the arena should read as swept.
+ * The throne room is left bare on purpose - the arena should read as swept -
+ * and nothing green grows in the castle.
  */
 export class Scatter {
   /** Sorted by x, which lets the draw pass cut to the visible slice. */
@@ -58,39 +153,38 @@ export class Scatter {
         const solid = tile === Tile.Solid || tile === Tile.Earth;
         if (!solid) continue;
 
-        const zone = zoneAt(tx * TILE).name;
-        if (zone === 'throne') continue;
+        const zone = zoneAt(tx * TILE);
+        if (zone.name === 'throne') continue;
         const rng = new Rng(tx * 7919 + ty * 104729 + 17);
 
         // Standing on a surface.
         if (level.tileAt(tx, ty - 1) === Tile.Empty) {
           const roll = rng.next();
-          const kind = Scatter.surfaceProp(zone, roll, rng);
+          const kind = Scatter.surfaceProp(zone.name, roll, rng);
           if (kind) {
             this.push({
               kind,
               x: tx * TILE + rng.range(4, TILE - 4),
               y: ty * TILE,
               seed: rng.next(),
+              hanging: false,
+              calm: zone.calm,
             });
           }
         }
 
         // Hanging from a ceiling.
         if (level.tileAt(tx, ty + 1) === Tile.Empty && rng.next() < 0.2) {
+          const z = zone.name;
           const kind: PropKind =
-            zone === 'caverns' || zone === 'rift' || zone === 'riftend' || zone === 'crystalworld'
-              ? 'stalactite'
-              : zone === 'drowned'
-                ? 'vine'
-              : zone === 'castle'
-                ? 'chain'
-                : 'vine';
+            z === 'caverns' || z === 'rift' || z === 'riftend' || z === 'crystalworld' ? 'stalactite' : z === 'castle' ? 'chain' : 'vine';
           this.push({
             kind,
             x: tx * TILE + rng.range(6, TILE - 6),
             y: (ty + 1) * TILE,
             seed: rng.next(),
+            hanging: true,
+            calm: zone.calm,
           });
         }
       }
@@ -192,213 +286,17 @@ export class Scatter {
     }
     for (let i = lo; i < this.props.length && this.props[i].x <= right; i++) {
       const prop = this.props[i];
-      ctx.save();
-      ctx.translate(Math.round(prop.x), Math.round(prop.y));
-      Scatter.drawProp(ctx, prop, time);
-      ctx.restore();
-    }
-  }
-
-  private static drawProp(ctx: CanvasRenderingContext2D, prop: Prop, time: number): void {
-    const s = prop.seed;
-    const sway = Math.sin(time * 1.3 + s * 9) * (1 + s);
-
-    switch (prop.kind) {
-      case 'tuft': {
-        ctx.fillStyle = s < 0.5 ? '#2f7a3c' : '#3c9147';
-        for (let i = 0; i < 3; i++) {
-          const lean = sway * (0.4 + i * 0.3);
-          ctx.fillRect(-3 + i * 3 + lean * 0.4, -3 - i, 2, 3 + i * 2);
-          ctx.fillRect(-3 + i * 3 + lean, -6 - i * 2, 2, 3);
-        }
-        break;
-      }
-      case 'fern': {
-        ctx.fillStyle = '#256b39';
-        for (let i = 0; i < 4; i++) {
-          const a = -1.9 + i * 0.42 + sway * 0.05;
-          const len = 9 + s * 6;
-          ctx.save();
-          ctx.rotate(a);
-          ctx.fillRect(0, -1, len, 2);
-          ctx.fillRect(len * 0.5, -3, 3, 2);
-          ctx.restore();
-        }
-        break;
-      }
-      case 'flower': {
-        ctx.fillStyle = '#2f7a3c';
-        ctx.fillRect(sway * 0.3, -7, 1.5, 7);
-        ctx.fillStyle = s < 0.5 ? '#e8e0f6' : '#f2c14e';
-        ctx.beginPath();
-        ctx.arc(sway * 0.3 + 0.7, -8, 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      case 'shroom': {
-        // The one prop that carries light: cap glows, stem stays dark.
-        const h = 5 + s * 5;
-        const r = 3 + s * 3;
-        const pulse = 0.75 + Math.sin(time * 1.7 + s * 8) * 0.25;
-        ctx.fillStyle = '#1d3a33';
-        ctx.fillRect(-1, -h, 2, h);
-        const g = ctx.createRadialGradient(0, -h, 0, 0, -h, r * 3.4);
-        g.addColorStop(0, `rgba(128,236,190,${(0.17 * pulse).toFixed(3)})`);
-        g.addColorStop(1, 'rgba(128,236,190,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(-r * 3.4, -h - r * 3.4, r * 6.8, r * 6.8);
-        ctx.fillStyle = '#3f9a74';
-        ctx.beginPath();
-        ctx.ellipse(0, -h, r * 1.25, r * 0.5, 0, Math.PI, 0);
-        ctx.fill();
-        ctx.fillStyle = '#6bbd99';
-        ctx.fillRect(-r * 0.4, -h - r * 0.5, r * 0.5, 1.5);
-        break;
-      }
-      case 'rubble': {
-        ctx.fillStyle = '#3a3446';
-        ctx.fillRect(-5, -3, 5, 3);
-        ctx.fillRect(1, -4, 4, 4);
-        ctx.fillStyle = '#4e4759';
-        ctx.fillRect(-5, -3, 5, 1);
-        ctx.fillRect(1, -4, 4, 1);
-        break;
-      }
-      case 'urn': {
-        ctx.fillStyle = '#6a4b39';
-        ctx.beginPath();
-        ctx.ellipse(0, -5, 4, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#8a6448';
-        ctx.fillRect(-2, -11, 4, 3);
-        ctx.fillStyle = 'rgba(255,220,180,0.18)';
-        ctx.fillRect(-3, -8, 2, 5);
-        break;
-      }
-      case 'stalagmite': {
-        const h = 9 + s * 16;
-        ctx.fillStyle = '#2a2f42';
-        ctx.beginPath();
-        ctx.moveTo(-3 - s * 2, 0);
-        ctx.lineTo(0, -h);
-        ctx.lineTo(3 + s * 2, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = 'rgba(120,180,220,0.16)';
-        ctx.fillRect(-1, -h + 2, 1.5, h - 3);
-        break;
-      }
-      case 'shard': {
-        const h = 7 + s * 9;
-        ctx.fillStyle = 'rgba(72,168,196,0.7)';
-        ctx.beginPath();
-        ctx.moveTo(-2.5, 0);
-        ctx.lineTo(0, -h);
-        ctx.lineTo(2.5, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = 'rgba(150,196,214,0.7)';
-        ctx.fillRect(-0.6, -h + 2, 1.2, h - 3);
-        break;
-      }
-      case 'riftshard': {
-        // The rift's own crystal: the cavern shard is cyan, which fought the
-        // violet rock it stands on here.
-        const h = 8 + s * 12;
-        const w = 2.2 + s * 1.6;
-        // Barely a pulse: these stand on every second tile, and a whole field
-        // of them breathing in step is what made the rift hard to look at.
-        const pulse = 0.9 + Math.sin(time * 0.5 + s * 9) * 0.1;
-        const g = ctx.createRadialGradient(0, -h * 0.6, 0, 0, -h * 0.6, h * 1.8);
-        g.addColorStop(0, `rgba(176,120,255,${(0.16 * pulse).toFixed(3)})`);
-        g.addColorStop(1, 'rgba(176,120,255,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(-h * 1.8, -h * 2.4, h * 3.6, h * 3.6);
-        ctx.fillStyle = 'rgba(120,74,190,0.85)';
-        ctx.beginPath();
-        ctx.moveTo(-w, 0);
-        ctx.lineTo(0, -h);
-        ctx.lineTo(w, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = `rgba(214,180,255,${(0.55 + pulse * 0.35).toFixed(2)})`;
-        ctx.fillRect(-0.6, -h + 2, 1.2, h - 3);
-        // A smaller splinter leaning against it, so it is not one lonely spike.
-        if (s > 0.45) {
-          ctx.fillStyle = 'rgba(120,74,190,0.7)';
-          ctx.beginPath();
-          ctx.moveTo(w * 0.8, 0);
-          ctx.lineTo(w * 2.2, -h * 0.55);
-          ctx.lineTo(w * 3, 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-        break;
-      }
-      case 'bones': {
-        ctx.fillStyle = '#b9bcc9';
-        ctx.save();
-        ctx.rotate((s - 0.5) * 0.6);
-        ctx.fillRect(-6, -2, 12, 2);
-        ctx.beginPath();
-        ctx.arc(-6, -1, 1.8, 0, Math.PI * 2);
-        ctx.arc(6, -1, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-        break;
-      }
-      case 'candle': {
-        const flicker = 0.8 + Math.sin(time * 8 + s * 11) * 0.2;
-        ctx.fillStyle = '#9c948a';
-        ctx.fillRect(-1.5, -8, 3, 8);
-        const g = ctx.createRadialGradient(0, -10, 0, 0, -10, 12);
-        g.addColorStop(0, `rgba(255,190,110,${(0.22 * flicker).toFixed(3)})`);
-        g.addColorStop(1, 'rgba(255,190,110,0)');
-        ctx.fillStyle = g;
-        ctx.fillRect(-12, -22, 24, 24);
-        ctx.fillStyle = '#c08f58';
-        ctx.beginPath();
-        ctx.ellipse(0, -10, 1.6, 2.6 * flicker, 0, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      case 'vine': {
-        const len = 14 + s * 30;
-        ctx.strokeStyle = '#1f5a33';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        for (let y = 0; y < len; y += 6) {
-          ctx.lineTo(Math.sin(time * 0.9 + s * 7 + y * 0.12) * (y / len) * 3, y);
-        }
-        ctx.stroke();
-        ctx.fillStyle = '#2f7a3c';
-        for (let y = 8; y < len; y += 11) {
-          const wob = Math.sin(time * 0.9 + s * 7 + y * 0.12) * (y / len) * 3;
-          ctx.fillRect(wob - 3, y, 3, 2);
-          ctx.fillRect(wob + 1, y + 4, 3, 2);
-        }
-        break;
-      }
-      case 'stalactite': {
-        const h = 10 + s * 18;
-        ctx.fillStyle = '#242a3c';
-        ctx.beginPath();
-        ctx.moveTo(-3 - s * 2, 0);
-        ctx.lineTo(0, h);
-        ctx.lineTo(3 + s * 2, 0);
-        ctx.closePath();
-        ctx.fill();
-        break;
-      }
-      case 'chain': {
-        const len = 12 + s * 26;
-        ctx.fillStyle = '#4a4652';
-        for (let y = 0; y < len; y += 6) {
-          ctx.fillRect(-2, y, 4, 4);
-        }
-        break;
-      }
+      const variants = ART_OF[prop.kind];
+      const frames = variants[Math.floor(prop.seed * variants.length)];
+      // Grass leans now and then and a flame flickers - each on its own
+      // clock, a whole frame at a time; in a calm zone they hold still.
+      const moving = frames.length > 1 && !prop.calm;
+      const rate = prop.kind === 'candle' ? 7 : 0.9;
+      const frame = moving ? frames[Math.floor(time * rate + prop.seed * 17) % 2] : frames[0];
+      const facing = prop.seed * 100 - Math.floor(prop.seed * 100) < 0.5 ? 1 : -1;
+      const x = prop.x - (frame.w * ART) / 2;
+      const y = prop.hanging ? prop.y : prop.y - frame.h * ART;
+      frame.draw(ctx, x, y, facing);
     }
   }
 }
