@@ -626,9 +626,9 @@ export const ZONES: Zone[] = [
     name: 'crystalworld',
     // Behind the rift, reached only by teleport. Nothing walks in here.
     start: ZONE_START.crystalworld,
-    // This colour is also the rim light along every ledge. Cyan carries a lot
-    // of luminance, so it is pulled down until the floor stops outshining the
-    // hero walking on it.
+    // This colour is also the rim light along the wall faces (the tops of
+    // ledges take their material's own highlight). Cyan carries a lot of
+    // luminance, so it is pulled down until no wall outshines the hero.
     sporeRgb: '126,188,226',
     darkness: 0.8,
     darkTint: '#02080f',

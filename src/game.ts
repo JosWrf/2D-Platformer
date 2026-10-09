@@ -1427,6 +1427,12 @@ export class Game implements World {
     for (const cp of this.checkpoints) {
       add(cp.x + 12, cp.y + 20, cp.activated ? 150 : 70, cp.activated ? '255,214,110' : '110,140,190', 0.8, 0.32);
     }
+    // A moving platform is the one piece of ground that has to be read while
+    // it moves: it keeps a little light of its own, untinted, so a mover
+    // crossing a dark cave is never a guess.
+    for (const platform of this.platforms) {
+      add(platform.x + platform.w / 2, platform.y + platform.h / 2, 70, '200,214,235', 0.55, 0);
+    }
     for (const p of this.projectiles) {
       const rgb =
         p.kind === 'orb'
