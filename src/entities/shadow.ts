@@ -16,11 +16,20 @@ const SHADOW_POISE = 7;
 /** How long a reel lasts, from a broken poise and from a parry. */
 const REEL = 0.9;
 const PARRIED_REEL = 1.15;
+/**
+ * How long it draws its blade back before the charge, the ring closing around
+ * it. His own charge starts with a plain cut on the press - and that cut, with
+ * the Flutklinge, throws his crescent - so the mirror's started with one too,
+ * out of nothing: no flare, no ring, from a sword's length where the crescent
+ * cannot miss. Measured with a hero who saw it 0.3 s late, that opening cut
+ * was three quarters of everything the shadow cost him.
+ */
+const DRAW_TIME = 0.5;
 
 type ShadowState = 'dormant' | 'rise' | 'duel' | 'reel' | 'fade' | 'dying';
 
 /** What the shadow's hands are doing this frame. */
-type Plan = 'stalk' | 'windup' | 'combo' | 'riposte' | 'charge' | 'leap' | 'volley' | 'recover' | 'guard' | 'roll' | 'step';
+type Plan = 'stalk' | 'windup' | 'combo' | 'riposte' | 'draw' | 'charge' | 'leap' | 'volley' | 'recover' | 'guard' | 'roll' | 'step';
 
 const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'parry', 'dash', 'down'];
 
@@ -504,8 +513,9 @@ export class Shadow extends Enemy {
         if (this.planTimer <= 0) this.setPlan('stalk', 0.2);
         break;
       case 'combo':
-        // Three cuts, the same cadence he has: each press lands in the window
-        // that queues the next swing.
+        // His cadence: each press lands in the window that queues the next
+        // swing. The second and third land in the same window, so it is two
+        // cuts - and their crescents - not three.
         b.facing = dx > 0 ? 1 : -1;
         if (dist > 46) a[toward] = true;
         if (this.presses < 3 && (b.attackTimer <= 0 || b.attackTimer < 0.2) && !this.wasDown.has('attack')) {
@@ -514,6 +524,13 @@ export class Shadow extends Enemy {
         }
         if (this.presses >= 3 && b.attackTimer <= 0) this.setPlan('recover', 0.65 * haste + 0.15);
         if (this.planTimer <= -1.5) this.setPlan('recover', 0.3);
+        break;
+      case 'draw':
+        // The tell before its charge: its eyes flare and a ring closes on it,
+        // the one his charge shows, before the blade has moved at all.
+        b.facing = dx > 0 ? 1 : -1;
+        this.flare = 1;
+        if (this.planTimer <= 0) this.setPlan('charge', 1.6);
         break;
       case 'charge':
         // A swing, then the blade held back until the ring closes - his own
@@ -614,7 +631,8 @@ export class Shadow extends Enemy {
       this.setPlan('windup', this.phaseTwo ? 0.3 : 0.38);
       audio.play('tell', 1.7);
     } else if (roll < 0.8) {
-      this.setPlan('charge', 1.6);
+      this.setPlan('draw', DRAW_TIME);
+      audio.play('tell', 1.25);
     } else if (p.onGround) {
       this.setPlan('leap', 1);
     } else {
@@ -818,6 +836,21 @@ export class Shadow extends Enemy {
     ctx.fillRect(ex - 3 - this.flare * 3, ey - 1 - this.flare * 2, 6 + this.flare * 6, 4 + this.flare * 4);
     if (this.flare > 0.05) glow(ctx, ex, ey, 18 + this.flare * 10, `rgba(190,150,255,${(0.5 * this.flare).toFixed(2)})`);
     ctx.restore();
+    // Drawing back for the charge: a broken ring closing on it, wider than the
+    // charge's own, which takes over once the blade has cut.
+    if (this.plan === 'draw' && this.state === 'duel') {
+      const t = clamp(1 - this.planTimer / DRAW_TIME, 0, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(170,120,255,${(0.3 + t * 0.5).toFixed(2)})`;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([6, 5]);
+      ctx.lineDashOffset = -t * 22;
+      ctx.beginPath();
+      ctx.arc(b.cx, b.cy - 2, 62 - t * 16, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     // His charge ring, in its colour: the tell has to read through the dye.
     if (b.chargeTimer > 0) {
       const t = Math.min(1, b.chargeTimer / b.chargeTime);

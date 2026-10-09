@@ -16,23 +16,29 @@
  *     two, and only those, he jumps under the head and swings in the air;
  *   - her fire: an ember is lobbed onto where he stood. Standing at the spot
  *     for a stump, facing it, with the fire coming from in front, he watches
- *     the coal (0.3 s late, judging its arc), steps back so it comes down just
- *     in front of him rather than on his head, and parries it - on his own
- *     guess of the moment, give or take 0.07 s, and only if at least 0.15 s
- *     were left when he first saw it. A turned ember flies flat at his height
- *     into the stump;
+ *     the coal (0.3 s late, judging its arc), steps back about a stride so it
+ *     comes down just in front of him rather than on his head, and parries it
+ *     - on his own guess of the moment, give or take 0.07 s, and only if at
+ *     least 0.15 s were left when he first saw it. A turned ember flies flat
+ *     at his height into the stump. On a ledge right above her fire, when the
+ *     flame head winds up he steps to the side first: a coal lobbed at him
+ *     there passes his height on its way up sooner than anyone sees it;
  *   - her breath (the stone head, and the crowned one that may borrow it):
  *     on the floor in its reach when one of them winds up, he stands, faces
- *     her and parries on the beat of the wind-up - from more than 60 px away,
- *     so she does not reel mid-breath (see the report: a reel then leaves the
- *     breath lying on the floor);
+ *     her and parries on the beat of the wind-up - from more than 60 px away
+ *     when there is time to get there, so she does not reel mid-breath (a
+ *     reel then leaves the breath lying on the floor - see the report); and
+ *     while one of those heads is up he does not wait about under her middle;
  *   - her venom: on the floor near her when the venom head winds up, he keeps
- *     running until the globs are down, and keeps out of the pools after;
+ *     running - away from the side the head leans to, where the globs come
+ *     down - until the spit is over, and keeps out of the puddles, which come
+ *     where he stood when she spat (not where the globs land - see the report);
  *   - rocks: out of any column the ceiling is marked to drop in; anything
  *     thrown that will come down where he stands: out from under it, and not
- *     into it - a pool in the way he hops over;
+ *     into it - a puddle in the way he hops over;
  *   - jumps: to climb (the steps are the design), to cut the two heads above,
- *     and over a pool - never into something already in the air.
+ *     and over a puddle - never into something already in the air, and he
+ *     swings at no head while her breath may be under way.
  *
  * Everything about her and what she throws comes through the 0.3 s lag; the
  * room (floor, steps, where the stumps hang) is read once, as anyone sees it.
@@ -77,7 +83,7 @@ export default function reader(g, h) {
   /** Where he has been, frame by frame: where he stood when she spat. */
   const trail = [];
   const seenBlobs = new Set();
-  let spits = []; // { from, x, n }: the puddles coming, as he has learned them
+  let spits = []; // { seen, from, until, xs }: the puddles coming, as he has learned them
   let lastSurface = null;
   let G = null;
 
@@ -377,7 +383,9 @@ export default function reader(g, h) {
         run = { key: windKey, until: now + toBegin + 52, dir: room >= 150 || room >= (pref > 0 ? l : r) ? pref : -pref };
       }
     }
-    if (run && now > run.until) run = null;
+    const breathers = v.necks.some((n) => (n.kind === 'stone' || n.kind === 'crown') && n.state === 'head');
+    if (run && now > run.until && !(breathers && Math.abs(p.cx - G.cx) < 74)) run = null;
+    if (run && now > run.until + 40) run = null;
     if (run && sNow) {
       // Out of the way already, or about to run into something: stop running.
       const k = danger(p.cx + run.dir * 20);
@@ -385,10 +393,14 @@ export default function reader(g, h) {
     }
 
     /* ---------------------------------------------- her fire on its way up */
+    // With a stump open she throws a second coal 78 px to his right, and on
+    // its way up that one crosses anyone standing just right of her fire.
     let aside = null;
-    if (wind === 'flame' && sNow && !G.offFire(p.cx, sNow)) {
+    const twoCoals = v.necks.some((n) => n.state === 'stump');
+    const wideClear = (x) => !twoCoals || x < G.flame.x || x - G.flame.x > 115;
+    if (wind === 'flame' && sNow && (!G.offFire(p.cx, sNow) || (sNow.clearOfFire && !wideClear(p.cx)))) {
       const need = sNow.clearOfFire + 4;
-      const xs = [G.flame.x - need, G.flame.x + need].filter((x) => x > sNow.x0 - 6 && x < sNow.x1 + 6);
+      const xs = [G.flame.x - need, twoCoals ? G.flame.x + 120 : G.flame.x + need].filter((x) => x > sNow.x0 - 6 && x < sNow.x1 + 6);
       if (xs.length) aside = xs.sort((u, w) => Math.abs(u - p.cx) - Math.abs(w - p.cx))[0];
     }
 
@@ -408,9 +420,15 @@ export default function reader(g, h) {
         noJump = true;
         hold = true;
         wantFace = Math.sign(G.cx - p.cx) || 1;
-        if (Math.abs(p.cx - G.cx) < 72) {
+        // Within 60 px of her middle a parry makes her reel - mid-breath, and
+        // the breath is left lying. Out of there first, if there is time to
+        // stop and turn before the guard goes up; never on the move with it up.
+        const toPress = guard.contact - 7 + guard.jitter - now;
+        if (!guard.pressed && Math.abs(p.cx - G.cx) < 70 && toPress > 6) {
+          const outs = [G.cx - 80, G.cx + 80].filter((x) => x > G.left + 14 && x < G.right - 14 && !danger(x));
+          const out = (outs.length ? outs : [G.cx + (p.cx < G.cx ? -80 : 80)]).sort((u, w) => Math.abs(u - p.cx) - Math.abs(w - p.cx))[0];
           hold = false;
-          goalX = G.cx + (p.cx < G.cx ? -76 : 76);
+          goalX = out;
         }
         if (guard.ok && !guard.pressed && now >= guard.contact - 7 + guard.jitter && p.parryCooldown <= 0) {
           guard.pressed = true;
@@ -530,7 +548,6 @@ export default function reader(g, h) {
         // it - and, while a head that breathes is up, not within 70 px of her
         // middle, where a parry makes her reel.
         const hd = task.hd;
-        const breathers = v.necks.some((n) => (n.kind === 'stone' || n.kind === 'crown') && n.state === 'head');
         let spots = [
           { x: hd.x - 25, face: 1 },
           { x: hd.x + 25, face: -1 },
@@ -604,6 +621,12 @@ export default function reader(g, h) {
       }
     }
     if (!here) dodge = null;
+    // And not waiting about right under her middle while a head that breathes
+    // is up: there the breath reaches him on its first frame.
+    if (sNow && sNow.floor && breathers && !run && !(hold && guard) && goalX !== null && Math.abs(goalX - G.cx) < 70) {
+      const outs = [G.cx - 76, G.cx + 76].filter((x) => !danger(x));
+      if (outs.length) goalX = outs.sort((u, w) => Math.abs(u - p.cx) - Math.abs(w - p.cx))[0];
+    }
 
     // Towards the goal - letting go in time to stop on it, not past it.
     const dist = goalX !== null ? goalX - p.cx : 0;

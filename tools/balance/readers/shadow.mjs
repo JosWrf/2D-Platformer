@@ -9,8 +9,9 @@
  * up to 0.07 s): both cuts and their crescents pass under him, and he comes
  * down in its follow-through and cuts there. The rest:
  *
- *   - its charged blow: a plain cut first - that one comes unannounced and
- *     he takes it - then the ring, long enough to be read, and the heavy blow
+ *   - its charged blow: drawn back for 0.5 s first, a broken ring closing on
+ *     it - he goes straight up when it has closed, over the plain cut and its
+ *     crescent - then the ring, long enough to be read, and the heavy blow
  *     when it is close: that one he parries, on the rhythm of the ring and the
  *     walk in, with a person's error in the press (up to 0.07 s either way);
  *   - its leap: he stands, faces where it will come down - past him - and
@@ -110,7 +111,7 @@ export default function reader(g, h) {
     /* --------------------------------------------- what it does, answered */
     if (key !== seenKey) {
       seenKey = key;
-      if (v.state === 'duel' && v.plan === 'windup' && uLedge) {
+      if (v.state === 'duel' && (v.plan === 'windup' || v.plan === 'draw') && uLedge) {
         // Its combo up on a board: nothing to jump. Out from under it.
         dbg({ ev: 'ledge-combo', dist: Math.round(dist) });
         fleeDir = -Math.sign(dx) || -p.facing;
@@ -124,6 +125,10 @@ export default function reader(g, h) {
         openFrom = wf + Math.round((start + 0.62) * 60);
         openUntil = openFrom + Math.round((p2 ? 0.67 : 0.8) * 60);
         decide('jump', Math.max(0, start - (dist < 56 ? 0.06 : 0) + jitter()), 'combo', face);
+      } else if (v.state === 'duel' && v.plan === 'draw' && dist < 170) {
+        // Drawn back, the ring closing: the plain cut comes the moment it has
+        // closed, and its crescent with it. Straight up as it comes.
+        decide('jump', Math.max(0, rem - (dist < 56 ? 0.06 : 0) + jitter()), 'draw', face);
       } else if (v.state === 'duel' && v.plan === 'charge') {
         // A plain cut (on him already, if he was in reach), the ring: ready
         // 0.585 s into the move. Then in to 52 px of him, the blow loosed, and
