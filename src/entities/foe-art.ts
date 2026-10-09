@@ -259,23 +259,23 @@ export const BAT = new Sheet<BatFrame>(
     dive: batFrame(WING_TUCK, BAT_BODY, 1, 5),
   },
   {
-    a: '#3b1443',
-    b: '#622461',
-    g: '#93388f',
-    c: '#622461',
-    d: '#93388f',
-    f: '#ca52c9',
+    a: '#622461',
+    b: '#93388f',
+    g: '#f389f5',
+    c: '#93388f',
+    d: '#ca52c9',
+    f: '#f389f5',
     e: '#f5555d',
     E: '#fdd2ed',
     k: '#1c121c',
     w: '#ffffff',
   },
   {
-    ruins: { a: '#391f21', b: '#5d2c28', g: '#8a4836', c: '#5d2c28', d: '#8a4836', f: '#bf6f4a', e: '#ffc825' },
-    caverns: { a: '#3b1443', b: '#622461', g: '#ca52c9', c: '#622461', d: '#93388f', f: '#f389f5', e: '#ffeb57' },
-    drowned: { a: '#3b1443', b: '#622461', g: '#ca52c9', c: '#622461', d: '#93388f', f: '#f389f5', e: '#ffa214' },
-    castle: { a: '#1a1932', b: '#2a2f4e', g: '#657392', c: '#424c6e', d: '#657392', f: '#92a1b9', e: '#ffc825' },
-    rift: { a: '#0c2e44', b: '#134c4c', g: '#33984b', c: '#134c4c', d: '#33984b', f: '#5ac54f', e: '#ffc825' },
+    ruins: { a: '#5d2c28', b: '#8a4836', g: '#e69c69', c: '#8a4836', d: '#bf6f4a', f: '#e69c69', e: '#ffc825' },
+    caverns: { a: '#622461', b: '#93388f', g: '#fdd2ed', c: '#93388f', d: '#ca52c9', f: '#fdd2ed', e: '#ffeb57' },
+    drowned: { a: '#93388f', b: '#ca52c9', g: '#fdd2ed', c: '#ca52c9', d: '#f389f5', f: '#fdd2ed', e: '#ffa214' },
+    castle: { a: '#2a2f4e', b: '#424c6e', g: '#c7cfdd', c: '#657392', d: '#92a1b9', f: '#c7cfdd', e: '#ffc825' },
+    rift: { a: '#134c4c', b: '#1e6f50', g: '#99e65f', c: '#1e6f50', d: '#5ac54f', f: '#99e65f', e: '#ffc825' },
   },
 );
 
@@ -303,14 +303,53 @@ const SK_CAPE_B: Grid = ['.rpp', 'rppq', 'pppq', 'ppqq', 'ppq.', 'qpq.', '.q.q',
 
 const SK_BACK_ARM: Grid = ['c', 'c', 'b', 'c'];
 
-/** Sword held out at the hero, a hair above level. */
-const SK_ARM_OUT: Grid = ['b...g......', '.bhhgssssst', '....guss...'];
+/**
+ * Its sword is a real one: a blade two pixels deep - lit along its back, a
+ * shade darker along its edge, a fleck of rust - ten long, behind a crossguard
+ * that stands out above and below it. Held out at the hero, a hair above level.
+ */
+const SK_ARM_OUT: Grid = ['b...g...........', '.bhhgssssssssss.', '....gttuttttttt.', '....g...........'];
 /** Sword up over the skull: the wind-up. */
-const SK_ARM_UP: Grid = ['..s', '..s', '..s', '..t', '..s', '..u', '..s', '..s', '.ggg', '..h', '.bh', 'b..'];
+const SK_ARM_UP: Grid = [
+  '..s..',
+  '..st.',
+  '..st.',
+  '..st.',
+  '..st.',
+  '..ut.',
+  '..st.',
+  '..st.',
+  '..st.',
+  '..st.',
+  '.gggg',
+  '..h..',
+  '.bh..',
+  'b....',
+];
 /** Sword down and forward, at the end of the cut. */
-const SK_ARM_CUT: Grid = ['b........', '.bh......', '..gs.....', '..gss....', '....uss..', '......sst'];
+const SK_ARM_CUT: Grid = [
+  'b...........',
+  '.bh.........',
+  '.ggss.......',
+  '..gttss.....',
+  '....uttss...',
+  '......ttsss.',
+  '........ttt.',
+];
 /** Sword lowered, the tip near the floor: the breath after the cut. */
-const SK_ARM_LOW: Grid = ['b.....', '.b....', '..h...', '..gg..', '...s..', '...s..', '....s.', '....u.', '.....s', '.....t'];
+const SK_ARM_LOW: Grid = [
+  'b......',
+  '.b.....',
+  '..h....',
+  '.ggg...',
+  '..st...',
+  '..st...',
+  '...st..',
+  '...ut..',
+  '....st.',
+  '....st.',
+  '.....s.',
+];
 
 export type SkeletonFrame = 'stand' | 'walk0' | 'walk1' | 'walk2' | 'walk3' | 'windup0' | 'windup1' | 'cut' | 'low';
 
@@ -340,8 +379,8 @@ export const SKELETON = new Sheet<SkeletonFrame>(
     walk1: skeleton(SK_LEGS_PASS, SK_CAPE_B, SK_ARM_OUT, 13, 16, SK_SKULL, -1),
     walk2: skeleton(flipX(SK_LEGS_STRIDE), SK_CAPE_A, SK_ARM_OUT, 13, 16, SK_SKULL),
     walk3: skeleton(flipX(SK_LEGS_PASS), SK_CAPE_B, SK_ARM_OUT, 13, 16, SK_SKULL, -1),
-    windup0: skeleton(SK_LEGS_STAND, SK_CAPE_B, SK_ARM_UP, 11, 4, SK_SKULL_GLARE),
-    windup1: skeleton(SK_LEGS_STAND, SK_CAPE_A, SK_ARM_UP, 11, 3, SK_SKULL_GLARE),
+    windup0: skeleton(SK_LEGS_STAND, SK_CAPE_B, SK_ARM_UP, 11, 2, SK_SKULL_GLARE),
+    windup1: skeleton(SK_LEGS_STAND, SK_CAPE_A, SK_ARM_UP, 11, 1, SK_SKULL_GLARE),
     cut: skeleton(SK_LEGS_STRIDE, SK_CAPE_B, SK_ARM_CUT, 13, 16, SK_SKULL, 0, (cells) =>
       smear(cells, 13, 20, 11, -1.75, 0.55, 3.2, 'x', 'y'),
     ),
@@ -383,45 +422,76 @@ export const SKELETON = new Sheet<SkeletonFrame>(
  * into a cross of white light, and the eyes in the hood go white with it.
  */
 
-const MG_HOOD: Grid = ['qq......', '.qpp....', '..pmnn..', '.pmnlnn.', '.pmnnnnk', 'pmmnnkkk', 'pmmnkeke', 'pmmnkkkk'];
-const MG_HOOD_CAST: Grid = ['qq......', '.qpp....', '..pmnn..', '.pmnlnn.', '.pmnnnnk', 'pmmnnkkk', 'pmmnkEkE', 'pmmnkkkk'];
-
-const MG_ROBE_A: Grid = [
-  '...pmnnnm....',
-  '..pmmnlnnm...',
-  '..pmmnlnnmp..',
-  '.pmmmnlnnmp..',
-  '.pmmmnnnnmmp.',
-  '.pmmmnnnnmmp.',
-  'pmmmmnnnnmmp.',
-  'pmmmmnnnnmmmp',
-  'pmmmmmnnnmmmp',
-  'qpmmmmnnnmmmp',
-  'qppmmmmnmmmpq',
-  '.qpp.mmmmmpq.',
-  '..q..pm.mp.q.',
-  '.....q...q...',
+/**
+ * The figure, whole: a hood with its peak bent back and its dark open towards
+ * the hero, two eyes in there; a mantle over broad shoulders; the far sleeve
+ * hanging at its back, the near one reaching out to the staff, the hand pale
+ * round it; the robe flaring to a ragged hem that it floats on. Lit from the
+ * upper left, a step lighter than the dark it stands in.
+ */
+const MG_FIGURE_A: Grid = [
+  '..qp...............',
+  '...pmp.............',
+  '....pnp............',
+  '....pnmp...........',
+  '...pnlnmp..........',
+  '...pnlnnmp.........',
+  '..pnlnnnnkk........',
+  '..pnlnnnkkkk.......',
+  '..pnnnnkkekek......',
+  '..pnnnnkkkkkk......',
+  '..pmnnnnkkkp.......',
+  '.pmnlnnnnnmmp......',
+  'pnlllnnnnnnmmp.....',
+  'pnlnnnnnnnnmnnnss..',
+  'pnnpnnnnnnmmmmmss..',
+  'pnnppnnnnnmpmmp....',
+  'pnnppnnnnnmmpp.....',
+  'pmn.pnnnnnmmmp.....',
+  'pmn.pnnnnnmmmmp....',
+  '.pm.pnnnnnnmmmp....',
+  '.pp.pmnnnnnmmmp....',
+  '...pmmnnnnnmmmmp...',
+  '...pmmnnnnnmmmmp...',
+  '..pmmmmnnnmmmmmmp..',
+  '..ppmm.pmmm.pmmpq..',
+  '...qp...pm...pq....',
 ];
 
-const MG_ROBE_B: Grid = [
-  '...pmnnnm....',
-  '..pmmnlnnm...',
-  '..pmmnlnnmp..',
-  '.pmmmnlnnmp..',
-  '.pmmmnnnnmmp.',
-  '.pmmmnnnnmmp.',
-  'pmmmmnnnnmmp.',
-  'pmmmmnnnnmmmp',
-  'pmmmmmnnnmmmp',
-  'qpmmmmnnnmmmp',
-  'qppmmmmnmmmpq',
-  'qpp.mmmmm.pq.',
-  '.q.pm.m.mp.q.',
-  '...q...q.....',
+/** The hem in its other flutter. */
+const MG_FIGURE_B: Grid = [
+  '..qp...............',
+  '...pmp.............',
+  '....pnp............',
+  '....pnmp...........',
+  '...pnlnmp..........',
+  '...pnlnnmp.........',
+  '..pnlnnnnkk........',
+  '..pnlnnnkkkk.......',
+  '..pnnnnkkekek......',
+  '..pnnnnkkkkkk......',
+  '..pmnnnnkkkp.......',
+  '.pmnlnnnnnmmp......',
+  'pnlllnnnnnnmmp.....',
+  'pnlnnnnnnnnmnnnss..',
+  'pnnpnnnnnnmmmmmss..',
+  'pnnppnnnnnmpmmp....',
+  'pnnppnnnnnmmpp.....',
+  'pmn.pnnnnnmmmp.....',
+  'pmn.pnnnnnmmmmp....',
+  '.pm.pnnnnnnmmmp....',
+  '.pp.pmnnnnnmmmp....',
+  '...pmmnnnnnmmmmp...',
+  '...pmmnnnnnmmmmp...',
+  '..pmmmmnnnmmmmmmp..',
+  '..pmmp.pmmm.ppmpq..',
+  '...q...pm..q...q...',
 ];
 
-/** The sleeve reaching out to the staff, the hand round it. */
-const MG_SLEEVE: Grid = ['.mmn..', 'pmnnss', '.pm..s'];
+/** The cast: the eyes in the hood gone white. */
+function glare(figure: Grid): Grid {
+  return figure.map((r) => r.replace(/e/g, 'E'));
+}
 
 const MG_STAFF: Grid = ['h', 'j', 'h', 'h', 'h', 'h', 'j', 'h', 'h', 'h', 'h', 'h', 'j', 'h', 'h', 'h', 'h', 'h', 'h'];
 
@@ -435,29 +505,27 @@ export const MAGE_W = 19;
 export const MAGE_H = 26;
 export const MAGE_SPINE = 7;
 
-function mage(robe: Grid, hood: Grid, orb: Grid, orbX: number, orbY: number): string[] {
+function mage(figure: Grid, orb: Grid, orbX: number, orbY: number): string[] {
   return compose(MAGE_W, MAGE_H, [
     [MG_STAFF, 14, 6],
-    [robe, 1, 12],
-    [hood, 3, 5],
-    [MG_SLEEVE, 9, 14],
+    [figure, 0, 0],
     [orb, orbX, orbY],
   ]);
 }
 
 export const MAGE = new Sheet<MageFrame>(
   {
-    idle0: mage(MG_ROBE_A, MG_HOOD, MG_ORB, 12, 1),
-    idle1: mage(MG_ROBE_B, MG_HOOD, MG_ORB, 12, 1),
-    cast0: mage(MG_ROBE_A, MG_HOOD_CAST, MG_ORB_CAST, 11, 0),
-    cast1: mage(MG_ROBE_B, MG_HOOD_CAST, MG_ORB_FLARE, 11, 0),
+    idle0: mage(MG_FIGURE_A, MG_ORB, 12, 1),
+    idle1: mage(MG_FIGURE_B, MG_ORB, 12, 1),
+    cast0: mage(glare(MG_FIGURE_A), MG_ORB_CAST, 11, 0),
+    cast1: mage(glare(MG_FIGURE_B), MG_ORB_FLARE, 11, 0),
   },
   {
-    q: '#1c121c',
-    p: '#3b1443',
-    m: '#622461',
-    n: '#93388f',
-    l: '#ca52c9',
+    q: '#3b1443',
+    p: '#622461',
+    m: '#93388f',
+    n: '#ca52c9',
+    l: '#f389f5',
     k: '#0e071b',
     e: '#f389f5',
     E: '#ffffff',
@@ -471,11 +539,11 @@ export const MAGE = new Sheet<MageFrame>(
     X: '#ffffff',
   },
   {
-    ruins: { p: '#391f21', m: '#5d2c28', n: '#8a4836', l: '#bf6f4a', e: '#ffc825', O: '#ffc825', W: '#ffeb57', o: '#ffa214', v: '#ed7614' },
+    ruins: { q: '#391f21', p: '#5d2c28', m: '#8a4836', n: '#bf6f4a', l: '#e69c69', e: '#ffc825', O: '#ffc825', W: '#ffeb57', o: '#ffa214', v: '#ed7614' },
     caverns: { e: '#ffc825', O: '#ffc825', W: '#ffeb57', o: '#ffa214', v: '#ed7614' },
     drowned: { e: '#d3fc7e', O: '#99e65f', W: '#d3fc7e', o: '#5ac54f', v: '#33984b' },
-    castle: { p: '#1a1932', m: '#2a2f4e', n: '#424c6e', l: '#657392', e: '#94fdff', O: '#94fdff', W: '#ffffff', o: '#0cf1ff', v: '#0098dc' },
-    rift: { p: '#0c2e44', m: '#134c4c', n: '#1e6f50', l: '#33984b', e: '#d3fc7e', O: '#99e65f', W: '#d3fc7e', o: '#5ac54f', v: '#33984b' },
+    castle: { q: '#1a1932', p: '#2a2f4e', m: '#424c6e', n: '#657392', l: '#92a1b9', e: '#94fdff', O: '#94fdff', W: '#ffffff', o: '#0cf1ff', v: '#0098dc' },
+    rift: { q: '#0c2e44', p: '#134c4c', m: '#1e6f50', n: '#33984b', l: '#5ac54f', e: '#d3fc7e', O: '#99e65f', W: '#d3fc7e', o: '#5ac54f', v: '#33984b' },
   },
 );
 
@@ -530,9 +598,9 @@ function zunder(stage: number, lit: boolean, step: 0 | 1 | 2): string[] {
     plot(cells, cx + 1, ey + 1, 'e');
     plot(cells, cx + 3, ey + 1, 'e');
   }
-  // The wick, and its spark once lit.
+  // The wick with an ember at its end, and its spark once lit.
   plot(cells, cx - 1, top - 1, 'w');
-  plot(cells, cx - 2, top - 2, 'w');
+  plot(cells, cx - 2, top - 2, lit ? 'w' : 'r');
   if (lit) {
     plot(cells, cx - 3, top - 3, 'F');
     if (stage % 2 === 1) plot(cells, cx - 3, top - 4, 'Y');
@@ -570,10 +638,10 @@ export const ZUNDER = new Sheet<ZunderFrame>(
     fuse3: zunder(3, true, 0),
   },
   {
-    '0': '#391f21',
-    '1': '#5d2c28',
-    '2': '#8a4836',
-    '3': '#bf6f4a',
+    '0': '#5d2c28',
+    '1': '#8a4836',
+    '2': '#bf6f4a',
+    '3': '#e69c69',
     '5': '#8e251d',
     '6': '#c64524',
     '7': '#e07438',
@@ -584,16 +652,14 @@ export const ZUNDER = new Sheet<ZunderFrame>(
     e: '#f6ca9f',
     E: '#ffffff',
     w: '#c7cfdd',
+    r: '#e07438',
     F: '#ffc825',
     l: '#391f21',
     L: '#1c121c',
   },
   {
-    ruins: { '0': '#391f21', '1': '#5d2c28', '2': '#8a4836', '3': '#bf6f4a' },
-    caverns: { '0': '#391f21', '1': '#5d2c28', '2': '#8a4836', '3': '#bf6f4a' },
-    drowned: { '0': '#571c27', '1': '#891e2b', '2': '#c42430', '3': '#ea323c' },
-    castle: { '0': '#0c2e44', '1': '#134c4c', '2': '#1e6f50', '3': '#33984b' },
-    rift: { '0': '#391f21', '1': '#5d2c28', '2': '#8a4836', '3': '#bf6f4a' },
+    drowned: { '0': '#891e2b', '1': '#c42430', '2': '#ea323c', '3': '#f5555d' },
+    castle: { '0': '#134c4c', '1': '#1e6f50', '2': '#33984b', '3': '#5ac54f' },
   },
 );
 
@@ -759,10 +825,10 @@ export const KLINGENLAEUFER = new Sheet<ChargerFrame>(
     D: '#f6ca9f',
   },
   {
-    ruins: { a: '#ea323c', b: '#891e2b', c: '#571c27', d: '#3b1443' },
+    ruins: { a: '#f5555d', b: '#c42430', c: '#891e2b', d: '#571c27' },
     caverns: { a: '#e69c69', b: '#8a4836', c: '#5d2c28', d: '#391f21' },
-    drowned: { a: '#ea323c', b: '#891e2b', c: '#571c27', d: '#3b1443' },
-    castle: { a: '#92a1b9', b: '#424c6e', c: '#2a2f4e', d: '#1a1932' },
+    drowned: { a: '#f5555d', b: '#c42430', c: '#891e2b', d: '#571c27' },
+    castle: { a: '#c7cfdd', b: '#657392', c: '#424c6e', d: '#2a2f4e' },
     rift: { a: '#e69c69', b: '#8a4836', c: '#5d2c28', d: '#391f21' },
   },
 );
