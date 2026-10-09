@@ -3,9 +3,14 @@ import { Input } from './core/input';
 import { Loop } from './core/loop';
 import { Game, VIEW_H, VIEW_W } from './game';
 import { ZONES } from './render/palette';
+import { ART_H, ART_W } from './render/pixel';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
-const ctx = canvas.getContext('2d', { alpha: false }) as CanvasRenderingContext2D;
+// The screen canvas is the art buffer's size and lives in main memory with
+// the game's other canvases (see makeCanvas); the browser scales it up.
+canvas.width = ART_W;
+canvas.height = ART_H;
+const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true }) as CanvasRenderingContext2D;
 ctx.imageSmoothingEnabled = false;
 
 const game = new Game();
@@ -13,15 +18,19 @@ const input = new Input();
 input.attach(window);
 
 /**
- * Fit the canvas into the window while keeping the 16:9 logical resolution.
+ * Fit the picture into the window, pixel for pixel.
  *
- * The floor used to be 0.4, which is 384 px of picture, and on anything
- * narrower than that the canvas simply hung over both edges of the window -
- * measured at 320 px wide, 32 px off each side, with the hearts on the left and
- * the progress bar on the right cut away. A phone held upright is exactly that
- * case. A small picture is worse than a big one; a cut-off picture is worse
- * than both, so it shrinks all the way down now, and the side padding gives way
- * first on narrow screens.
+ * The canvas holds the 480×270 art buffer (render/pixel.ts) itself, and the
+ * browser shows it at a whole number of device pixels per art pixel - the
+ * most that fits - with the rest of the window left around it. It used to be
+ * stretched by whatever fraction fitted, which made some pixels one screen
+ * pixel wide and their neighbours two, and it was drawn at the device's own
+ * resolution, so a HiDPI screen saw a finer drawing of every sprite than any
+ * other screen did.
+ *
+ * The floor of the old fit was 0.4, which hung the picture over both edges on
+ * a phone held upright; a picture too small for one whole pixel per art pixel
+ * still shrinks, by the fraction it needs, rather than be cut off.
  */
 function resize(): void {
   const frame = document.getElementById('frame') as HTMLElement;
@@ -29,14 +38,15 @@ function resize(): void {
   const pad = window.innerWidth < 520 ? 8 : 32;
   const maxW = window.innerWidth - pad;
   const maxH = window.innerHeight - legendHeight;
-  const scale = Math.max(0.2, Math.min(maxW / VIEW_W, maxH / VIEW_H));
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  canvas.width = Math.round(VIEW_W * dpr);
-  canvas.height = Math.round(VIEW_H * dpr);
-  canvas.style.width = `${Math.round(VIEW_W * scale)}px`;
-  canvas.style.height = `${Math.round(VIEW_H * scale)}px`;
-  frame.style.width = `${Math.round(VIEW_W * scale) + 4}px`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const dpr = window.devicePixelRatio || 1;
+  // Device pixels per art pixel.
+  const fit = Math.min((maxW * dpr) / ART_W, (maxH * dpr) / ART_H);
+  const cssScale = (fit >= 1 ? Math.floor(fit) : fit) / dpr;
+  canvas.style.width = `${ART_W * cssScale}px`;
+  canvas.style.height = `${ART_H * cssScale}px`;
+  frame.style.width = `${ART_W * cssScale + 4}px`;
+  // The game draws in its 960×540 logical view.
+  ctx.setTransform(ART_W / VIEW_W, 0, 0, ART_H / VIEW_H, 0, 0);
   ctx.imageSmoothingEnabled = false;
 }
 resize();

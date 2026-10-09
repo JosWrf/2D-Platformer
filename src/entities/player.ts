@@ -1333,7 +1333,7 @@ export class Player extends Body {
     const sq = this.squash;
     ctx.scale(this.facing * (1 - sq * 0.35), 1 + sq * 0.45);
 
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       // Carried on the back when idle, so it never crosses the torso.
       if (!pose) this.drawCarriedBlade(ctx);
       this.drawBody(ctx, pose);

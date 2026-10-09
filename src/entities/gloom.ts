@@ -1595,7 +1595,7 @@ export class Gloom extends Enemy {
     this.drawWaves(ctx);
     const lift = this.floorY - this.bottom;
     if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64, 0.3 * clamp(1 - lift / 150, 0, 1));
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       ctx.scale(this.facing, 1);

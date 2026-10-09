@@ -611,7 +611,7 @@ export class Vesper extends Enemy {
     shadow(ctx, this.cx, this.floorY, 60 * clamp(1 - height / 420, 0.3, 1), 0.3 * clamp(1 - height / 500, 0.2, 1));
     ctx.save();
     ctx.globalAlpha = this.fade;
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.cy);
       if (this.state === 'dive') {

@@ -799,7 +799,7 @@ export class Mimic extends Enemy {
       return;
     }
     const t = this.tongueRect();
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, W * 0.62, 0.34);

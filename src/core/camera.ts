@@ -100,11 +100,16 @@ export class Camera {
     this.shake = Math.min(MAX_SHAKE, this.shake + scaled * (1 - this.shake / MAX_SHAKE));
   }
 
+  /*
+   * Where the view is drawn from, on the art grid: two logical pixels to an
+   * art pixel (render/pixel.ts), so the world never sits half an art pixel
+   * off, smeared across two.
+   */
   get renderX(): number {
-    return Math.round(this.x + this.offsetX);
+    return Math.round((this.x + this.offsetX) / 2) * 2;
   }
 
   get renderY(): number {
-    return Math.round(this.y + this.offsetY);
+    return Math.round((this.y + this.offsetY) / 2) * 2;
   }
 }

@@ -1176,7 +1176,7 @@ export class Wyrm extends Enemy {
     if (this.state === 'stunned' || this.state === 'stuck') ang = this.hx > neck.x ? 0.1 : Math.PI - 0.1;
     const flip = Math.cos(ang) < 0;
     const flash = this.flash > 0 ? this.headFlash : 0;
-    withHitFlash(ctx, flash, () => {
+    withHitFlash(ctx, flash, (ctx) => {
       ctx.save();
       ctx.translate(this.hx, this.hy);
       ctx.rotate(ang);

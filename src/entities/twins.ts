@@ -1983,7 +1983,7 @@ export class Twins extends Enemy {
     }
     const air = Math.max(0, F - t.y);
     shadow(ctx, t.x, F, (t.who === 'sol' ? 34 : 28) * clamp(1 - air / 220, 0.35, 1), 0.32 * clamp(1 - air / 260, 0.3, 1));
-    withHitFlash(ctx, t.flash, () => {
+    withHitFlash(ctx, t.flash, (ctx) => {
       ctx.save();
       ctx.translate(t.x, t.y);
       ctx.scale(t.facing, 1);

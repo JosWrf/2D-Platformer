@@ -1,5 +1,6 @@
 import { audio } from '../core/audio';
 import { Rect, TAU, approach, clamp, damp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
+import { makeCanvas } from '../render/pixel';
 import { glow, shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { TILE } from '../world/tiles';
@@ -1727,7 +1728,7 @@ export class Jester extends Enemy {
     for (const f of this.all) if (f.casts) this.drawWallShadow(ctx, f);
     this.drawFloor(ctx);
     for (const f of this.order) {
-      if (f === this.me) withHitFlash(ctx, this.flash, () => this.drawFigure(ctx, f, false));
+      if (f === this.me) withHitFlash(ctx, this.flash, (ctx) => this.drawFigure(ctx, f, false));
       else this.drawFigure(ctx, f, false);
     }
     if (this.dropped) this.drawDroppedMask(ctx);
@@ -1802,12 +1803,7 @@ export class Jester extends Enemy {
     const LW = 220;
     const LH = 240;
     const down = 2;
-    if (!this.silCanvas) {
-      this.silCanvas = document.createElement('canvas');
-      this.silCanvas.width = LW / down;
-      this.silCanvas.height = LH / down;
-      this.silCtx = this.silCanvas.getContext('2d');
-    }
+    if (!this.silCanvas) ({ canvas: this.silCanvas, ctx: this.silCtx } = makeCanvas(LW / down, LH / down));
     const sc = this.silCtx;
     if (!sc) return;
     sc.setTransform(1, 0, 0, 1, 0, 0);
@@ -1820,7 +1816,6 @@ export class Jester extends Enemy {
     const flick = 0.94 + Math.sin(this.anim * 7.3) * 0.04 + Math.sin(this.anim * 17.1) * 0.02;
     ctx.save();
     ctx.globalAlpha = WALL_SHADOW_ALPHA * flick * f.fade * clamp(this.stageLight * 1.4, 0.4, 1);
-    ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.silCanvas as HTMLCanvasElement, s.x - LW / 2, s.y - (LH - 14), LW, LH);
     ctx.restore();
   }

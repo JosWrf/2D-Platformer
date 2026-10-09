@@ -635,3 +635,57 @@ export function mixHex(a: string, b: string, t: number): string {
   const bl = Math.round(ab + (bb - ab) * t);
   return `rgb(${r},${g},${bl})`;
 }
+
+/**
+ * The palette every frame is mapped to (render/pixel.ts, PaletteMapper):
+ * sixty-four colours in ramps - greys, cold slate blues down to a violet
+ * black, flesh and rust, fire from deep red to pale yellow, the greens of the
+ * forest and the teals of the drowned hall, the blues of the caves, violets for
+ * the rift and pinks for the crystal - each ramp shifting hue as it darkens,
+ * the way a painter's shadows do. The canvas makes tens of thousands of
+ * colours in a frame, from every gradient, glow and soft edge; mapped to these,
+ * with an ordered dither where something falls between two of them, a frame
+ * holds a few dozen, and every zone is drawn from the same box of paints.
+ */
+export const ART_PALETTE: readonly number[] = [
+  0x131313, 0x1b1b1b, 0x272727, 0x3d3d3d, 0x5d5d5d, 0x858585, 0xb4b4b4, 0xffffff,
+  0xc7cfdd, 0x92a1b9, 0x657392, 0x424c6e, 0x2a2f4e, 0x1a1932, 0x0e071b, 0x1c121c,
+  0x391f21, 0x5d2c28, 0x8a4836, 0xbf6f4a, 0xe69c69, 0xf6ca9f, 0xf9e6cf, 0xedab50,
+  0xe07438, 0xc64524, 0x8e251d, 0xff5000, 0xed7614, 0xffa214, 0xffc825, 0xffeb57,
+  0xd3fc7e, 0x99e65f, 0x5ac54f, 0x33984b, 0x1e6f50, 0x134c4c, 0x0c2e44, 0x00396d,
+  0x0069aa, 0x0098dc, 0x00cdf9, 0x0cf1ff, 0x94fdff, 0xfdd2ed, 0xf389f5, 0xdb3ffd,
+  0x7a09fa, 0x3003d9, 0x0c0293, 0x03193f, 0x3b1443, 0x622461, 0x93388f, 0xca52c9,
+  0xc85086, 0xf68187, 0xf5555d, 0xea323c, 0xc42430, 0x891e2b, 0x571c27, 0xff0040,
+];
+
+/** The same colours as "#rrggbb", for drawing with. */
+export const ART_HEX: readonly string[] = ART_PALETTE.map((c) => `#${c.toString(16).padStart(6, '0')}`);
+
+/**
+ * The palette's ramps, darkest first, by what they are for. Art drawn for the
+ * grid takes its colours from here: a colour of the palette comes through the
+ * mapping as it is, anything between two of them comes out as a dither of
+ * both - which is right for a falloff of light and wrong for a cloak.
+ */
+export const RAMP = {
+  /** Neutral greys, black to white. */
+  grey: ['#131313', '#1b1b1b', '#272727', '#3d3d3d', '#5d5d5d', '#858585', '#b4b4b4', '#ffffff'],
+  /** Cold slate, from violet black up to a pale steel: night, stone, metal. */
+  slate: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e', '#657392', '#92a1b9', '#c7cfdd'],
+  /** Flesh, wood and earth, from a plum black up to cream. */
+  earth: ['#1c121c', '#391f21', '#5d2c28', '#8a4836', '#bf6f4a', '#e69c69', '#f6ca9f', '#f9e6cf'],
+  /** Rust and copper. */
+  rust: ['#8e251d', '#c64524', '#e07438', '#edab50'],
+  /** Fire, deep orange to pale yellow. */
+  fire: ['#ff5000', '#ed7614', '#ffa214', '#ffc825', '#ffeb57'],
+  /** Leaf and moss, from a sea-blue black up to a lime light. */
+  green: ['#0c2e44', '#134c4c', '#1e6f50', '#33984b', '#5ac54f', '#99e65f', '#d3fc7e'],
+  /** Water and ice. */
+  blue: ['#03193f', '#00396d', '#0069aa', '#0098dc', '#00cdf9', '#0cf1ff', '#94fdff'],
+  /** Ultramarine to lilac: the rift and its magic. */
+  violet: ['#0c0293', '#3003d9', '#7a09fa', '#db3ffd', '#f389f5', '#fdd2ed'],
+  /** Plum and orchid. */
+  plum: ['#3b1443', '#622461', '#93388f', '#ca52c9', '#c85086'],
+  /** Blood, wine and rose. */
+  rose: ['#571c27', '#891e2b', '#c42430', '#ea323c', '#f5555d', '#f68187', '#ff0040'],
+} as const;

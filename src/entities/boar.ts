@@ -880,7 +880,7 @@ export class Boar extends Enemy {
 
   override draw(ctx: CanvasRenderingContext2D): void {
     this.drawWaves(ctx);
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, W * 0.95, 0.38);

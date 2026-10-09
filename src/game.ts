@@ -27,8 +27,9 @@ import { Decor } from './render/decor';
 import { Spores } from './render/atmosphere';
 import { LightPass, type Light } from './render/lighting';
 import { drawEdgeLight } from './render/rims';
+import { ART, ART_H, ART_W, PaletteMapper, makeCanvas } from './render/pixel';
 import { Scatter } from './render/scatter';
-import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
+import { ART_PALETTE, PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
 import { glow } from './render/sprites';
 import { drawTilemap } from './render/tilemap';
 import { drawBossBar, drawHeart, drawPanel, drawRelicBadge, drawSkillBadge, drawTextCentered, font } from './ui/hud';
@@ -47,6 +48,8 @@ const NO_INPUT = new Input();
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
+/** The outline round everything the hero reads: a deep violet-black, not black. */
+const OUTLINE = '#120c24';
 
 export type GameState = 'title' | 'playing' | 'paused' | 'dead' | 'victory';
 
@@ -312,8 +315,14 @@ export class Game implements World {
   private readonly lightPass = new LightPass(VIEW_W, VIEW_H);
   private readonly spores = new Spores(VIEW_W, VIEW_H);
   private readonly scatter = new Scatter(this.level);
-  private readonly castLayer = Game.makeLayer();
-  private readonly castCtx = this.castLayer.getContext('2d') as CanvasRenderingContext2D;
+  /** The world, its darkness and its rims: the first layer of the 480×270 art buffer. See render/pixel.ts. */
+  private readonly art = makeCanvas(ART_W, ART_H);
+  /** What the hero reads - himself, what he fights, what flies and what he picks up - drawn apart to be outlined. */
+  private readonly actors = makeCanvas(ART_W, ART_H);
+  /** The readable layer's silhouette, in the outline colour. */
+  private readonly silhouette = makeCanvas(ART_W, ART_H);
+  /** The palette every frame is mapped to, built on the first frame. */
+  private paletteMapper: PaletteMapper | null = null;
 
   player: Player;
   boss: Boss | null = null;
@@ -383,13 +392,6 @@ export class Game implements World {
   }
 
   /** Offscreen layer at view resolution, used for compositing whole passes. */
-  private static makeLayer(): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.width = VIEW_W;
-    canvas.height = VIEW_H;
-    return canvas;
-  }
-
   private buildFromSpawns(): void {
     for (const spawn of this.level.spawns) {
       const x = spawn.tx * TILE;
@@ -1577,129 +1579,166 @@ export class Game implements World {
     }
   }
 
-  /**
-   * Draws the enemies a second time, additively and faintly, on top of the
-   * darkness, so a bat in an unlit corner still reads as a bat.
-   *
-   * This goes through an offscreen layer on purpose. The entities reset
-   * globalAlpha inside their own draw calls (blink, trails, flashes), which
-   * silently ignores any alpha set here and stacks them at full strength -
-   * that is what bleached the hero white. Compositing the finished layer once
-   * keeps the intended weight.
-   *
-   * The hero is deliberately not in here: he already carries the brightest
-   * light in the game, and drawing him twice only costs him his colours.
-   */
-  private drawCastLight(ctx: CanvasRenderingContext2D): void {
-    const layer = this.castCtx;
-    let any = false;
-    layer.clearRect(0, 0, VIEW_W, VIEW_H);
-    layer.save();
-    layer.translate(-this.camera.renderX, -this.camera.renderY);
-    for (const enemy of this.enemies) {
-      if (enemy.dead || !enemy.castLight || !this.isVisible(enemy.x, enemy.y, 140)) continue;
-      // Drawn without its hit flash. The flash is a canvas filter, and a canvas
-      // filter costs a layer the size of the whole view per draw: measured, one
-      // flashing enemy took this pass from 0.4 ms to 64 ms, for the dozen
-      // frames after every explosion. In a faint additive overlay it is not
-      // visible anyway - the flash on the play field is the one that reads.
-      const flash = enemy.flash;
-      enemy.flash = 0;
-      enemy.draw(layer, this);
-      enemy.flash = flash;
-      any = true;
-    }
-    layer.restore();
-    if (!any) return;
-
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    // Weight chosen against a measurement: the brightest decoration in a scene
-    // must stay below the dimmest enemy, or the eye goes to the mushroom
-    // instead of the bat about to bite.
-    ctx.globalAlpha = 0.68;
-    ctx.drawImage(this.castLayer, 0, 0);
-    ctx.restore();
-  }
-
   /* --------------------------------------------------------------- render */
 
+  /**
+   * The frame, drawn into the art buffer and then onto the screen.
+   *
+   *   1. The world: sky, terrain, decoration - then the darkness over it.
+   *   2. What the hero has to read, on a layer of its own, outlined, and laid
+   *      over the darkness with only a breath of it: readable in any light,
+   *      the way the light pass used to buy by drawing every enemy twice.
+   *   3. Effects and spores, the screen's own flashes.
+   *   4. Words and the HUD.
+   *   5. The whole buffer mapped to the palette, then shown pixel for pixel.
+   */
   render(ctx: CanvasRenderingContext2D): void {
-    ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    this.background.draw(ctx, this.camera, this.time);
+    const a = this.art.ctx;
+    a.setTransform(1 / ART, 0, 0, 1 / ART, 0, 0);
+    a.imageSmoothingEnabled = false;
+    a.globalAlpha = 1;
+    a.globalCompositeOperation = 'source-over';
+    a.fillStyle = '#000000';
+    a.fillRect(0, 0, VIEW_W, VIEW_H);
+    this.background.draw(a, this.camera, this.time);
 
-    ctx.save();
-    ctx.translate(-this.camera.renderX, -this.camera.renderY);
-
-    drawTilemap(ctx, this.level, this.camera, this.time);
-    this.scatter.draw(ctx, this.camera, VIEW_W, this.time);
-
+    a.save();
+    a.translate(-this.camera.renderX, -this.camera.renderY);
+    drawTilemap(a, this.level, this.camera, this.time);
+    this.scatter.draw(a, this.camera, VIEW_W, this.time);
     for (const d of this.decor) {
-      if (this.isVisible(d.x, d.y, 120)) d.draw(ctx);
+      if (this.isVisible(d.x, d.y, 120)) d.draw(a);
     }
     for (const cp of this.checkpoints) {
-      if (this.isVisible(cp.x, cp.y, 120)) cp.draw(ctx);
+      if (this.isVisible(cp.x, cp.y, 120)) cp.draw(a);
     }
-    if (this.portal && this.isVisible(this.portal.x, this.portal.y, 200)) this.portal.draw(ctx);
+    if (this.portal && this.isVisible(this.portal.x, this.portal.y, 200)) this.portal.draw(a);
     for (const platform of this.platforms) {
-      if (this.isVisible(platform.x, platform.y, 200)) platform.draw(ctx);
+      if (this.isVisible(platform.x, platform.y, 200)) platform.draw(a);
     }
-    for (const pickup of this.pickups) {
-      if (!pickup.dead && this.isVisible(pickup.x, pickup.y, 100)) pickup.draw(ctx);
-    }
-    for (const enemy of this.enemies) {
-      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(ctx, this);
-    }
-    if (this.boss && !this.boss.dead && this.isVisible(this.boss.x, this.boss.y, 300)) {
-      this.boss.draw(ctx);
-    }
-    // The hero's silk on whatever it holds.
-    for (const enemy of this.enemies) {
-      if (!enemy.dead && enemy.snare > 0) drawSnare(ctx, enemy.x, enemy.y, enemy.w, enemy.h, enemy.snare);
-    }
-    if (this.boss && !this.boss.dead && this.boss.snare > 0) {
-      drawSnare(ctx, this.boss.x, this.boss.y, this.boss.w, this.boss.h, this.boss.snare);
-    }
-    for (const p of this.projectiles) {
-      if (this.isVisible(p.x, p.y, 120)) p.draw(ctx);
-    }
-    if (!this.player.dead || this.state === 'victory') this.player.draw(ctx, this);
-    this.particles.draw(ctx);
-    this.particles.drawTexts(ctx);
-
-    ctx.restore();
+    a.restore();
 
     const blend = zoneBlend(this.player.cx);
     const darkness = blend.from.darkness + (blend.to.darkness - blend.from.darkness) * blend.t;
     const tint = mixHex(blend.from.darkTint, blend.to.darkTint, blend.t);
     const lights = this.collectLights();
-    this.lightPass.draw(ctx, this.camera, lights, darkness, tint);
+    this.lightPass.draw(a, this.camera, lights, darkness, tint);
 
-    // Readability first: ledges, pit walls, then the characters themselves keep
-    // a share of their own colour on top of the darkness.
+    // Readability first: ledges and pit walls keep a rim of light.
     const sporeRgb = blend.t > 0.5 ? blend.to.sporeRgb : blend.from.sporeRgb;
-    drawEdgeLight(ctx, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb, lights);
-    this.drawCastLight(ctx);
+    drawEdgeLight(a, this.level, this.camera, VIEW_W, VIEW_H, sporeRgb, lights);
 
+    this.drawActors(a, darkness, tint);
+
+    a.save();
+    a.translate(-this.camera.renderX, -this.camera.renderY);
+    this.particles.draw(a);
+    a.restore();
     // Spores sit in front of the darkness, so they glow through it.
     // B quiets the spore field everywhere, not just in the zones that are calm
     // by design: it is the one switch for players who cannot look at movement,
     // and a drifting field of bright dots is movement.
     const calm = (blend.t > 0.5 ? blend.to.calm : blend.from.calm) || this.camera.motion <= 0;
-    this.spores.draw(ctx, this.camera, this.time, sporeRgb, calm);
+    this.spores.draw(a, this.camera, this.time, sporeRgb, calm);
+    this.drawLighting(a);
 
-    this.drawLighting(ctx);
-    if (this.state !== 'title') this.drawHud(ctx);
-    this.drawOverlays(ctx);
+    // Words and the HUD on the same grid and through the same palette: one
+    // picture, not a game with a sharper screen laid over it.
+    a.save();
+    a.translate(-this.camera.renderX, -this.camera.renderY);
+    this.particles.drawTexts(a);
+    a.restore();
+    if (this.state !== 'title') this.drawHud(a);
+    this.drawOverlays(a);
+
+    // The whole frame to the palette: one read of the buffer, and the pixels
+    // written straight onto the screen, which is the buffer's size. (Drawn
+    // across as a canvas instead, the screen would hold on to a copy of the
+    // buffer for every frame until the browser next showed one - and in a
+    // loop that never lets it, pay for them all at once.)
+    this.paletteMapper ??= new PaletteMapper(ART_PALETTE);
+    a.setTransform(1, 0, 0, 1, 0, 0);
+    const image = a.getImageData(0, 0, ART_W, ART_H);
+    this.paletteMapper.map(image, 14, Math.round(this.camera.renderX / ART), Math.round(this.camera.renderY / ART));
+    if (ctx.canvas.width === ART_W && ctx.canvas.height === ART_H) {
+      ctx.putImageData(image, 0, 0);
+    } else {
+      a.putImageData(image, 0, 0);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(this.art.canvas, 0, 0, VIEW_W, VIEW_H);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * The hero, what he fights, what is thrown and what lies about to be picked
+   * up: on their own layer, laid over the darkness with only a breath of it,
+   * and outlined - the layer's silhouette in the outline colour, one art pixel
+   * out in each of the four directions, underneath it.
+   */
+  private drawActors(target: CanvasRenderingContext2D, ambient: number, tint: string): void {
+    const c = this.actors.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+    c.clearRect(0, 0, ART_W, ART_H);
+    c.setTransform(1 / ART, 0, 0, 1 / ART, -this.camera.renderX / ART, -this.camera.renderY / ART);
+    c.imageSmoothingEnabled = false;
+    for (const pickup of this.pickups) {
+      if (!pickup.dead && this.isVisible(pickup.x, pickup.y, 100)) pickup.draw(c);
+    }
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(c, this);
+    }
+    if (this.boss && !this.boss.dead && this.isVisible(this.boss.x, this.boss.y, 300)) {
+      this.boss.draw(c);
+    }
+    // The hero's silk on whatever it holds.
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && enemy.snare > 0) drawSnare(c, enemy.x, enemy.y, enemy.w, enemy.h, enemy.snare);
+    }
+    if (this.boss && !this.boss.dead && this.boss.snare > 0) {
+      drawSnare(c, this.boss.x, this.boss.y, this.boss.w, this.boss.h, this.boss.snare);
+    }
+    for (const p of this.projectiles) {
+      if (this.isVisible(p.x, p.y, 120)) p.draw(c);
+    }
+    if (!this.player.dead || this.state === 'victory') this.player.draw(c, this);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+
+    const s = this.silhouette.ctx;
+    s.globalCompositeOperation = 'source-over';
+    s.clearRect(0, 0, ART_W, ART_H);
+    s.drawImage(this.actors.canvas, 0, 0);
+    s.globalCompositeOperation = 'source-in';
+    s.fillStyle = OUTLINE;
+    s.fillRect(0, 0, ART_W, ART_H);
+    s.globalCompositeOperation = 'source-over';
+
+    // Read first, but in the same night as everything else.
+    c.globalCompositeOperation = 'source-atop';
+    c.globalAlpha = Math.min(0.3, ambient * 0.22);
+    c.fillStyle = tint;
+    c.fillRect(0, 0, ART_W, ART_H);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+
+    target.save();
+    target.setTransform(1, 0, 0, 1, 0, 0);
+    target.drawImage(this.silhouette.canvas, -1, 0);
+    target.drawImage(this.silhouette.canvas, 1, 0);
+    target.drawImage(this.silhouette.canvas, 0, -1);
+    target.drawImage(this.silhouette.canvas, 0, 1);
+    target.drawImage(this.actors.canvas, 0, 0);
+    target.restore();
   }
 
   private drawLighting(ctx: CanvasRenderingContext2D): void {
-    // Vignette.
-    const g = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.35, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.95);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(0,0,0,0.55)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // (The soft vignette that used to darken the corners is gone: a smooth
+    // radial haze is the one thing a palette of a few colours cannot draw.)
 
     // Low-health pulse.
     if (this.state === 'playing' && this.player.hp <= 2 && !this.player.dead) {

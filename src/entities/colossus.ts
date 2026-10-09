@@ -974,7 +974,7 @@ export class Colossus extends Enemy {
     const hy = this.headY;
     const rgb = this.runeRgb();
     const flash = this.flash > 0 ? this.headFlash : 0;
-    withHitFlash(ctx, flash, () => {
+    withHitFlash(ctx, flash, (ctx) => {
       ctx.save();
       ctx.translate(hx, hy);
       // Sagging: the head tips forward, which on a face seen from the front
@@ -1195,7 +1195,7 @@ export class Colossus extends Enemy {
     }
 
     const flash = this.flash > 0 ? hand.flash : 0;
-    withHitFlash(ctx, flash, () => {
+    withHitFlash(ctx, flash, (ctx) => {
       ctx.save();
       ctx.translate(hand.x, hand.y);
       ctx.rotate(hand.turn);

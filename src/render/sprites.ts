@@ -1,3 +1,5 @@
+import { makeCanvas } from './pixel';
+
 export function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -160,27 +162,54 @@ export function slashCrescent(
   ctx.globalAlpha = 1;
 }
 
+/** Above this a struck sprite is drawn all white; below it the white fades. */
+const FLASH_SOLID = 0.8;
+const flashLayers = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
+
 /**
- * Flash a sprite white while it is taking damage. Uses a canvas filter so only
- * the sprite drawn inside the callback is affected.
+ * A sprite taking a hit: all white for its first two or three frames, then a
+ * fading white laid over it, which the palette turns into a dither.
  *
- * A canvas filter is not free: the browser allocates and processes a layer the
- * size of the whole canvas for every filtered draw. That is affordable once per
- * frame on the play field, and it is not affordable in the cast-light pass -
- * see Game.drawCastLight, which drops the flash for exactly this reason.
+ * The sprite is drawn into a layer of its own - the size of the canvas it is
+ * meant for, under the same transform - whitened there with source-atop, so
+ * only the sprite and never what is under it, and laid on in one go. The draw
+ * is handed the layer's context to draw with. This used to be a canvas filter
+ * (brightness and saturate), which the browser runs over a layer the size of
+ * the whole canvas for every draw - tens of milliseconds on a canvas kept in
+ * main memory - and which turned the struck hero lilac rather than white.
  */
 export function withHitFlash(
   ctx: CanvasRenderingContext2D,
   flash: number,
-  draw: () => void,
+  draw: (ctx: CanvasRenderingContext2D) => void,
 ): void {
-  if (flash > 0) {
-    ctx.save();
-    const amount = 1 + Math.min(1, flash) * 1.5;
-    ctx.filter = `brightness(${amount.toFixed(2)}) saturate(0.5)`;
-    draw();
-    ctx.restore();
-  } else {
-    draw();
+  if (flash <= 0) {
+    draw(ctx);
+    return;
   }
+  const { width, height } = ctx.canvas;
+  const key = `${width}x${height}`;
+  let layer = flashLayers.get(key);
+  if (!layer) {
+    layer = makeCanvas(width, height);
+    flashLayers.set(key, layer);
+  }
+  const f = layer.ctx;
+  f.setTransform(1, 0, 0, 1, 0, 0);
+  f.globalAlpha = 1;
+  f.globalCompositeOperation = 'source-over';
+  f.clearRect(0, 0, width, height);
+  f.setTransform(ctx.getTransform());
+  draw(f);
+  f.setTransform(1, 0, 0, 1, 0, 0);
+  f.globalAlpha = flash >= FLASH_SOLID ? 1 : (flash / FLASH_SOLID) * 0.35;
+  f.globalCompositeOperation = 'source-atop';
+  f.fillStyle = '#ffffff';
+  f.fillRect(0, 0, width, height);
+  f.globalCompositeOperation = 'source-over';
+  f.globalAlpha = 1;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer.canvas, 0, 0);
+  ctx.restore();
 }

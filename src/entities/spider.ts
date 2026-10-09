@@ -800,7 +800,7 @@ export class Spider extends Enemy {
     this.drawEggs(ctx);
     if (this.state === 'dropWind' || this.state === 'drop') this.drawMark(ctx);
     this.drawThread(ctx);
-    withHitFlash(ctx, this.flash, () => this.drawBody(ctx));
+    withHitFlash(ctx, this.flash, (ctx) => this.drawBody(ctx));
   }
 
   /** Old webs in the upper corners of her chamber, the room's own decoration. */
@@ -1148,7 +1148,7 @@ export class Spiderling extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       ctx.scale(this.facing, 1);

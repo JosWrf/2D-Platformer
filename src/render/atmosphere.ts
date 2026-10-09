@@ -1,5 +1,6 @@
 import { Camera } from '../core/camera';
 import { Rng } from '../core/math';
+import { ART } from './pixel';
 
 interface Spore {
   x: number;
@@ -66,26 +67,23 @@ export class Spores {
       if (fade <= 0) continue;
       // Slow individual breathing keeps the field from looking like static.
       const pulse = calm ? 0.8 + Math.sin(time * 0.5 + s.phase) * 0.12 : 0.55 + Math.sin(time * 1.6 + s.phase) * 0.45;
-      const halo = s.size * 7;
 
-      const g = ctx.createRadialGradient(x, y, 0, x, y, halo);
-      g.addColorStop(0, `rgba(${rgb},${(0.34 * pulse * fade).toFixed(3)})`);
-      g.addColorStop(0.4, `rgba(${rgb},${(0.14 * pulse * fade).toFixed(3)})`);
-      g.addColorStop(1, `rgba(${rgb},0)`);
-      ctx.fillStyle = g;
-      ctx.fillRect(x - halo, y - halo, halo * 2, halo * 2);
-
+      // A mote is one art pixel of its zone's colour; a near one at the top of
+      // its breath twinkles into a little cross with a pale heart. No halo: a
+      // soft glow is the one thing a palette of a few colours cannot draw, and
+      // fifty of them were half a millisecond of every frame.
+      const ax = Math.round(x / ART) * ART;
+      const ay = Math.round(y / ART) * ART;
       // Capped well below the hero's own brightness: decoration must never
       // outshine the things that can kill you.
-      ctx.globalAlpha = (0.3 + pulse * 0.3) * fade;
-      ctx.fillStyle = '#ffe6b4';
-      // The centre is on a whole pixel, so the disc is blended the same way in
-      // every frame. It is the sub-pixel centre that made the field crawl, not
-      // the soft edge - and a hard square instead of a disc reads as a speck of
-      // dirt rather than a mote.
-      ctx.beginPath();
-      ctx.arc(x, y, s.size * 0.85, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.globalAlpha = Math.min(1, (0.35 + pulse * 0.45) * fade);
+      ctx.fillStyle = `rgb(${rgb})`;
+      if (s.size > 1.5 && pulse > 0.8) {
+        ctx.fillRect(ax - ART, ay, ART * 3, ART);
+        ctx.fillRect(ax, ay - ART, ART, ART * 3);
+        ctx.fillStyle = '#f9e6cf';
+      }
+      ctx.fillRect(ax, ay, ART, ART);
       ctx.globalAlpha = 1;
     }
     ctx.restore();

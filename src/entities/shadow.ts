@@ -1,6 +1,7 @@
 import { audio } from '../core/audio';
 import { Input, type Action } from '../core/input';
 import { Rect, clamp, rand, rectsOverlap, sign } from '../core/math';
+import { makeCanvas } from '../render/pixel';
 import { glow } from '../render/sprites';
 import type { Boss } from './boss';
 import type { World } from '../world/context';
@@ -162,14 +163,8 @@ export class Shadow extends Enemy {
     this.contactDamage = 0;
     this.body = new Player(x, y);
     this.body.facing = -1;
-    this.layer = document.createElement('canvas');
-    this.layer.width = 220;
-    this.layer.height = 170;
-    this.layerCtx = this.layer.getContext('2d') as CanvasRenderingContext2D;
-    this.rim = document.createElement('canvas');
-    this.rim.width = 220;
-    this.rim.height = 170;
-    this.rimCtx = this.rim.getContext('2d') as CanvasRenderingContext2D;
+    ({ canvas: this.layer, ctx: this.layerCtx } = makeCanvas(220, 170));
+    ({ canvas: this.rim, ctx: this.rimCtx } = makeCanvas(220, 170));
   }
 
   get phase(): 1 | 2 {

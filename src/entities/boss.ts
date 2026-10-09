@@ -713,7 +713,7 @@ export class Boss extends Body {
     if (bladeBehind) this.drawGreatsword(ctx, dyingFade * 0.9);
 
     ctx.globalAlpha = dyingFade;
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       const stagger = this.state === 'stagger' ? Math.sin(this.anim * 22) * 0.07 : 0;

@@ -409,7 +409,7 @@ export class Slime extends Enemy {
   override draw(ctx: CanvasRenderingContext2D): void {
     shadow(ctx, this.cx, this.bottom + 1, this.w * 0.9, 0.3);
     const squish = this.onGround ? Math.sin(this.anim * 6) * 0.06 : clamp(-this.vy / 900, -0.2, 0.25);
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       ctx.scale(1 + squish * 0.6, 1 - squish);
@@ -551,7 +551,7 @@ export class Bat extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.cy);
       const flap = Math.sin(this.anim * 18) * 0.9;
@@ -718,7 +718,7 @@ export class Skeleton extends Enemy {
 
   override draw(ctx: CanvasRenderingContext2D): void {
     shadow(ctx, this.cx, this.bottom + 1, this.w, 0.3);
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       ctx.scale(this.facing, 1);
@@ -853,7 +853,7 @@ export class DarkMage extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       ctx.scale(this.facing, 1);
@@ -1026,7 +1026,7 @@ export class Bomber extends Enemy {
     // The tell: it swells, and a ring closes in on it. Both are needed - the
     // swell reads up close, the ring reads across the room.
     const heat = lit ? 1 - Math.max(0, this.fuse) / 0.9 : 0;
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.55);
@@ -1229,7 +1229,7 @@ export class Shieldman extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.6);
@@ -1426,7 +1426,7 @@ export class Charger extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.6);
@@ -1744,7 +1744,7 @@ export class Warden extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.6);
@@ -2109,7 +2109,7 @@ export class Gallert extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       // The shadow belongs to the floor, not to him: while he is up there it
@@ -2769,7 +2769,7 @@ export class Thalassa extends Enemy {
 
   override draw(ctx: CanvasRenderingContext2D): void {
     this.drawTide(ctx);
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.6);
@@ -3179,7 +3179,7 @@ export class Prismarch extends Enemy {
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       ctx.translate(this.cx, this.bottom);
       shadow(ctx, 0, 0, this.w * 0.6);
@@ -4057,7 +4057,7 @@ export class Hydra extends Enemy {
     this.drawPools(ctx);
     this.drawDrops(ctx);
     this.drawBreath(ctx);
-    withHitFlash(ctx, this.flash, () => {
+    withHitFlash(ctx, this.flash, (ctx) => {
       ctx.save();
       shadow(ctx, this.cx, this.bottom, this.w * 0.62);
       /*
