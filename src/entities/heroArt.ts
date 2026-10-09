@@ -1302,58 +1302,58 @@ const FRAMES = {
     -------^-------
   `,
   roll1: `
-    ...LLLL...
-    ..LBBBBSo.
-    .LBBBBSYS.
-    .LBBBBBSo.
-    LBBBBBBbbo
-    LBBBBBbbbo
-    LBBBBBmtbb
-    .BBBBCmtt.
-    .gBBCCtd..
-    ..ggCCdd..
-    ....CK....
+    ...YYYY...
+    ..YLLLLSo.
+    .YLLLLSYS.
+    .YLLLLLSo.
+    YLLLLLLooo
+    YLLLLLoooo
+    YLLLLLMmoo
+    .LLLLBMmm.
+    .gLLBBmt..
+    ..ggBBtt..
+    ....BC....
     -----^----
   `,
   roll2: `
-    ....LLL....
-    ..gLBBBBB..
-    .gBBBBBBBB.
-    .gBBBBBBBCC
-    LBBBBBBBCCC
-    LBBBBBBCCCK
-    .dtmmbCCSCK
-    .ddttbbSYS.
-    ...tbbboSo.
-    ....boo....
+    ....YYY....
+    ..gYLLLLL..
+    .gLLLLLLLL.
+    .gLLLLLLLBB
+    YLLLLLLLBBB
+    YLLLLLLBBBC
+    .tmMMoBBSBC
+    .ttmmooSYS.
+    ...mooooSo.
+    ....ooo....
     ...........
     -----^-----
   `,
   roll3: `
-    ....LL....
-    ..ddBBgg..
-    ..dtBBBBg.
-    .ttmBBBBC.
-    bbtmBBBCCC
-    obbbBBCCCK
-    obbBBCCCCK
-    .oSBCCCCK.
-    .SYSCCCCK.
-    .oSCCCCK..
-    ...CKKK...
+    ....YY....
+    ..ttLLgg..
+    ..tmLLLLg.
+    .mmMLLLLB.
+    oomMLLLBBB
+    ooooLLBBBC
+    oooLLBBBBC
+    .oSLBBBBC.
+    .SYSBBBBC.
+    .oSBBBBC..
+    ...BCCC...
     ----^-----
   `,
   roll4: `
-    ....oob....
-    .oSobbbt...
-    .SYSbbttdd.
-    LBSBBbmmtd.
-    LBBBBBBCCCK
-    LBBBBBCCCCK
-    BBBBBCCCCg.
-    .BBBCCCCCg.
-    ..BCCCCKg..
-    ....CKK....
+    ....ooo....
+    .oSoooom...
+    .SYSoommtt.
+    YLSLLoMMmt.
+    YLLLLLLBBBC
+    YLLLLLBBBBC
+    LLLLLBBBBg.
+    .LLLBBBBBg.
+    ..LBBBBCg..
+    ....BCC....
     -----^-----
   `,
   roll5: `
@@ -1377,6 +1377,25 @@ const FRAMES = {
     .....boo.Soo...
     .....bbo.oooo..
     --------^------
+  `,
+  fallen: `
+    ...........YYLL..
+    .........YYYLLLB.
+    ........YYLLLLBBK
+    ........YLLLLKKoS
+    .......YLLLLKoSoS
+    .....CCYLLLBKoSo.
+    ....BCC.LLBBBKo..
+    ....BCCYLLLLL....
+    ..WLBCCYLLLKY....
+    ..WLBCCLLLLKYL...
+    .W.LBCtLLLLKYL...
+    .W.LBCgggGgKob...
+    W..BCKtm...mbb...
+    M..gg.tm..mM.....
+    ......boo.Soo....
+    ......bbo.oooo...
+    ---------^-------
   `,
   sheath: `
     ......YYLL....

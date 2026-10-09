@@ -1348,7 +1348,11 @@ export class Player extends Body {
     const hidden = this.invuln > 0 && this.hurtTimer <= 0 && this.attackTimer <= 0 && Math.floor(this.invuln * 20) % 2 === 0;
     if (!hidden) this.drawContact(ctx, world, mid);
     if (this.trail.length) this.drawAfterimages(ctx);
-    this.drawFigure(ctx, this.look(), mid, feet, hidden);
+    // The game goes on drawing him under the victory screen, with nothing
+    // updating him any more: he holds the sword up. (World does not promise
+    // a state; the game that is passed in has one.)
+    const victory = 'state' in world && world.state === 'victory';
+    this.drawFigure(ctx, victory ? VICTORY : this.look(), mid, feet, hidden && !victory);
     this.drawGuard(ctx, mid, feet);
   }
 
@@ -1374,6 +1378,9 @@ export class Player extends Body {
    */
   private look(): Look {
     const air = !this.onGround;
+    // Fallen: on his knees. (The game stops drawing him the moment he dies;
+    // this is what it shows if it ever draws him while the death screen runs.)
+    if (this.dead) return { frame: 'fallen' };
     if (this.hurtTimer > 0) {
       // Struck, then reeling: the first frame for the first half of the stun.
       const split = this.has('keilerhaut') ? 0.05 : 0.14;
@@ -1613,6 +1620,9 @@ const SWING_KINDS: readonly SwingKind[] = ['cut', 'rise', 'wide'];
 
 /** Above this a struck hero is drawn all white (the flash runs down from 1). */
 const FLASH_SOLID = 0.8;
+
+/** The fight won: the rising cut's pose, blade straight up. */
+const VICTORY: Look = { frame: 'atk_rise', blade: { dir: 'up', length: 12, behind: false } };
 
 /** The roll: in, four quarter turns, out. */
 const ROLL_FRAMES: readonly HeroFrame[] = ['roll0', 'roll1', 'roll2', 'roll3', 'roll4', 'roll5'];
