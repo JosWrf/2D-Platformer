@@ -1,7 +1,38 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, damp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, withHitFlash } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { oval, ring } from '../render/pen';
+import { ART, snap, type PixelSprite } from '../render/pixel';
 import type { World } from '../world/context';
+import {
+  FIST,
+  FIST_GHOST,
+  FIST_PX,
+  FIST_PY,
+  HEAD,
+  HEAD_CX,
+  HEAD_CY,
+  MOUND,
+  MOUND_H,
+  MOUND_W,
+  PEBBLES,
+  RING,
+  RING_SIDE,
+  SHARDS,
+  SUN,
+  SUN_R,
+  SUN_X,
+  SUN_Y,
+  TORSO,
+  TORSO_CX,
+  TORSO_DEATH,
+  TORSO_H,
+  ellipseCells,
+  glowColor,
+  sprite,
+  type Glow,
+  type HeadLook,
+} from './colossus-art';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 
@@ -774,570 +805,258 @@ export class Colossus extends Enemy {
 
   /* -------------------------------------------------------------- drawing */
 
-  private runeRgb(): string {
-    return this.phaseTwo ? '255,238,190' : '255,178,84';
+  /*
+   * Drawn from parts on the art grid (colossus-art.ts): the bust rising out of
+   * its rubble, the head over it, the fists, the sun column. Every part is a
+   * sprite made once and blitted at whole art pixels; only the floor marks,
+   * the rays and the column are laid down with the pen, as runs of pixels.
+   * The light he gives off is in lights(), never painted here.
+   */
+
+  /** The sun on his chest: dark while he sleeps, bright awake, white when a fist winds up. */
+  private sunLevel(): Glow {
+    if (this.state === 'dormant') return 0;
+    const heat = 0.35 + this.eyes * 0.35 + Math.max(...this.hands.map((h) => h.glow)) * 0.3;
+    return heat >= 0.9 ? 3 : heat >= 0.6 ? 2 : 1;
+  }
+
+  /** His cracks: dark asleep, a steady glow while he fights, flaring as he breaks. */
+  private crackLevel(): Glow {
+    switch (this.state) {
+      case 'dormant':
+        return 0;
+      case 'intro':
+        return this.eyes > 0.5 ? 2 : 1;
+      case 'slumped':
+        return 1;
+      case 'dying':
+        return this.timer > 1.6 ? 3 : this.timer > 0.8 ? 2 : 1;
+      default:
+        return 2;
+    }
+  }
+
+  private eyeLevel(): Glow {
+    const e = this.eyes;
+    return e >= 0.75 ? 3 : e >= 0.45 ? 2 : e >= 0.12 ? 1 : 0;
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    this.drawBeam(ctx, true);
-    this.drawBody(ctx);
-    this.drawHead(ctx);
-    for (const hand of this.hands) this.drawHand(ctx, hand);
-    this.drawBeam(ctx, false);
+    const phase = this.phase;
+    const x = snap(this.baseX);
+    const floor = snap(this.floorY);
+    // Rising, and sagging, the whole bust settles into the ground.
+    const sink = Math.round(((1 - this.rise) * 118 + this.slump * 52) / ART) * ART;
+    this.drawPebbles(ctx, sink, true);
+    this.drawTorso(ctx, x, floor, sink, phase);
+    sprite('mound', MOUND, 0, 1).draw(ctx, x - ((MOUND_W - 1) / 2) * ART, floor - MOUND_H * ART);
+    this.drawPebbles(ctx, sink, false);
+    this.drawHead(ctx, floor, phase);
+    for (const hand of this.hands) this.drawHand(ctx, hand, floor, phase);
+    this.drawBeam(ctx, floor);
   }
 
-  /** The mound he stands buried in, his chest and shoulders, and the collar. */
-  private drawBody(ctx: CanvasRenderingContext2D): void {
-    const cx = this.baseX;
-    const floor = this.floorY;
-    // Sagging, the whole bust settles into the ground as the head comes down.
-    const sink = (1 - this.rise) * 118 + this.slump * 52;
-    const rgb = this.runeRgb();
-    const wake = this.state === 'dormant' ? 0.15 : 1;
-    ctx.save();
-
-    // The mound: broken paving pushed up around him.
-    ctx.fillStyle = '#2b2230';
-    ctx.beginPath();
-    ctx.ellipse(cx, floor + 2, 132, 20, 0, Math.PI, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#3d3240';
-    for (let i = -5; i <= 5; i++) {
-      const bx = cx + i * 23;
-      const bh = 8 + ((i * 7 + 11) % 5) * 3;
-      ctx.beginPath();
-      ctx.moveTo(bx - 12, floor);
-      ctx.lineTo(bx - 8, floor - bh);
-      ctx.lineTo(bx + 9, floor - bh + 3);
-      ctx.lineTo(bx + 12, floor);
-      ctx.closePath();
-      ctx.fill();
+  /** Chest and shoulders, the cracks that open as he dies, and the sun on his breast. */
+  private drawTorso(ctx: CanvasRenderingContext2D, x: number, floor: number, sink: number, phase: 1 | 2): void {
+    const x0 = x - TORSO_CX * ART;
+    const y0 = floor - TORSO_H * ART + sink;
+    above(ctx, sprite('torso', TORSO, this.crackLevel(), phase), x0, y0, floor);
+    if (this.state === 'dying') {
+      const step = this.timer < 0.8 ? 2 : this.timer < 1.4 ? 1 : this.timer < 2 ? 0 : -1;
+      if (step >= 0) above(ctx, sprite(`death${step}`, TORSO_DEATH[step], 3, phase), x0, y0, floor);
     }
+    // Its rays turn a third of the way between two rays at a time.
+    const turn = Math.floor((this.anim * 0.2) / (Math.PI / 18)) % 3;
+    above(ctx, sprite(`sun${turn}`, SUN[turn], this.sunLevel(), phase), x0 + (SUN_X - SUN_R) * ART, y0 + (SUN_Y - SUN_R) * ART, floor);
+  }
 
-    // Everything below the floor is under the floor.
-    ctx.beginPath();
-    ctx.rect(cx - 220, floor - 400, 440, 400);
-    ctx.clip();
-    ctx.translate(cx, floor + sink);
-
-    // Chest and shoulders.
-    const stone = ctx.createLinearGradient(0, -150, 0, 0);
-    stone.addColorStop(0, '#a38c69');
-    stone.addColorStop(0.45, '#6f5a45');
-    stone.addColorStop(1, '#2e241d');
-    ctx.fillStyle = stone;
-    ctx.beginPath();
-    ctx.moveTo(-70, 0);
-    ctx.lineTo(-84, -64);
-    ctx.quadraticCurveTo(-100, -114, -74, -128);
-    ctx.quadraticCurveTo(-42, -140, -22, -140);
-    ctx.lineTo(22, -140);
-    ctx.quadraticCurveTo(42, -140, 74, -128);
-    ctx.quadraticCurveTo(100, -114, 84, -64);
-    ctx.lineTo(70, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    // Shade down the sides, so the chest has a front.
-    const side = ctx.createLinearGradient(-90, 0, 90, 0);
-    side.addColorStop(0, 'rgba(20,12,18,0.55)');
-    side.addColorStop(0.28, 'rgba(20,12,18,0)');
-    side.addColorStop(0.72, 'rgba(20,12,18,0)');
-    side.addColorStop(1, 'rgba(20,12,18,0.6)');
-    ctx.fillStyle = side;
-    ctx.fill();
-
-    // Shoulder caps, gold over lapis.
-    for (const s of [-1, 1]) {
-      ctx.fillStyle = '#23365f';
-      ctx.beginPath();
-      ctx.ellipse(s * 76, -118, 26, 18, s * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#d9b25a';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.ellipse(s * 76, -118, 26, 18, s * 0.35, Math.PI * 1.05, Math.PI * 1.95);
-      ctx.stroke();
-      // The arm ends at the shoulder: a stump with a ring of runes where the
-      // arm was. The hands do not need it.
-      ctx.fillStyle = '#5d4b3b';
-      ctx.beginPath();
-      ctx.ellipse(s * 96, -96, 12, 18, s * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(${rgb},${(0.35 * wake + Math.sin(this.anim * 2 + s) * 0.1).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(s * 96, -96, 9, 14, s * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // The broad collar: rows of beads, lapis and gold, across the chest.
-    const rows: [number, string][] = [
-      [34, '#d9b25a'],
-      [46, '#2b4a88'],
-      [58, '#caa24c'],
-      [70, '#1f3668'],
-    ];
-    for (const [r, color] of rows) {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 7;
-      ctx.beginPath();
-      ctx.ellipse(0, -140, r + 8, r * 0.62, 0, Math.PI * 0.08, Math.PI * 0.92);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#e8c86c';
-    for (let i = 0; i < 11; i++) {
-      const a = Math.PI * (0.12 + (i / 10) * 0.76);
-      ctx.beginPath();
-      ctx.arc(Math.cos(a) * 86, -140 + Math.sin(a) * 50, 3.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // The sun disc on his breast: the core, and the one thing on his body
-    // that brightens before he moves.
-    const heat = 0.35 + this.eyes * 0.35 + Math.max(...this.hands.map((h) => h.glow)) * 0.3;
-    const discY = -62;
-    ctx.fillStyle = '#6a4a1c';
-    ctx.beginPath();
-    ctx.arc(0, discY, 20, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 0, discY, 56, `rgba(${rgb},${(0.45 * heat * wake).toFixed(3)})`);
-    ctx.fillStyle = `rgba(${rgb},${(0.55 + heat * 0.45).toFixed(3)})`;
-    ctx.globalAlpha = wake;
-    ctx.beginPath();
-    ctx.arc(0, discY, 13, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${rgb},0.8)`;
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + this.anim * 0.2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 17, discY + Math.sin(a) * 17);
-      ctx.lineTo(Math.cos(a) * 25, discY + Math.sin(a) * 25);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Cracks with the light inside him showing through.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(${rgb},${(0.5 * wake * (0.7 + heat * 0.3)).toFixed(3)})`;
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    const cracks = [
-      [-58, -104, -44, -80, -52, -54, -40, -30],
-      [48, -110, 40, -86, 56, -64],
-      [20, -30, 34, -14, 28, 0],
-      [-24, -26, -36, -8],
-    ];
-    for (const c of cracks) {
-      ctx.beginPath();
-      ctx.moveTo(c[0], c[1]);
-      for (let i = 2; i < c.length; i += 2) ctx.lineTo(c[i], c[i + 1]);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // Moss where the rain has sat for a thousand years.
-    ctx.fillStyle = 'rgba(86,120,64,0.55)';
-    for (const [mx, my, mr] of [
-      [-70, -122, 10],
-      [62, -126, 8],
-      [-80, -60, 7],
-      [74, -40, 9],
-    ]) {
-      ctx.beginPath();
-      ctx.ellipse(mx, my, mr, mr * 0.5, 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-
-    // Stones held up around his shoulders by nothing but will.
-    if (this.rise > 0.6 && this.state !== 'dying') {
-      ctx.fillStyle = '#8a775e';
-      for (const p of this.pebbles) {
-        const px = cx + Math.cos(p.a) * p.r * 1.3;
-        const py = floor - 130 + sink + Math.sin(p.a) * p.r * 0.35;
-        if (py > floor - 4) continue;
-        ctx.fillRect(px - p.size / 2, py - p.size / 2, p.size, p.size * 0.8);
-      }
+  /** Stones held up round his shoulders by nothing but will: the far half of their orbit behind him. */
+  private drawPebbles(ctx: CanvasRenderingContext2D, sink: number, behind: boolean): void {
+    if (this.rise <= 0.6 || this.state === 'dying') return;
+    for (const p of this.pebbles) {
+      const s = Math.sin(p.a);
+      if (s < 0 !== behind) continue;
+      const px = this.baseX + Math.cos(p.a) * p.r * 1.3;
+      const py = this.floorY - 130 + sink + s * p.r * 0.35;
+      if (py > this.floorY - 4) continue;
+      const k = p.size < 4.3 ? 0 : p.size < 5.6 ? 1 : 2;
+      const pebble = sprite(`pebble${k}`, PEBBLES[k], 0, 1);
+      pebble.draw(ctx, px - pebble.w, py - pebble.h);
     }
   }
 
-  private drawHead(ctx: CanvasRenderingContext2D): void {
-    const hx = this.headX;
-    const hy = this.headY;
-    const rgb = this.runeRgb();
-    const flash = this.flash > 0 ? this.headFlash : 0;
-    withHitFlash(ctx, flash, (ctx) => {
-      ctx.save();
-      ctx.translate(hx, hy);
-      // Sagging: the head tips forward, which on a face seen from the front
-      // reads as it coming down and a little smaller.
-      const tip = 1 - this.slump * 0.06;
-      ctx.scale(tip, tip);
-      const look = -this.gazeUp * 5;
-
-      // Headcloth, falling in lappets past both cheeks to the shoulders.
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(-26, -40);
-      ctx.quadraticCurveTo(0, -50, 26, -40);
-      ctx.lineTo(40, -6);
-      ctx.lineTo(44, 50);
-      ctx.lineTo(24, 52);
-      ctx.lineTo(22, 6);
-      ctx.lineTo(-22, 6);
-      ctx.lineTo(-24, 52);
-      ctx.lineTo(-44, 50);
-      ctx.lineTo(-40, -6);
-      ctx.closePath();
-      ctx.fillStyle = '#26406f';
-      ctx.fill();
-      ctx.clip();
-      ctx.fillStyle = '#d6ae55';
-      for (let y = -46; y < 56; y += 9) ctx.fillRect(-50, y, 100, 4.5);
-      ctx.restore();
-      ctx.strokeStyle = 'rgba(20,14,26,0.6)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-40, -6);
-      ctx.lineTo(-44, 50);
-      ctx.moveTo(40, -6);
-      ctx.lineTo(44, 50);
-      ctx.stroke();
-
-      // The face.
-      const face = ctx.createLinearGradient(0, -34, 0, 30);
-      face.addColorStop(0, '#b49b75');
-      face.addColorStop(1, '#6f5944');
-      ctx.fillStyle = face;
-      ctx.beginPath();
-      ctx.moveTo(-20, -30);
-      ctx.lineTo(20, -30);
-      ctx.quadraticCurveTo(24, 6, 16, 22);
-      ctx.quadraticCurveTo(0, 32, -16, 22);
-      ctx.quadraticCurveTo(-24, 6, -20, -30);
-      ctx.closePath();
-      ctx.fill();
-      // Band across the brow.
-      ctx.fillStyle = '#d6ae55';
-      ctx.fillRect(-22, -32, 44, 6);
-
-      // Brow and nose, carved.
-      ctx.fillStyle = 'rgba(40,28,24,0.55)';
-      ctx.fillRect(-16, -14 + look, 12, 2.5);
-      ctx.fillRect(4, -14 + look, 12, 2.5);
-      ctx.fillStyle = 'rgba(40,28,24,0.35)';
-      ctx.beginPath();
-      ctx.moveTo(-1, -10);
-      ctx.lineTo(4, 6);
-      ctx.lineTo(-4, 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = 'rgba(30,20,18,0.7)';
-      ctx.fillRect(-7, 13, 14, 2);
-
-      // Eyes: kohl-lined, and lit from inside when he is awake.
-      for (const s of [-1, 1]) {
-        const ex = s * 10;
-        const ey = -7 + look;
-        ctx.fillStyle = '#1b1320';
-        ctx.beginPath();
-        ctx.moveTo(ex - 7, ey);
-        ctx.quadraticCurveTo(ex, ey - 5, ex + 7, ey);
-        ctx.quadraticCurveTo(ex, ey + 4, ex - 7, ey);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = '#1b1320';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(ex + s * 7, ey);
-        ctx.lineTo(ex + s * 12, ey + 2);
-        ctx.stroke();
-        if (this.eyes > 0.02) {
-          ctx.save();
-          ctx.globalCompositeOperation = 'lighter';
-          glow(ctx, ex, ey, 16, `rgba(${rgb},${(0.6 * this.eyes).toFixed(3)})`);
-          ctx.fillStyle = `rgba(255,250,230,${(0.9 * this.eyes).toFixed(3)})`;
-          ctx.beginPath();
-          ctx.ellipse(ex, ey, 4.2, 1.8, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
+  private drawHead(ctx: CanvasRenderingContext2D, floor: number, phase: 1 | 2): void {
+    // Looking up at the sky, or bowed with his fist gone.
+    const look: HeadLook = this.gazeUp > 0.5 ? 'up' : this.slump > 0.45 ? 'down' : 'front';
+    const flash = this.flash > 0 && this.headFlash > 0.78;
+    const head = sprite(`head-${look}`, HEAD[look], this.eyeLevel(), phase, flash);
+    const x0 = snap(this.headX) - HEAD_CX * ART;
+    const y0 = snap(this.headY) - HEAD_CY * ART;
+    above(ctx, head, x0, y0, floor);
+    // Looking up: two rays out of his eyes, straight up into the sky.
+    if (this.state === 'gaze' && this.gazeUp > 0.2) {
+      const a = this.gazeUp * (this.beam ? 0.35 : 0.8);
+      if (a > 0.15) {
+        const bands = a > 0.5 ? GAZE_STRONG : GAZE_WEAK;
+        const eye = y0 + (look === 'up' ? 18 : 19) * ART;
+        for (const col of [16, 28]) {
+          let y = eye;
+          for (const [len, color, dashed] of bands) {
+            ctx.fillStyle = color;
+            if (!dashed) ctx.fillRect(x0 + col * ART, y - len * ART, ART, len * ART);
+            else for (let k = 0; k + 4 <= len; k += 6) ctx.fillRect(x0 + col * ART, y - (k + 4) * ART, ART, 4 * ART);
+            y -= len * ART;
+          }
         }
       }
-
-      // The braided beard.
-      ctx.fillStyle = '#6f5a44';
-      ctx.beginPath();
-      ctx.moveTo(-6, 24);
-      ctx.lineTo(6, 24);
-      ctx.lineTo(5, 46);
-      ctx.quadraticCurveTo(0, 50, -5, 46);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#d6ae55';
-      for (let y = 29; y < 46; y += 5) ctx.fillRect(-5.5, y, 11, 1.8);
-
-      // The cobra on his brow.
-      ctx.fillStyle = '#e2bb5e';
-      ctx.beginPath();
-      ctx.moveTo(0, -48);
-      ctx.quadraticCurveTo(7, -42, 4, -34);
-      ctx.lineTo(-4, -34);
-      ctx.quadraticCurveTo(-7, -42, 0, -48);
-      ctx.fill();
-      ctx.fillStyle = '#2b4a88';
-      ctx.fillRect(-1.5, -44, 3, 7);
-
-      // A crack across the face, with the light behind it.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(${rgb},${(0.35 + this.eyes * 0.35).toFixed(3)})`;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(14, -30);
-      ctx.lineTo(10, -20);
-      ctx.lineTo(16, -8);
-      ctx.lineTo(12, 4);
-      ctx.stroke();
-      ctx.restore();
-
-      // Looking up at the sky: two thin rays out of his eyes, straight up.
-      if (this.state === 'gaze' && this.gazeUp > 0.2) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        const a = this.gazeUp * (this.beam ? 0.35 : 0.8);
-        for (const s of [-1, 1]) {
-          const g = ctx.createLinearGradient(0, -600, 0, 0);
-          g.addColorStop(0, `rgba(${rgb},0)`);
-          g.addColorStop(1, `rgba(${rgb},${a.toFixed(3)})`);
-          ctx.fillStyle = g;
-          ctx.fillRect(s * 10 - 1.5, -600, 3, 594 + look);
-        }
-        ctx.restore();
-      }
-      ctx.restore();
-    });
+    }
   }
 
-  private drawHand(ctx: CanvasRenderingContext2D, hand: Hand): void {
+  private drawHand(ctx: CanvasRenderingContext2D, hand: Hand, floor: number, phase: 1 | 2): void {
     if (hand.state === 'broken' || hand.state === 'reform') {
-      const a = hand.state === 'reform' ? 0.9 : 1;
-      ctx.save();
-      ctx.globalAlpha = a;
       for (const s of hand.shards) {
-        ctx.save();
-        ctx.translate(s.x, s.y);
-        ctx.rotate(s.rot);
-        ctx.fillStyle = '#8a7358';
-        ctx.beginPath();
-        ctx.moveTo(-s.r, -s.r * 0.3);
-        ctx.lineTo(-s.r * 0.2, -s.r * 0.8);
-        ctx.lineTo(s.r * 0.9, -s.r * 0.2);
-        ctx.lineTo(s.r * 0.4, s.r * 0.7);
-        ctx.lineTo(-s.r * 0.7, s.r * 0.5);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#b9a07a';
-        ctx.fillRect(-s.r * 0.4, -s.r * 0.5, s.r * 0.6, s.r * 0.3);
-        ctx.restore();
+        const k = s.r < 8.3 ? 0 : s.r < 10.6 ? 1 : 2;
+        const turn = ((Math.round(s.rot / (Math.PI / 4)) % 8) + 8) % 8;
+        const shard = sprite(`shard${k}-${turn}`, SHARDS[k][turn], 0, 1);
+        shard.draw(ctx, s.x - shard.w, s.y - shard.h);
       }
       if (hand.state === 'reform') {
-        ctx.globalCompositeOperation = 'lighter';
-        glow(ctx, this.homeOf(hand).x, this.homeOf(hand).y, 50, `rgba(${this.runeRgb()},0.4)`);
+        // The ring of runes that calls the pieces home, closing on where the fist belongs.
+        const home = this.homeOf(hand);
+        const r = Math.round(8 + clamp(hand.timer / 0.9, 0, 1) * 22);
+        ring(ctx, snap(home.x), snap(home.y), r * ART, glowColor('r', 3, phase));
       }
-      ctx.restore();
       return;
     }
 
-    const rgb = this.runeRgb();
-    // Its shadow, down on the floor, larger and darker the lower it is - the
-    // warning the slam gives, read from where the hero stands.
+    const x = snap(hand.x);
+    const y = snap(hand.y);
+    // Its shadow on the floor, wider the lower it comes - and while it hunts
+    // the hero, a ring of light round the place it means to land.
     const height = this.floorY - (hand.y + HAND_H / 2);
     if (height > 4) {
       const k = clamp(1 - height / 300, 0.15, 1);
-      ctx.save();
-      ctx.fillStyle = `rgba(0,0,0,${(0.2 + k * 0.35).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(hand.x, this.floorY, HAND_W * (0.35 + k * 0.35), 7, 0, 0, Math.PI * 2);
-      ctx.fill();
+      const half = Math.round((HAND_W * (0.35 + k * 0.35)) / ART);
+      ctx.fillStyle = RAMP.slate[0];
+      ctx.fillRect(x - half * ART, floor - ART, half * 2 * ART, ART);
       if (hand.state === 'track' || hand.state === 'drop') {
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(${rgb},${(0.3 + (hand.state === 'drop' ? 0.4 : 0.2)).toFixed(3)})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.ellipse(hand.x, this.floorY - 1, HAND_W * 0.62, 9, 0, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.fillStyle = glowColor(hand.state === 'drop' ? 'R' : 'r', 3, phase);
+        for (const [dx, dy] of ellipseCells(19, 4)) ctx.fillRect(x + dx * ART, floor - ART + dy * ART, ART, ART);
       }
-      ctx.restore();
     }
 
-    // Motion: a smear behind a sweeping or falling fist.
+    const sideways = Math.abs(Math.sin(hand.turn)) > 0.7;
+    const view = sideways ? 'side' : 'front';
+    // Thumbs in towards him; on its side, knuckles first the way it sweeps.
+    const facing: 1 | -1 = sideways ? (hand.turn > 0 ? 1 : -1) : hand.side;
+    // Its rune: out while he sleeps and while it lies spent on the floor,
+    // blazing while it winds up, cooling after.
+    const asleep = this.state === 'dormant' || hand.state === 'floor';
+    const level: Glow = asleep ? 0 : hand.glow >= 0.8 ? 3 : hand.glow >= 0.4 ? 2 : 1;
+    // Locked over the hero, the last breath before it falls: it shudders.
+    const fx = x + (hand.state === 'track' && hand.timer < 0.2 ? (Math.floor(this.anim * 30) % 2 === 0 ? ART : -ART) : 0);
+
+    // Falling or sweeping, its afterimage strung out behind it.
     if (hand.state === 'sweep' || hand.state === 'drop') {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = 1; i <= 4; i++) {
-        const ox = hand.state === 'sweep' ? -hand.dir * i * 16 : 0;
-        const oy = hand.state === 'drop' ? -i * 18 : 0;
-        ctx.globalAlpha = 0.14 * (5 - i) * 0.5;
-        ctx.fillStyle = `rgb(${rgb})`;
-        ctx.beginPath();
-        ctx.ellipse(hand.x + ox, hand.y + oy, 24, 20, 0, 0, Math.PI * 2);
-        ctx.fill();
+      for (let i = 2; i >= 1; i--) {
+        const ox = hand.state === 'sweep' ? -hand.dir * i * 7 * ART : 0;
+        const oy = hand.state === 'drop' ? -i * 7 * ART : 0;
+        fist(ctx, sprite(`ghost-${view}-${i}`, FIST_GHOST[view][i - 1], level, phase), fx + ox, y + oy, facing);
       }
-      ctx.restore();
     }
-
-    const flash = this.flash > 0 ? hand.flash : 0;
-    withHitFlash(ctx, flash, (ctx) => {
-      ctx.save();
-      ctx.translate(hand.x, hand.y);
-      ctx.rotate(hand.turn);
-      // Mirrored per side so both thumbs point in towards him.
-      ctx.scale(hand.side, 1);
-      const bob = hand.state === 'track' && hand.timer < 0.2 ? Math.sin(this.anim * 70) * 1.2 : 0;
-      ctx.translate(bob, 0);
-
-      // Cuff at the wrist, with the ring of runes the hand answers to.
-      ctx.fillStyle = '#23365f';
-      ctx.fillRect(-24, -30, 48, 12);
-      ctx.fillStyle = '#d9b25a';
-      ctx.fillRect(-24, -30, 48, 3);
-      ctx.fillRect(-24, -21, 48, 3);
-
-      // The fist itself: back of the hand, four knuckles below.
-      const g = ctx.createLinearGradient(0, -20, 0, 26);
-      g.addColorStop(0, '#a38c69');
-      g.addColorStop(1, '#584535');
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-26, -18);
-      ctx.lineTo(24, -18);
-      ctx.quadraticCurveTo(30, 0, 26, 14);
-      ctx.lineTo(-26, 14);
-      ctx.quadraticCurveTo(-30, 0, -26, -18);
-      ctx.closePath();
-      ctx.fill();
-      for (let i = 0; i < 4; i++) {
-        const kx = -19 + i * 12.5;
-        ctx.fillStyle = i % 2 ? '#8d765b' : '#9d8566';
-        ctx.beginPath();
-        ctx.ellipse(kx, 16, 6.8, 8.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(40,28,22,0.5)';
-        ctx.fillRect(kx + 5.4, 10, 1.4, 12);
+    // The ring of runes turning round the wrist while it winds up.
+    const turning = hand.glow > 0.3;
+    const step = Math.floor(this.anim * 20) % 6;
+    const ringAt = (front: boolean): void => {
+      if (sideways) {
+        const g = RING_SIDE[front ? 'front' : 'back'][step];
+        sprite(`ringS${front ? 'f' : 'b'}${step}`, g, 3, phase).draw(ctx, fx - 13 * ART * facing - 5 * ART, y - 20 * ART);
+      } else {
+        const g = RING[front ? 'front' : 'back'][step];
+        sprite(`ringF${front ? 'f' : 'b'}${step}`, g, 3, phase).draw(ctx, fx - 20 * ART, y - 18 * ART);
       }
-      // Thumb, folded over the fingers on the inside.
-      ctx.fillStyle = '#9a8264';
-      ctx.beginPath();
-      ctx.ellipse(-26, 4, 8, 13, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // The rune on the back of the hand. Dark stone at rest, blazing when
-      // the hand is about to move.
-      const heat = hand.state === 'floor' ? 0.1 : 0.25 + hand.glow * 0.75;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 0, -2, 30, `rgba(${rgb},${(0.35 * heat).toFixed(3)})`);
-      ctx.strokeStyle = `rgba(${rgb},${(0.4 + heat * 0.6).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-9, -2);
-      ctx.quadraticCurveTo(0, -11, 9, -2);
-      ctx.quadraticCurveTo(0, 5, -9, -2);
-      ctx.moveTo(0, 3);
-      ctx.lineTo(-3, 9);
-      ctx.moveTo(4, 2);
-      ctx.quadraticCurveTo(9, 6, 7, 10);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(255,248,220,${(0.5 + heat * 0.5).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(0, -2, 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // A ring turning round the wrist while it winds up.
-      if (hand.glow > 0.3) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(${rgb},${(0.5 * hand.glow).toFixed(3)})`;
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([5, 6]);
-        ctx.lineDashOffset = -this.anim * 40;
-        ctx.beginPath();
-        ctx.ellipse(0, -24, 38, 10, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
-      ctx.restore();
-    });
+    };
+    if (turning) ringAt(false);
+    const flash = this.flash > 0 && hand.flash > 0.78;
+    fist(ctx, sprite(`fist-${view}`, FIST[view], level, phase, flash), fx, y, facing);
+    if (turning) ringAt(true);
   }
 
   /**
-   * The sun column: a ring on the floor first, then the light itself. Drawn in
-   * two passes - the wide glow behind him, the hot core in front - so it
-   * stands in the court rather than being pasted onto it.
+   * The sun column: first a ring on the floor closing in and the edges of the
+   * column to come running down out of the sky, then the column itself in
+   * bands of the fire ramp round a white core, script sliding down it and the
+   * floor burning where it stands. Its glow on the room is in lights().
    */
-  private drawBeam(ctx: CanvasRenderingContext2D, behind: boolean): void {
+  private drawBeam(ctx: CanvasRenderingContext2D, floor: number): void {
     const beam = this.beam;
     if (!beam) return;
-    const x = beam.x;
-    const floor = this.floorY;
-    const top = floor - 720;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const x = snap(beam.x);
     if (beam.stage === 'mark') {
-      if (behind) return ctx.restore();
       const p = clamp(beam.t / 0.55, 0, 1);
-      ctx.strokeStyle = `rgba(255,220,140,${(0.3 + p * 0.5).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(x, floor - 2, BEAM_HALF + 26 * (1 - p), 7, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(255,220,140,${(0.08 + p * 0.12).toFixed(3)})`;
-      ctx.fillRect(x - BEAM_HALF * p, top, BEAM_HALF * 2 * p, floor - top);
-      return ctx.restore();
+      ctx.fillStyle = p < 0.33 ? RAMP.rust[1] : p < 0.66 ? RAMP.fire[1] : RAMP.fire[2];
+      const rx = Math.round((BEAM_HALF + 26 * (1 - p)) / ART);
+      for (const [dx, dy] of ellipseCells(rx, 3)) ctx.fillRect(x + dx * ART, floor - ART + dy * ART, ART, ART);
+      const half = Math.round((BEAM_HALF * p) / ART);
+      if (half >= 1) {
+        const run = (6 - (Math.floor(beam.t * 40) % 6)) % 6;
+        for (const ex of [x - half * ART, x + (half - 1) * ART]) {
+          for (let d = run; d < 300; d += 6) ctx.fillRect(ex, floor - (d + 4) * ART, ART, 4 * ART);
+        }
+      }
+      return;
     }
     const k = beam.stage === 'fade' ? clamp(1 - beam.t / 0.3, 0, 1) : clamp(beam.t / 0.08, 0, 1);
-    if (behind) {
-      const halo = ctx.createLinearGradient(x - 70, 0, x + 70, 0);
-      halo.addColorStop(0, 'rgba(255,190,90,0)');
-      halo.addColorStop(0.5, `rgba(255,200,110,${(0.32 * k).toFixed(3)})`);
-      halo.addColorStop(1, 'rgba(255,190,90,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(x - 70, top, 140, floor - top);
-      glow(ctx, x, floor, 90, `rgba(255,210,130,${(0.5 * k).toFixed(3)})`);
-      return ctx.restore();
+    const half = Math.round((BEAM_HALF / ART) * k);
+    if (half < 1) return;
+    const top = floor - 720;
+    for (let i = 0; i < BEAM_BANDS.length; i++) {
+      const w = half - i * 2;
+      if (w <= 0) break;
+      ctx.fillStyle = BEAM_BANDS[i];
+      ctx.fillRect(x - w * ART, top, w * 2 * ART, floor - top);
     }
-    const core = ctx.createLinearGradient(x - BEAM_HALF, 0, x + BEAM_HALF, 0);
-    core.addColorStop(0, 'rgba(255,200,110,0)');
-    core.addColorStop(0.3, `rgba(255,226,160,${(0.75 * k).toFixed(3)})`);
-    core.addColorStop(0.5, `rgba(255,252,236,${(0.95 * k).toFixed(3)})`);
-    core.addColorStop(0.7, `rgba(255,226,160,${(0.75 * k).toFixed(3)})`);
-    core.addColorStop(1, 'rgba(255,200,110,0)');
-    ctx.fillStyle = core;
-    ctx.fillRect(x - BEAM_HALF, top, BEAM_HALF * 2, floor - top);
-    // Rings of script sliding down the column.
-    ctx.strokeStyle = `rgba(255,240,200,${(0.5 * k).toFixed(3)})`;
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 6; i++) {
-      const y = floor - ((beam.t * 260 + i * 110) % 660);
-      ctx.beginPath();
-      ctx.ellipse(x, y, BEAM_HALF + 8, 5, 0, 0, Math.PI * 2);
-      ctx.stroke();
+    if (half >= 6) {
+      for (let i = 0; i < 6; i++) {
+        const y = snap(floor - ((beam.t * 260 + i * 110) % 660));
+        ctx.fillStyle = RAMP.fire[4];
+        ctx.fillRect(x - (half + 3) * ART, y, (half + 3) * 2 * ART, ART);
+        ctx.fillStyle = RAMP.fire[3];
+        ctx.fillRect(x - 2 * ART, y, 4 * ART, ART);
+      }
     }
     // Where it meets the floor, it burns.
-    ctx.fillStyle = `rgba(255,248,220,${(0.8 * k).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.ellipse(x, floor - 2, BEAM_HALF + 10, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    oval(ctx, x, floor - ART, (half + 5) * ART, 3 * ART, RAMP.fire[2]);
+    oval(ctx, x, floor - ART, (half + 1) * ART, 2 * ART, RAMP.fire[4]);
+    if (half > 3) oval(ctx, x, floor - ART, (half - 3) * ART, ART * 1.4, '#ffffff');
   }
+}
+
+/** The bands of the sun column, from its edge in: orange, amber, gold, yellow, white. */
+const BEAM_BANDS = [RAMP.fire[1], RAMP.fire[2], RAMP.fire[3], RAMP.fire[4], '#ffffff'];
+
+/** The rays out of his eyes as he looks up: bands of so many art pixels from the eye up, the last dashed. */
+const GAZE_STRONG: readonly (readonly [number, string, boolean])[] = [
+  [6, '#ffffff', false],
+  [16, RAMP.fire[4], false],
+  [36, RAMP.fire[2], false],
+  [60, RAMP.fire[1], true],
+];
+const GAZE_WEAK: readonly (readonly [number, string, boolean])[] = [
+  [4, RAMP.fire[3], false],
+  [12, RAMP.fire[2], false],
+  [36, RAMP.fire[1], true],
+];
+
+/** A sprite's rows above the floor only: what is under the floor stays under it. */
+function above(ctx: CanvasRenderingContext2D, s: PixelSprite, x: number, y: number, floor: number): void {
+  const rows = Math.min(s.h, Math.floor((floor - y) / ART));
+  if (rows <= 0) return;
+  ctx.drawImage(s.canvas, 0, 0, s.w, rows, x, y, s.w * ART, rows * ART);
+}
+
+/** A fist frame by its point, mirrored about that column when facing left. */
+function fist(ctx: CanvasRenderingContext2D, s: PixelSprite, x: number, y: number, facing: 1 | -1): void {
+  const col = facing < 0 ? s.w - 1 - FIST_PX : FIST_PX;
+  s.draw(ctx, x - col * ART, y - FIST_PY * ART, facing);
 }
