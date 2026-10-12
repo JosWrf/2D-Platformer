@@ -258,98 +258,144 @@ function drawLairGate(ctx: CanvasRenderingContext2D, tx: number, ty: number, tim
   glowDisc(ctx, x + 8, y + 8, 11, '#33984b', 0.08 + s * 0.04);
 }
 
-/** The colour a ward burns in, per zone: a colour of the palette. */
-function wardColor(x: number): string {
-  switch (zoneAt(x).name) {
-    case 'forest':
-      return '#99e65f';
-    case 'ruins':
-      return '#edab50';
-    case 'caverns':
-      return '#e07438';
-    case 'drowned':
-      return '#0cf1ff';
-    case 'castle':
-      return '#f5555d';
-    default:
-      return '#db3ffd';
-  }
+/**
+ * The colours a ward burns in, per zone, all from one ramp of the palette:
+ * the deep and dark of the curtain, its bright middle, its edges and strands,
+ * and its runes. As "r,g,b" too, for the light it throws on the floor.
+ */
+interface WardInk {
+  deep: string;
+  dark: string;
+  mid: string;
+  edge: string;
+  rune: string;
+  rgb: string;
+}
+
+const WARD_INK: Record<string, WardInk> = {
+  forest: { deep: '#134c4c', dark: '#1e6f50', mid: '#33984b', edge: '#99e65f', rune: '#d3fc7e', rgb: '153,230,95' },
+  ruins: { deep: '#391f21', dark: '#5d2c28', mid: '#8a4836', edge: '#edab50', rune: '#ffeb57', rgb: '237,171,80' },
+  caverns: { deep: '#391f21', dark: '#8e251d', mid: '#c64524', edge: '#e07438', rune: '#ffc825', rgb: '224,116,56' },
+  drowned: { deep: '#03193f', dark: '#00396d', mid: '#0069aa', edge: '#00cdf9', rune: '#94fdff', rgb: '0,205,249' },
+  castle: { deep: '#571c27', dark: '#891e2b', mid: '#c42430', edge: '#f5555d', rune: '#f68187', rgb: '245,85,93' },
+  rift: { deep: '#3b1443', dark: '#622461', mid: '#93388f', edge: '#db3ffd', rune: '#f389f5', rgb: '219,63,253' },
+};
+
+function wardInk(x: number): WardInk {
+  return WARD_INK[zoneAt(x).name] ?? WARD_INK.rift;
 }
 
 /** The rune on a standing ward: a diamond with a stroke through it. */
 const RUNE_ROWS = ['...W...', '..W.W..', '.W...W.', 'W..W..W', '.W.W.W.', 'W..W..W', '.W...W.', '..W.W..', '...W...'];
-const RUNE = new PixelSprite(RUNE_ROWS, { W: '#ffffff' });
+const RUNE_CELLS: readonly (readonly [number, number])[] = RUNE_ROWS.flatMap((row, y) =>
+  [...row].flatMap((ch, x) => (ch === 'W' ? [[x, y] as const] : [])),
+);
 
 /**
- * A boss arena's ward: a curtain of light hung between the floor and the sky,
- * with a rune every third tile. Standing, it is unmistakably a wall. Open, the
- * way in still shows where it will come down - a faint line of runes on the
- * floor - so the moment it rises behind the hero is not a surprise but a
- * promise kept. It moves slowly on purpose: a column of flicker is the last
- * thing a fight needs next to it. The light is flat bands of colour rather
- * than a gradient, strands that climb a whole pixel at a time, and a rune
- * that brightens in three steps.
+ * The curtain's columns, left to right across its ten pixels: the bright
+ * edges, the deep beside them, the dark, and the bright middle - which widens
+ * by a pixel each way when the ward breathes in.
+ */
+const CURTAIN: readonly (keyof WardInk)[] = ['edge', 'deep', 'dark', 'dark', 'mid', 'mid', 'dark', 'dark', 'deep', 'edge'];
+
+/**
+ * A boss arena's ward, standing: a curtain of light hung between the floor and
+ * the sky, with a rune every third tile. Standing, it is unmistakably a wall.
+ * It is drawn after the darkness, in the palette's own colours and nothing
+ * else - every pixel of it solid, so there is no translucent sheet for the
+ * pass to turn into a sprinkle of dots round it - and the light it throws on
+ * the floor is a light of the frame's (wardLights), stepping the floor up its
+ * ramps. It moves slowly on purpose: a column of flicker is the last thing a
+ * fight needs next to it. Strands climb it a whole pixel at a time, and its
+ * middle and its runes brighten in three steps.
  */
 function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: number, time: number): void {
-  const wx = tx * TILE;
-  const color = wardColor(wx);
-  const arena = level.arenaAt(wx);
-  const closed = level.wardClosed(tx);
+  const ink = wardInk(tx * TILE);
   const floorBelow = level.solidAt(tx, ty + 1) && level.tileAt(tx, ty + 1) !== Tile.Ward;
-  const x = tx * TPX;
-  const y = ty * TPX;
-  if (!closed) {
-    if (!arena || arena.cleared || !floorBelow) return;
-    // The sleeping ward: a seam of runes in the floor where it will stand.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = color;
-    ctx.globalAlpha = step3(time * 1.4 + tx) === 2 ? 0.3 : 0.22;
-    px(ctx, x + 6, y + TPX - 2, 4, 2);
-    px(ctx, x + 7, y + TPX - 6, 2, 3);
-    ctx.restore();
-    return;
-  }
-
   const topCap = !level.solidAt(tx, ty - 1) || ty === 0;
   const breath = step3(time * 1.6 + ty * 0.35);
-  ctx.save();
-  // A dark core, so the light has something to stand in front of.
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = '#0e071b';
-  px(ctx, x + 3, y, 10, TPX);
-  ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = color;
-  // The sheet: three flat bands, strongest in the middle.
-  ctx.globalAlpha = 0.08;
-  px(ctx, x - 2, y, TPX + 4, TPX);
-  ctx.globalAlpha = 0.1 + breath * 0.03;
-  px(ctx, x + 3, y, 10, TPX);
-  ctx.globalAlpha = 0.12 + breath * 0.04;
-  px(ctx, x + 6, y, 4, TPX);
+  const x = tx * TPX;
+  const y = ty * TPX;
+  for (let i = 0; i < CURTAIN.length; i++) {
+    let key = CURTAIN[i];
+    if (breath === 2 && (i === 3 || i === 6)) key = 'mid';
+    ctx.fillStyle = ink[key];
+    px(ctx, x + 3 + i, y, 1, TPX);
+  }
   // Strands of light running up the curtain, a pixel at a time.
-  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = ink.edge;
   for (let i = 0; i < 3; i++) {
-    const sx = x + 4 + i * 4;
+    const sx = x + 5 + i * 2 + (i === 2 ? 1 : 0);
     const run = Math.floor(time * (9 + i * 2.5) + i * 7 + ty * 5) % TPX;
     const sy = y + TPX - run - 5;
     const top = Math.max(y, sy);
     const bottom = Math.min(y + TPX, sy + 5);
     if (bottom > top) px(ctx, sx, top, 1, bottom - top);
   }
-  // The edges, bright and steady.
-  px(ctx, x + 3, y, 1, TPX);
-  px(ctx, x + 12, y, 1, TPX);
-  // A rune every third tile, and a knot where it meets the floor.
+  // A rune every third tile, and one where it meets the floor.
   if (ty % 3 === 1 || floorBelow) {
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 0.45 + breath * 0.2;
-    RUNE.draw(ctx, (x + 5) * ART, (y + 4) * ART);
-    glowDisc(ctx, x + 8, y + 8, 9, color, 0.2 + breath * 0.06);
+    ctx.fillStyle = breath === 0 ? ink.edge : ink.rune;
+    for (const [rx, ry] of RUNE_CELLS) px(ctx, x + 5 + rx, y + 4 + ry, 1, 1);
   }
-  ctx.restore();
-  if (topCap) glowDisc(ctx, x + 8, y, 12, color, 0.24);
-  if (floorBelow) glowDisc(ctx, x + 8, y + TPX, 14, color, 0.32);
+  // Where it ends in the air, a bar of light across it; where it meets the
+  // floor, a foot that spreads a pixel each way.
+  ctx.fillStyle = ink.edge;
+  if (topCap) px(ctx, x + 3, y, 10, 1);
+  if (floorBelow) {
+    px(ctx, x + 1, y + TPX - 1, 14, 1);
+    px(ctx, x + 2, y + TPX - 2, 1, 1);
+    px(ctx, x + 13, y + TPX - 2, 1, 1);
+  }
+}
+
+/**
+ * Where a ward will come down, while it is open: a seam of runes in the floor.
+ * The way in still shows where it will stand, so the moment it rises behind
+ * the hero is not a surprise but a promise kept.
+ */
+function drawSleepingWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: number, time: number): void {
+  const wx = tx * TILE;
+  const arena = level.arenaAt(wx);
+  const floorBelow = level.solidAt(tx, ty + 1) && level.tileAt(tx, ty + 1) !== Tile.Ward;
+  if (!arena || arena.cleared || !floorBelow) return;
+  const x = tx * TPX;
+  const y = ty * TPX;
+  const ink = wardInk(wx);
+  ctx.fillStyle = step3(time * 1.4 + tx) === 2 ? ink.mid : ink.dark;
+  px(ctx, x + 6, y + TPX - 2, 4, 2);
+  px(ctx, x + 7, y + TPX - 6, 2, 3);
+}
+
+/**
+ * The standing wards in view, drawn over the lit ground (see drawWard): in
+ * world coordinates, on a context set up like the ground layer's.
+ */
+export function drawWards(ctx: CanvasRenderingContext2D, level: Level, camera: Camera, time: number): void {
+  const art = terrainOf(level);
+  const left = Math.floor(camera.renderX / TILE) - 1;
+  const right = Math.ceil((camera.renderX + camera.viewW) / TILE) + 1;
+  const top = Math.floor(camera.renderY / TILE) - 1;
+  const bottom = Math.ceil((camera.renderY + camera.viewH) / TILE) + 1;
+  for (const door of art.doors) {
+    if (door.tx < left) continue;
+    if (door.tx > right) break;
+    if (door.tile !== Tile.Ward || door.ty < top || door.ty > bottom) continue;
+    if (level.wardClosed(door.tx)) drawWard(ctx, level, door.tx, door.ty, time);
+  }
+}
+
+/** The light each standing ward in view throws on the floor at its foot. */
+export function wardLights(level: Level, camera: Camera, add: (x: number, y: number, radius: number, rgb: string, strength: number, tint: number) => void): void {
+  const art = terrainOf(level);
+  const left = Math.floor(camera.renderX / TILE) - 3;
+  const right = Math.ceil((camera.renderX + camera.viewW) / TILE) + 3;
+  for (const door of art.doors) {
+    if (door.tx < left) continue;
+    if (door.tx > right) break;
+    if (door.tile !== Tile.Ward || !level.wardClosed(door.tx)) continue;
+    if (!level.solidAt(door.tx, door.ty + 1) || level.tileAt(door.tx, door.ty + 1) === Tile.Ward) continue;
+    add(door.tx * TILE + TILE / 2, (door.ty + 1) * TILE - 6, 110, wardInk(door.tx * TILE).rgb, 0.8, 0.4);
+  }
 }
 
 /** The doors of the boss rooms in view: open and shut, so drawn every frame. */
@@ -382,7 +428,8 @@ function drawDoors(
         if (level.lairClosed) drawLairGate(ctx, door.tx, door.ty, time);
         break;
       case Tile.Ward:
-        drawWard(ctx, level, door.tx, door.ty, time);
+        // A standing ward is drawn over the lit ground (drawWards); here only the seam of a sleeping one.
+        if (!level.wardClosed(door.tx)) drawSleepingWard(ctx, level, door.tx, door.ty, time);
         break;
       default:
         break;

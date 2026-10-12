@@ -32,7 +32,7 @@ import { ART, ART_H, ART_W, abgrOf, actorCoverage, makeCanvas, settleActors } fr
 import { PaletteMap } from './render/palettemap';
 import { Scatter } from './render/scatter';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
-import { drawTilemap } from './render/tilemap';
+import { drawTilemap, drawWards, wardLights } from './render/tilemap';
 import {
   RELIC_ROW,
   drawBanner,
@@ -1524,6 +1524,7 @@ export class Game implements World {
     for (const l of this.player.moteLights()) add(l.x, l.y, l.radius, l.rgb, l.strength, l.tint);
 
     this.scatter.collectLights(this.camera, VIEW_W, VIEW_H, lights);
+    wardLights(this.level, this.camera, add);
     if (this.portal) add(this.portal.cx, this.portal.cy, 190, '186,132,255', 0.9, 0.34);
 
     const boss = this.boss;
@@ -1692,6 +1693,11 @@ export class Game implements World {
     a.save();
     a.setTransform(1, 0, 0, 1, 0, 0);
     a.drawImage(this.ground.canvas, 0, 0);
+    a.restore();
+    // The standing wards are light, not ground: over the darkness, never in it.
+    a.save();
+    a.setTransform(1 / ART, 0, 0, 1 / ART, -this.camera.renderX / ART, -this.camera.renderY / ART);
+    drawWards(a, this.level, this.camera, this.time);
     a.restore();
 
     // Readability first: ledges and pit walls keep a rim of light.
