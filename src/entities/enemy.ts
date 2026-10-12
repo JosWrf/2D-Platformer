@@ -9,7 +9,7 @@ import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Body } from './entity';
-import { gallertPart } from './gallert-art';
+import { bubbleSprite, gallertPart, heapTop, lipPart, mirePart } from './gallert-art';
 import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart, warmHydra } from './hydra-art';
 import { clusterPart, heartAt, heartPart, shardPart } from './prism-art';
 import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
@@ -1716,6 +1716,8 @@ export class Gallert extends Enemy {
   private spawned = 0;
   /** Last floor he stood on, so his shadow stays down there when he leaps. */
   private groundY = 0;
+  /** How far the bog is heaped up round him, 0..1 - drawing only: it sinks while he is in the air. */
+  private mire = 1;
 
   constructor(x: number, y: number) {
     super('gallert', x, y);
@@ -1785,6 +1787,7 @@ export class Gallert extends Enemy {
     this.core = Math.max(0, this.core - dt * 2);
     this.squash = approach(this.squash, 0, dt * 2.4);
     if (this.onGround) this.groundY = this.bottom;
+    this.mire = approach(this.mire, this.onGround ? 1 : 0, dt * (this.onGround ? 2.5 : 5));
 
     if (!this.engaged) {
       if (dist < this.aggroRange && !player.dead) {
@@ -1957,14 +1960,35 @@ export class Gallert extends Enemy {
   /*
    * Drawn for the grid (gallert-art.ts): one of five drawn shapes for his
    * squash - flattened as he winds up the leap, stretched in the air - with a
-   * four-frame jiggle at rest; his eyes squint before the leap and his mouth
-   * gapes before the spit, and the core in him fills before every move. The
-   * shadow stays on the floor and shrinks while he is up there, which is what
-   * says how high he is. A struck Gallert is white for two frames.
+   * four-frame jiggle at rest; his eyes screw shut before the leap and his
+   * mouth gapes before the spit, and the core in him fills before every move.
+   * He rises out of his bog: a heaving mire heap behind him and a lip of mire
+   * round his foot, bones sticking out of it and bubbles coming up through
+   * it, which sinks to a puddle while he is in the air and wells up again
+   * where he lands. The shadow stays on the floor and shrinks while he is up
+   * there, which is what says how high he is. A struck Gallert is white for
+   * two frames.
    */
   override draw(ctx: CanvasRenderingContext2D): void {
     const rise = clamp((this.groundY - this.bottom) / 150, 0, 1);
     shadow(ctx, this.cx, this.groundY, this.w * 0.55 * (1 - rise * 0.45), 0.32 * (1 - rise * 0.5));
+    const gy = this.groundY || this.bottom;
+    const flip = this.facing < 0;
+    const level = Math.round(this.mire * 4);
+    const heave = Math.floor(this.anim * 4) & 3;
+    blit(ctx, mirePart(level, heave), this.cx, gy, flip);
+    if (level >= 2) {
+      for (const [bx, phase] of [
+        [-34, 0],
+        [8, 3],
+        [44, 5],
+      ]) {
+        const sp = bubbleSprite((Math.floor(this.anim * 6) + phase) % 7);
+        if (!sp) continue;
+        const x = this.cx + (flip ? -bx : bx);
+        sp.draw(ctx, x - (sp.w * ART) / 2, gy - heapTop(bx, level, heave) - sp.h * ART + ART);
+      }
+    }
     const s = this.squash;
     const shape = s < -0.6 ? 0 : s < -0.2 ? 1 : s < 0.2 ? 2 : s < 0.6 ? 3 : 4;
     const jiggle = shape === 2 ? Math.floor(this.anim * 5) & 3 : 0;
@@ -1976,6 +2000,7 @@ export class Gallert extends Enemy {
       (c) => blit(c, gallertPart(shape, jiggle, mouth, heat), this.cx, this.bottom, this.facing < 0),
       { x: this.cx - 70, y: this.bottom - 110, w: 140, h: 116 },
     );
+    blit(ctx, lipPart(level, heave), this.cx, gy, flip);
   }
 }
 
