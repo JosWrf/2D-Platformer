@@ -4,7 +4,7 @@ import { ART, snap } from '../render/pixel';
 import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
-import { TONGUE, WRECK, drawChest, lidFrame } from './mimic-art';
+import { HOARD_W, TONGUE, WRECK, drawChest, hoardSprite, lidFrame } from './mimic-art';
 import { Projectile } from './projectile';
 
 /**
@@ -149,8 +149,13 @@ export class Mimic extends Enemy {
   private arenaRight = 0;
   private floorY = 0;
   private coinGlint = 0;
+  /** Where its hoard is heaped: under where it slept, on the floor. */
+  private readonly hoardX: number;
+  private hoardY = 0;
 
   override castLight = false;
+  // The hoard stays where it is while the chest hops about the vault.
+  override drawReach = 760;
 
   constructor(x: number, y: number) {
     super('mimic', x, y);
@@ -164,6 +169,7 @@ export class Mimic extends Enemy {
     // It stays on the floor of its vault: a chest on a plank is a chest that
     // bites from somewhere it cannot be reached.
     this.ignorePlatforms = true;
+    this.hoardX = this.cx;
   }
 
   get phase(): 1 | 2 {
@@ -334,6 +340,7 @@ export class Mimic extends Enemy {
       this.arenaRight = arena ? arena.right : this.cx + 560;
     }
     if (this.onGround) this.floorY = this.bottom;
+    if (this.hoardY === 0 && this.onGround) this.hoardY = this.bottom;
 
     if (this.state === 'dormant') {
       // A chest, and a glint in the keyhole now and then.
@@ -863,6 +870,18 @@ export class Mimic extends Enemy {
         ctx.fillRect(x, oy + (y - 2) * ART, ART, ART);
       }
     }
+  }
+
+  /**
+   * The hoard behind where it slept (mimic-art.ts), drawn with the ground:
+   * whole while it lives, and sliding away in four steps once the chest is
+   * broken.
+   */
+  override drawSetPiece(ctx: CanvasRenderingContext2D): void {
+    if (this.hoardY === 0) return;
+    const step = this.state === 'dying' ? Math.ceil(clamp(this.timer / 1.4, 0, 1) * 4) : 4;
+    const sp = hoardSprite(step);
+    if (sp) sp.draw(ctx, this.hoardX - (HOARD_W * ART) / 2, this.hoardY - sp.h * ART);
   }
 
   /** The chest gone to pieces: planks and bits of its gold, tumbling in four drawn turns. */

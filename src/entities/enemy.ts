@@ -158,6 +158,18 @@ export abstract class Enemy extends Body {
   contactDamage = 1;
   scoreValue = 25;
   aggroRange = 240;
+  /**
+   * How far outside the view it is still drawn, in pixels: further for a boss
+   * with a set piece of its own that stays where it is while he goes about.
+   */
+  drawReach = 140;
+
+  /**
+   * A set piece of its own, drawn with the ground rather than with the
+   * actors: under the light like the rest of the level, and behind every
+   * actor with their outlines between. Nothing, for most.
+   */
+  drawSetPiece(_ctx: CanvasRenderingContext2D): void {}
   /** Enemies far off-screen are frozen to keep the big level cheap. */
   active = false;
   /**

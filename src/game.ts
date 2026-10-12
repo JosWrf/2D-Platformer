@@ -1677,6 +1677,9 @@ export class Game implements World {
     for (const platform of this.platforms) {
       if (this.isVisible(platform.x, platform.y, 200)) platform.draw(g);
     }
+    for (const enemy of this.enemies) {
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, enemy.drawReach)) enemy.drawSetPiece(g);
+    }
 
     const blend = zoneBlend(this.player.cx, this.level.rooms);
     // A crossing between two zones' darkness in four steps, so each step's
@@ -1919,7 +1922,7 @@ export class Game implements World {
       if (!pickup.dead && this.isVisible(pickup.x, pickup.y, 100)) pickup.draw(c);
     }
     for (const enemy of this.enemies) {
-      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, 140)) enemy.draw(c, this);
+      if (!enemy.dead && this.isVisible(enemy.x, enemy.y, enemy.drawReach)) enemy.draw(c, this);
     }
     if (this.boss && !this.boss.dead && this.isVisible(this.boss.x, this.boss.y, 300)) {
       this.boss.draw(c);
