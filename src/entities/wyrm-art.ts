@@ -1,7 +1,7 @@
 import { RAMP } from '../render/palette';
 import { ART } from '../render/pixel';
 import { type Grid, flame, hash2, rows as rowsOfCells, tumble } from '../render/sheet';
-import { BigSheet, cellsOf, crop, despeckle, fillPoly, rotSprites, rowsOf, strokeCells4 } from './puppet';
+import { BigSheet, cellsOf, despeckle, fillPoly, rowsOf, strokeCells4, turnings } from './puppet';
 
 /**
  * Ignivor, drawn for the grid: plates of obsidian - near-black glass, a step
@@ -148,28 +148,29 @@ type Turned = { rows: string[]; x: number; y: number };
 
 /** A part turned to the nine angles about its pivot, each cropped, with its pivot. */
 function turned(rows: Grid, px: number, py: number): Turned[] {
-  const half = Math.ceil(Math.hypot(rows[0].length, rows.length)) + 2;
-  return rotSprites(rows, ANGLES, px, py, half * 2, half * 2, half - px, half - py).map((g) => {
-    const cut = crop(despeckle(g));
-    return { rows: cut.rows, x: half - cut.x, y: half - cut.y };
-  });
+  return turnings(rows, px, py, ANGLES);
 }
 
 const plateFrames: Record<string, string[]> = {};
 const plateAt: Record<string, { x: number; y: number }> = {};
-SIZES.forEach((r, s) => {
-  const p = plate(r);
+
+/** The plates of one size at all nine angles, worked out the first time they are wanted (see warmWyrm). */
+function ensurePlates(s: number): void {
+  if (plateFrames[`p${s}_0`]) return;
+  const p = plate(SIZES[s]);
   turned(p.rows, p.x, p.y).forEach((t, i) => {
     plateFrames[`p${s}_${i}`] = t.rows;
     plateAt[`p${s}_${i}`] = { x: t.x, y: t.y };
   });
-});
+}
 const PLATES = new BigSheet<string>(plateFrames, KEY, PALETTES);
 
 /** A plate of the body at (x, y), its size picked from r (art pixels), turned to a heading. */
 export function drawPlate(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, ang: number, palette = ''): void {
   const { i, facing } = heading(ang);
-  const id = `p${plateSize(r)}_${i}`;
+  const s = plateSize(r);
+  ensurePlates(s);
+  const id = `p${s}_${i}`;
   const at = plateAt[id];
   PLATES.draw(ctx, id, x, y, at.x, at.y, facing, palette);
 }
@@ -247,19 +248,23 @@ const JAWS = [0, 0.25, 0.55];
 
 const headFrames: Record<string, string[]> = {};
 const headAt: Record<string, { x: number; y: number }> = {};
-JAWS.forEach((j, n) => {
-  const h = head(j);
+
+/** The head with one of its jaws at all nine angles, worked out the first time it is wanted. */
+function ensureHeads(n: number): void {
+  if (headFrames[`h${n}_0`]) return;
+  const h = head(JAWS[n]);
   turned(h.rows, h.x, h.y).forEach((t, i) => {
     headFrames[`h${n}_${i}`] = t.rows;
     headAt[`h${n}_${i}`] = { x: t.x, y: t.y };
   });
-});
+}
 const HEADS = new BigSheet<string>(headFrames, KEY, PALETTES);
 
 /** The head at its point (x, y) on a heading, the jaw dropped by `jaw` (0..0.55 radians). */
 export function drawWyrmHead(ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, jaw: number, palette = ''): void {
   const { i, facing } = heading(ang);
   const n = jaw < 0.12 ? 0 : jaw < 0.4 ? 1 : 2;
+  ensureHeads(n);
   const id = `h${n}_${i}`;
   const at = headAt[id];
   HEADS.draw(ctx, id, x, y, at.x, at.y, facing, palette);
@@ -280,12 +285,32 @@ function flames(prefix: string, w: number, heights: readonly number[], tones: st
 }
 
 /** The wall of flame behind him under the floor: 17 wide, risen to four heights. */
-export const PILLAR_STEPS = [10, 21, 31, 41];
-export const PILLAR_FLAMES = new BigSheet<string>(flames('w', 17, PILLAR_STEPS, 'bcdef'), KEY);
+const PILLAR_STEPS = [10, 21, 31, 41];
+const pillarFrames: Record<string, string[]> = {};
+const PILLAR_FLAMES = new BigSheet<string>(pillarFrames, KEY);
 
 /** The tongues on a burning pool. */
-export const TONGUE_STEPS = [3, 5, 7];
-export const TONGUES = new BigSheet<string>(flames('t', 5, TONGUE_STEPS, 'cde'), KEY);
+const TONGUE_STEPS = [3, 5, 7];
+const tongueFrames: Record<string, string[]> = {};
+const TONGUES = new BigSheet<string>(tongueFrames, KEY);
+
+function ensureFire(): void {
+  if (pillarFrames.w0_0) return;
+  Object.assign(pillarFrames, flames('w', 17, PILLAR_STEPS, 'bcdef'));
+  Object.assign(tongueFrames, flames('t', 5, TONGUE_STEPS, 'cde'));
+}
+
+/** A tongue of the wall of flame, risen to `step` (0..3), standing on (x, floor). */
+export function drawPillarFlame(ctx: CanvasRenderingContext2D, step: number, flick: number, x: number, floor: number): void {
+  ensureFire();
+  PILLAR_FLAMES.draw(ctx, `w${step}_${flick}`, x, floor, 8, PILLAR_STEPS[step]);
+}
+
+/** A tongue on a pool, `n` (0..2) tall, standing on (x, y). */
+export function drawTongue(ctx: CanvasRenderingContext2D, n: number, flick: number, x: number, y: number): void {
+  ensureFire();
+  TONGUES.draw(ctx, `t${n}_${flick}`, x, y, 2, TONGUE_STEPS[n]);
+}
 
 /** A pool of fire on the floor: an oval in bands, 31 × 5, white-hot at its heart. */
 function poolRows(k: number): string[] {
@@ -372,24 +397,54 @@ export function drawCinder(ctx: CanvasRenderingContext2D, x: number, y: number, 
   CINDERS.draw(ctx, `c${s}_${i}`, x, y, Math.floor(w / 2), Math.floor(w / 2), 1, palette);
 }
 
+/**
+ * What is worked out of him only when it is first wanted: plates, head and
+ * fire, and the canvases of plates and head both ways round. warmWyrm does
+ * it a little at a time from the moment he is in view, so neither the
+ * game's start nor the fight pays for it at once.
+ */
+const PENDING: (() => void)[] = [
+  ...SIZES.map((_, s) => () => ensurePlates(s)),
+  ...SIZES.map((_, s) => () => ANGLES.forEach((_a, i) => PLATES.bake(`p${s}_${i}`))),
+  ...JAWS.map((_, n) => () => ensureHeads(n)),
+  ...JAWS.map((_, n) => () => ANGLES.forEach((_a, i) => HEADS.bake(`h${n}_${i}`))),
+  ...JAWS.map((_, n) => () => ANGLES.forEach((_a, i) => HEADS.bake(`h${n}_${i}`, 'hot'))),
+  ensureFire,
+];
+
+/** Works out what is still missing of him for up to `budget` ms. True once all of him is ready. */
+export function warmWyrm(budget: number): boolean {
+  const t0 = performance.now();
+  while (PENDING.length > 0) {
+    PENDING.shift()?.();
+    if (performance.now() - t0 >= budget) break;
+  }
+  return PENDING.length === 0;
+}
+
 /** Everything as rows, for looking at outside the game. */
-export const WYRM_DEBUG = {
-  key: KEY,
-  palettes: PALETTES,
-  frames: {
-    ...plateFrames,
-    ...headFrames,
-    ...flames('w', 17, PILLAR_STEPS, 'bcdef'),
-    ...flames('t', 5, TONGUE_STEPS, 'cde'),
-    pool: poolRows(1),
-    c0: crackRows(9),
-    c1: crackRows(15),
-    c2: crackRows(22),
-    slab: slabRows(),
-    ...cinderFrames,
-    plate0: plate(12).rows,
-    plate3: plate(6).rows,
-    head0: head(0).rows,
-    head2: head(0.55).rows,
-  } as Record<string, string[]>,
-};
+export function wyrmDebug(): { key: Record<string, string>; palettes: typeof PALETTES; frames: Record<string, string[]> } {
+  SIZES.forEach((_, i) => ensurePlates(i));
+  JAWS.forEach((_, n) => ensureHeads(n));
+  ensureFire();
+  return {
+    key: KEY,
+    palettes: PALETTES,
+    frames: {
+      ...plateFrames,
+      ...headFrames,
+      ...pillarFrames,
+      ...tongueFrames,
+      pool: poolRows(1),
+      c0: crackRows(9),
+      c1: crackRows(15),
+      c2: crackRows(22),
+      slab: slabRows(),
+      ...cinderFrames,
+      plate0: plate(12).rows,
+      plate3: plate(6).rows,
+      head0: head(0).rows,
+      head2: head(0.55).rows,
+    },
+  };
+}

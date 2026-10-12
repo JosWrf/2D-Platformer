@@ -454,24 +454,24 @@ const SLAM: Legs = [
 
 const UP_TAIL = [TAIL_UP, 1, 9] as const;
 
-function frames(): Record<BoarFrame, string[]> {
+function frames(): Record<BoarFrame, () => string[]> {
   const scrape = (leg: Leg): string[] =>
     pose({ legs: [STAND[0], STAND[1], [5, 3, 0, 4], leg], dy: 1, pitch: 0.06, nod: 0.18, crest: CREST_UP, tail: UP_TAIL });
   return {
-    stand0: pose({}),
-    stand1: pose({ dy: 1 }),
-    trot0: pose({ legs: TROT[0] }),
-    trot1: pose({ legs: TROT[1], dy: 1 }),
-    trot2: pose({ legs: TROT[2] }),
-    trot3: pose({ legs: TROT[3], dy: 1 }),
-    gallop0: pose({ legs: GALLOP[0], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop1: pose({ legs: GALLOP[1], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop2: pose({ legs: GALLOP[2], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop3: pose({ legs: GALLOP[3], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    scrape0: scrape(SCRAPE[0]),
-    scrape1: scrape(SCRAPE[1]),
-    scrape2: scrape(SCRAPE[2]),
-    rear0: rearing(
+    stand0: () => pose({}),
+    stand1: () => pose({ dy: 1 }),
+    trot0: () => pose({ legs: TROT[0] }),
+    trot1: () => pose({ legs: TROT[1], dy: 1 }),
+    trot2: () => pose({ legs: TROT[2] }),
+    trot3: () => pose({ legs: TROT[3], dy: 1 }),
+    gallop0: () => pose({ legs: GALLOP[0], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
+    gallop1: () => pose({ legs: GALLOP[1], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
+    gallop2: () => pose({ legs: GALLOP[2], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
+    gallop3: () => pose({ legs: GALLOP[3], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
+    scrape0: () => scrape(SCRAPE[0]),
+    scrape1: () => scrape(SCRAPE[1]),
+    scrape2: () => scrape(SCRAPE[2]),
+    rear0: () => rearing(
       16,
       [
         [20, 3, 30, 4],
@@ -482,7 +482,7 @@ function frames(): Record<BoarFrame, string[]> {
         [-8, 4, 18, 5],
       ],
     ),
-    rear1: rearing(
+    rear1: () => rearing(
       32,
       [
         [50, 3, 90, 4],
@@ -493,7 +493,7 @@ function frames(): Record<BoarFrame, string[]> {
         [-20, 4, 25, 5],
       ],
     ),
-    rear2: rearing(
+    rear2: () => rearing(
       32,
       [
         [80, 3, 120, 4],
@@ -504,24 +504,24 @@ function frames(): Record<BoarFrame, string[]> {
         [-20, 4, 25, 5],
       ],
     ),
-    slam: pose({ legs: SLAM, dy: 2, pitch: 0.07, nod: 0.2, crest: CREST_UP }),
-    dig0: pose({ dy: 1, pitch: 0.06, nod: 0.3 }),
-    dig1: pose({ dy: 2, pitch: 0.08, nod: 0.36 }),
-    toss: pose({ nod: -0.3, hy: -1, crest: CREST_UP, tail: UP_TAIL }),
-    pant0: pose({ dy: 1, nod: 0.12, mouth: true, tongue: true }),
-    pant1: pose({ dy: 2, nod: 0.14, mouth: true, tongue: true }),
-    dazed0: pose({ legs: SPLAY, dy: 1, nod: 0.16, mood: DAZED, tongue: true, hx: -1 }),
-    dazed1: pose({ legs: SPLAY, dy: 1, nod: 0.1, mood: DAZED, tongue: true, hy: 1 }),
-    stagger: pose({ legs: BRACE, nod: -0.18, hx: -1, hy: -1, crest: CREST_UP, mouth: true }),
-    shake0: pose({ nod: -0.08, hx: -1, crest: CREST_UP, tail: UP_TAIL }),
-    shake1: pose({ nod: 0.12, hx: 1, hy: 1, crest: CREST_UP }),
-    roar: pose({ nod: -0.22, hy: -1, mouth: true, crest: CREST_UP, tail: UP_TAIL }),
-    sleep0: pose({ legs: FOLD, dy: 6, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
-    sleep1: pose({ legs: FOLD, dy: 7, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
-    wake: pose({ legs: BUCKLE, dy: 3, nod: 0.1 }),
-    fall0: pose({ legs: BUCKLE, dy: 3, nod: 0.2, mood: SHUT, mouth: true }),
-    fall1: pose({ legs: BUCKLE, dy: 5, pitch: 0.08, nod: 0.35, mood: SHUT, tongue: true, crest: CREST_FLAT }),
-    fall2: pose({ legs: FOLD, dy: 7, pitch: 0.04, nod: 0.4, mood: SHUT, tongue: true, crest: CREST_FLAT }),
+    slam: () => pose({ legs: SLAM, dy: 2, pitch: 0.07, nod: 0.2, crest: CREST_UP }),
+    dig0: () => pose({ dy: 1, pitch: 0.06, nod: 0.3 }),
+    dig1: () => pose({ dy: 2, pitch: 0.08, nod: 0.36 }),
+    toss: () => pose({ nod: -0.3, hy: -1, crest: CREST_UP, tail: UP_TAIL }),
+    pant0: () => pose({ dy: 1, nod: 0.12, mouth: true, tongue: true }),
+    pant1: () => pose({ dy: 2, nod: 0.14, mouth: true, tongue: true }),
+    dazed0: () => pose({ legs: SPLAY, dy: 1, nod: 0.16, mood: DAZED, tongue: true, hx: -1 }),
+    dazed1: () => pose({ legs: SPLAY, dy: 1, nod: 0.1, mood: DAZED, tongue: true, hy: 1 }),
+    stagger: () => pose({ legs: BRACE, nod: -0.18, hx: -1, hy: -1, crest: CREST_UP, mouth: true }),
+    shake0: () => pose({ nod: -0.08, hx: -1, crest: CREST_UP, tail: UP_TAIL }),
+    shake1: () => pose({ nod: 0.12, hx: 1, hy: 1, crest: CREST_UP }),
+    roar: () => pose({ nod: -0.22, hy: -1, mouth: true, crest: CREST_UP, tail: UP_TAIL }),
+    sleep0: () => pose({ legs: FOLD, dy: 6, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
+    sleep1: () => pose({ legs: FOLD, dy: 7, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
+    wake: () => pose({ legs: BUCKLE, dy: 3, nod: 0.1 }),
+    fall0: () => pose({ legs: BUCKLE, dy: 3, nod: 0.2, mood: SHUT, mouth: true }),
+    fall1: () => pose({ legs: BUCKLE, dy: 5, pitch: 0.08, nod: 0.35, mood: SHUT, tongue: true, crest: CREST_FLAT }),
+    fall2: () => pose({ legs: FOLD, dy: 7, pitch: 0.04, nod: 0.4, mood: SHUT, tongue: true, crest: CREST_FLAT }),
   };
 }
 
@@ -565,16 +565,36 @@ export type BoarFrame =
  * His frames, cropped to what is in them; each remembers where the box he
  * stands in went, so all of them are drawn by the same point.
  */
-const made = frames();
-const cut: Record<string, string[]> = {};
-const at: Record<string, { x: number; y: number }> = {};
-for (const [name, rows] of Object.entries(made)) {
-  const c = crop(rows);
+const MAKE = frames();
+const cut = {} as Record<BoarFrame, string[]>;
+const at = {} as Record<BoarFrame, { x: number; y: number }>;
+
+/** A frame, worked out the first time it is wanted (see warmBoar). */
+function ensureBoar(name: BoarFrame): void {
+  if (cut[name]) return;
+  const c = crop(MAKE[name]());
   cut[name] = c.rows;
   at[name] = { x: c.x, y: c.y };
 }
 
-export const BOAR = new Sheet<BoarFrame>(cut as Record<BoarFrame, string[]>, KEY, PALETTES);
+export const BOAR = new Sheet<BoarFrame>(cut, KEY, PALETTES);
+
+const PENDING = Object.keys(MAKE) as BoarFrame[];
+
+/**
+ * Works out frames still missing for up to `budget` ms - a little at a time
+ * from the moment he is in view, so neither the game's start nor the fight
+ * pays for all of him at once. True once all of him is ready.
+ */
+export function warmBoar(budget: number): boolean {
+  const t0 = performance.now();
+  while (PENDING.length > 0) {
+    const name = PENDING.shift();
+    if (name) ensureBoar(name);
+    if (performance.now() - t0 >= budget) break;
+  }
+  return PENDING.length === 0;
+}
 
 /**
  * Draws a frame with the middle of his hitbox at logical x `cx` and his
@@ -582,6 +602,7 @@ export const BOAR = new Sheet<BoarFrame>(cut as Record<BoarFrame, string[]>, KEY
  * 11-42 of the uncropped frame; its middle line is the left edge of column 27.
  */
 export function drawBoar(ctx: CanvasRenderingContext2D, frame: BoarFrame, cx: number, bottom: number, facing: 1 | -1, hot: boolean): void {
+  ensureBoar(frame);
   const o = at[frame];
   BOAR.draw(ctx, frame, cx, bottom, 27 - o.x, FH - o.y, facing, hot ? 'hot' : '');
 }

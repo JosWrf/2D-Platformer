@@ -2,7 +2,7 @@ import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
-import { type BoarFrame, RIDGE, STARS, drawBoar } from './boar-art';
+import { type BoarFrame, RIDGE, STARS, drawBoar, warmBoar } from './boar-art';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 import { ROCK } from './projectile-art';
@@ -407,7 +407,13 @@ export class Boar extends Enemy {
 
   /* --------------------------------------------------------------- update */
 
+  /** All his frames worked out (see warmBoar). */
+  private ready = false;
+
   override update(dt: number, world: World): void {
+    // His frames are worked out a little at a time from the moment he is in
+    // view, long before the fight needs them.
+    if (!this.ready) this.ready = warmBoar(2);
     this.updateCommon(dt);
     const p = world.player;
     if (this.arenaRight === 0) {

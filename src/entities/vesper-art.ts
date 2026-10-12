@@ -1,6 +1,6 @@
 import { RAMP } from '../render/palette';
 import { type Grid } from '../render/sheet';
-import { BigSheet, type Cells, cellsOf, crop, despeckle, fillPoly, rotSprite, rowsOf, strokeCells4 } from './puppet';
+import { BigSheet, type Cells, cellsOf, crop, despeckle, fillPoly, rowsOf, strokeCells4, turnings } from './puppet';
 
 /**
  * Vesperon, drawn for the grid: the lord of the keep, front on, in a high
@@ -73,16 +73,11 @@ type Pt = [number, number];
  * Returns the frame and its shoulder.
  */
 function wing(open: number, beat: number, fan: number): { rows: string[]; x: number; y: number } {
-  const W = 180;
-  const H = 200;
-  const OX = 10;
-  const OY = 100;
-  const c = cellsOf([], W, H);
   const lift = -0.35 - beat * 0.45 + (1 - open) * 1.25;
   const reach = 36 + open * 74;
   const ca = Math.cos(lift);
   const sa = Math.sin(lift);
-  const P = ([x, y]: Pt): Pt => [OX + (x * ca - y * sa) * S, OY + (x * sa + y * ca) * S];
+  const turn = ([x, y]: Pt): Pt => [(x * ca - y * sa) * S, (x * sa + y * ca) * S];
   const wristL: Pt = [reach * 0.55, -8];
   const tipsL: Pt[] = [];
   for (let i = 0; i < 4; i++) {
@@ -108,6 +103,19 @@ function wing(open: number, beat: number, fan: number): { rows: string[]; x: num
   for (let i = 1; i < 4; i++) scallop(tipsL[i - 1], tipsL[i]);
   scallop(tipsL[3], [6, 44]);
   outline.push([0, 22], [-6, 24]);
+  // A canvas just big enough for this pose, with room for the claw and the outline.
+  const turned = outline.map(turn);
+  const xs = turned.map((p) => p[0]);
+  const ys = turned.map((p) => p[1]);
+  const OX = Math.ceil(-Math.min(...xs)) + 3;
+  const OY = Math.ceil(-Math.min(...ys)) + 6;
+  const W = OX + Math.ceil(Math.max(...xs)) + 4;
+  const H = OY + Math.ceil(Math.max(...ys)) + 4;
+  const P = (p: Pt): Pt => {
+    const [x, y] = turn(p);
+    return [OX + x, OY + y];
+  };
+  const c = cellsOf([], W, H);
   fillPoly(c, outline.map(P), 'm');
 
   // Shade each panel by where it lies round the wrist: lit just after the
@@ -166,8 +174,8 @@ function wing(open: number, beat: number, fan: number): { rows: string[]; x: num
   for (const [dx, dy, l] of [[0, 0, 'K'], [0, -1, 'K'], [0, -2, 'k'], [1, -2, 'k'], [1, -3, 'k']] as const) {
     if (c[ky + dy]?.[kx + dx] !== undefined) c[ky + dy][kx + dx] = l;
   }
-  const cut = crop(despeckle(rowsOf(c)));
-  return { rows: cut.rows, x: OX - cut.x, y: OY - cut.y };
+  const cut = crop(rowsOf(c));
+  return { rows: despeckle(cut.rows), x: OX - cut.x, y: OY - cut.y };
 }
 
 /** The beat, frame by frame: [spread, beat, fan]. */
@@ -195,7 +203,10 @@ export type WingFrame = keyof typeof WING_POSES;
 
 const wingRows = {} as Record<WingFrame, string[]>;
 const wingAt = {} as Record<WingFrame, { x: number; y: number }>;
-for (const name of Object.keys(WING_POSES) as WingFrame[]) {
+
+/** A wing frame, worked out the first time it is wanted (see warmVesper). */
+function ensureWing(name: WingFrame): void {
+  if (wingRows[name]) return;
   const [o, b, f] = WING_POSES[name];
   const w = wing(o, b, f);
   wingRows[name] = w.rows;
@@ -624,6 +635,7 @@ function whole(pose: BodyFrame, w: WingFrame, cw: number, ch: number): Cells {
       }
     }
   };
+  ensureWing(w);
   const at = wingAt[w];
   lay(wingRows[w], cw + SHOULDER_X - at.x, ch + SHOULDER_Y - at.y, false);
   lay(wingRows[w], cw - SHOULDER_X - 1 + at.x, ch + SHOULDER_Y - at.y, true);
@@ -633,13 +645,19 @@ function whole(pose: BodyFrame, w: WingFrame, cw: number, ch: number): Cells {
 
 /** The dive, pitched towards where he is going, wings half drawn in: three angles, each turned once with RotSprite. */
 const DIVE_DEG = [18, 32, 46] as const;
-const diveRows: Record<string, string[]> = {};
-const diveAt: Record<string, { x: number; y: number }> = {};
-for (const deg of DIVE_DEG) {
-  const base = rowsOf(whole('fly2', 'half0', 60, 50));
-  const turned = crop(despeckle(rotSprite(base, deg, 60, 50, 120, 100)));
-  diveRows[`dive${deg}`] = turned.rows;
-  diveAt[`dive${deg}`] = { x: 60 - turned.x, y: 50 - turned.y };
+
+type WholeFrame = 'dive18' | 'dive32' | 'dive46' | 'die0' | 'die1' | 'die2' | 'die3';
+const wholeRows = {} as Record<WholeFrame, string[]>;
+const wholeAt = {} as Record<WholeFrame, { x: number; y: number }>;
+
+function makeDives(): void {
+  if (wholeRows.dive18) return;
+  const base = crop(rowsOf(whole('fly2', 'half0', 100, 70)));
+  turnings(base.rows, 100 - base.x, 70 - base.y, DIVE_DEG).forEach((t, i) => {
+    const id = `dive${DIVE_DEG[i]}` as WholeFrame;
+    wholeRows[id] = t.rows;
+    wholeAt[id] = { x: t.x, y: t.y };
+  });
 }
 
 /** A little bat, the shape he leaves in. */
@@ -686,21 +704,51 @@ function scatter(g: Grid, gone: number, hx: number, hy: number): string[] {
 }
 
 /** His end: the figure with its wings half spread, fraying into bats over four steps. */
-const dieRows: Record<string, string[]> = {};
-const dieAt: Record<string, { x: number; y: number }> = {};
-{
+function makeDeath(): void {
+  if (wholeRows.die0) return;
   const base = crop(rowsOf(whole('fall1', 'half0', 110, 70)));
   const hx = 110 - base.x;
   const hy = 70 - base.y;
   [0, 0.3, 0.55, 0.8].forEach((gone, i) => {
-    dieRows[`die${i}`] = scatter(base.rows, gone, hx, hy);
-    dieAt[`die${i}`] = { x: hx, y: hy };
+    const id = `die${i}` as WholeFrame;
+    wholeRows[id] = scatter(base.rows, gone, hx, hy);
+    wholeAt[id] = { x: hx, y: hy };
   });
 }
 
-type WholeFrame = 'dive18' | 'dive32' | 'dive46' | 'die0' | 'die1' | 'die2' | 'die3';
-const WHOLE = new BigSheet<WholeFrame>({ ...diveRows, ...dieRows } as Record<WholeFrame, string[]>, KEY, PALETTES);
-const wholeAt = { ...diveAt, ...dieAt } as Record<WholeFrame, { x: number; y: number }>;
+const WHOLE = new BigSheet<WholeFrame>(wholeRows, KEY, PALETTES);
+
+/**
+ * What is worked out of him only when it is first wanted: the wing frames,
+ * the dive and his end, and the canvases of every frame both ways round.
+ * warmVesper does it a little at a time while he sleeps, so neither the
+ * game's start nor the fight pays for it at once.
+ */
+const PENDING: (() => void)[] = [
+  ...(Object.keys(BODY) as BodyFrame[]).map((n) => () => FIGURE.bake(n)),
+  ...(Object.keys(WING_POSES) as WingFrame[]).map((n) => () => {
+    ensureWing(n);
+    WINGS.bake(n);
+  }),
+  () => {
+    makeDives();
+    for (const d of DIVE_DEG) WHOLE.bake(`dive${d}`, 'hot');
+  },
+  () => {
+    makeDeath();
+    for (let i = 0; i < 4; i++) WHOLE.bake(`die${i}` as WholeFrame);
+  },
+];
+
+/** Works out what is still missing of him for up to `budget` ms. True once all of him is ready. */
+export function warmVesper(budget: number): boolean {
+  const t0 = performance.now();
+  while (PENDING.length > 0) {
+    PENDING.shift()?.();
+    if (performance.now() - t0 >= budget) break;
+  }
+  return PENDING.length === 0;
+}
 
 /* --------------------------------------------------------------- drawing */
 
@@ -716,6 +764,7 @@ export interface VesperLook {
 /** The lord at his middle (cx, cy) in logical pixels, facing his way; wings behind, body over them. */
 export function drawVesper(ctx: CanvasRenderingContext2D, cx: number, cy: number, facing: 1 | -1, look: VesperLook): void {
   if (look.wing) {
+    ensureWing(look.wing);
     const at = wingAt[look.wing];
     const p = look.palette === 'white' ? 'white' : '';
     WINGS.draw(ctx, look.wing, cx + SHOULDER_X * 2 * facing, cy + SHOULDER_Y * 2, at.x, at.y, facing, p);
@@ -733,6 +782,10 @@ const SICKLES = new BigSheet<'big' | 'small'>({ big: SICKLE, small: SICKLE_SMALL
 
 /** A whole-figure frame - the dive or his end - at his middle. */
 export function drawVesperWhole(ctx: CanvasRenderingContext2D, frame: WholeFrame, cx: number, cy: number, facing: 1 | -1, palette = ''): void {
+  if (!wholeRows[frame]) {
+    if (frame.startsWith('dive')) makeDives();
+    else makeDeath();
+  }
   const at = wholeAt[frame];
   WHOLE.draw(ctx, frame, cx, cy, at.x, at.y, facing, palette);
 }
@@ -790,9 +843,19 @@ export const MOON_R = 31;
 export const STARS = new BigSheet<'s'>({ s: ['.k.', 'kwk', '.k.'] }, KEY);
 
 /** Everything as rows, for looking at outside the game. */
-export const VESPER_DEBUG = {
-  key: KEY,
-  palettes: PALETTES,
-  frames: { ...wingRows, ...BODY, ...diveRows, ...dieRows, m0: moonRows(0), m1: moonRows(1), m2: moonRows(2) } as Record<string, string[]>,
-  whole: (pose: BodyFrame, w: WingFrame): string[] => crop(rowsOf(whole(pose, w, 140, 120))).rows,
-};
+export function vesperDebug(): {
+  key: Record<string, string>;
+  palettes: typeof PALETTES;
+  frames: Record<string, string[]>;
+  whole: (pose: BodyFrame, w: WingFrame) => string[];
+} {
+  for (const n of Object.keys(WING_POSES) as WingFrame[]) ensureWing(n);
+  makeDives();
+  makeDeath();
+  return {
+    key: KEY,
+    palettes: PALETTES,
+    frames: { ...wingRows, ...BODY, ...wholeRows, m0: moonRows(0), m1: moonRows(1), m2: moonRows(2) },
+    whole: (pose, w) => crop(rowsOf(whole(pose, w, 140, 120))).rows,
+  };
+}

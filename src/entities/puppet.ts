@@ -74,27 +74,56 @@ export function shear(g: Grid, k: number, pivot: number, room: number): string[]
   return rowsOf(out);
 }
 
-/** Scale2x (EPX) on a frame of letters. */
-function scale2x(c: Cells): Cells {
-  const h = c.length;
-  const w = c[0]?.length ?? 0;
-  const at = (x: number, y: number): string => (y >= 0 && y < h && x >= 0 && x < w ? c[y][x] : '.');
-  const out: Cells = [];
-  for (let y = 0; y < h * 2; y++) out.push(new Array<string>(w * 2).fill('.'));
+/** A frame as the char codes of its letters in one array, row after row ('.' is 46). */
+interface Plane {
+  w: number;
+  h: number;
+  c: Uint16Array;
+}
+
+const EMPTY = 46;
+
+function planeOf(g: Grid): Plane {
+  const h = g.length;
+  const w = Math.max(0, ...g.map((r) => r.length));
+  const c = new Uint16Array(w * h).fill(EMPTY);
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const p = c[y][x];
-      const a = at(x, y - 1);
-      const b = at(x + 1, y);
-      const l = at(x - 1, y);
-      const d = at(x, y + 1);
-      out[y * 2][x * 2] = l === a && l !== d && a !== b ? a : p;
-      out[y * 2][x * 2 + 1] = a === b && a !== l && b !== d ? b : p;
-      out[y * 2 + 1][x * 2] = d === l && d !== b && l !== a ? l : p;
-      out[y * 2 + 1][x * 2 + 1] = b === d && b !== a && d !== l ? d : p;
+    const row = g[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row.charCodeAt(x);
+      c[y * w + x] = ch === 32 ? EMPTY : ch;
     }
   }
+  return { w, h, c };
+}
+
+function rowsOfPlane(p: Plane): string[] {
+  const out: string[] = [];
+  for (let y = 0; y < p.h; y++) out.push(String.fromCharCode(...p.c.subarray(y * p.w, (y + 1) * p.w)));
   return out;
+}
+
+/** Scale2x (EPX) on a frame of letters. */
+function scale2x(p: Plane): Plane {
+  const { w, h, c } = p;
+  const W = w * 2;
+  const out = new Uint16Array(W * h * 2);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const P = c[i];
+      const A = y > 0 ? c[i - w] : EMPTY;
+      const B = x < w - 1 ? c[i + 1] : EMPTY;
+      const L = x > 0 ? c[i - 1] : EMPTY;
+      const D = y < h - 1 ? c[i + w] : EMPTY;
+      const o = y * 2 * W + x * 2;
+      out[o] = L === A && L !== D && A !== B ? A : P;
+      out[o + 1] = A === B && A !== L && B !== D ? B : P;
+      out[o + W] = D === L && D !== B && L !== A ? L : P;
+      out[o + W + 1] = B === D && B !== A && D !== L ? D : P;
+    }
+  }
+  return { w: W, h: h * 2, c: out };
 }
 
 /**
@@ -111,33 +140,48 @@ export function rotSprite(g: Grid, deg: number, px: number, py: number, outW: nu
 
 /** rotSprite at several angles, the eightfold blow-up done once for all of them. */
 export function rotSprites(g: Grid, degs: readonly number[], px: number, py: number, outW: number, outH: number, ox = 0, oy = 0): string[][] {
-  let big = cellsOf(g);
+  let big = planeOf(g);
   for (let i = 0; i < 3; i++) big = scale2x(big);
   return degs.map((deg) => turnBig(big, deg, px, py, outW, outH, ox, oy));
 }
 
-function turnBig(big: Cells, deg: number, px: number, py: number, outW: number, outH: number, ox: number, oy: number): string[] {
+function turnBig(big: Plane, deg: number, px: number, py: number, outW: number, outH: number, ox: number, oy: number): string[] {
   const S = 8;
-  const h8 = big.length;
-  const w8 = big[0]?.length ?? 0;
   const a = (deg * Math.PI) / 180;
   const ca = Math.cos(a);
   const sa = Math.sin(a);
-  const out = cellsOf([], outW, outH);
   const tx = px + ox;
   const ty = py + oy;
+  const line = new Uint16Array(outW);
+  const rows: string[] = [];
   for (let y = 0; y < outH; y++) {
     for (let x = 0; x < outW; x++) {
       const dx = x + 0.5 - tx;
       const dy = y + 0.5 - ty;
-      const sx = dx * ca + dy * sa + px;
-      const sy = -dx * sa + dy * ca + py;
-      const X = Math.floor(sx * S);
-      const Y = Math.floor(sy * S);
-      if (X >= 0 && X < w8 && Y >= 0 && Y < h8) out[y][x] = big[Y][X];
+      const X = Math.floor((dx * ca + dy * sa + px) * S);
+      const Y = Math.floor((-dx * sa + dy * ca + py) * S);
+      line[x] = X >= 0 && X < big.w && Y >= 0 && Y < big.h ? big.c[Y * big.w + X] : EMPTY;
     }
+    rows.push(String.fromCharCode(...line));
   }
-  return rowsOf(out);
+  return rows;
+}
+
+/**
+ * A part turned to each of `degs` about its pivot (px, py) with RotSprite,
+ * each turn cropped to what it covers and cleaned of lone cells; with the
+ * pivot's place in each cropped frame.
+ */
+export function turnings(g: Grid, px: number, py: number, degs: readonly number[]): { rows: string[]; x: number; y: number }[] {
+  let r = 1;
+  g.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (row[x] !== '.' && row[x] !== ' ') r = Math.max(r, Math.hypot(x + 0.5 - px, y + 0.5 - py));
+  });
+  const half = Math.ceil(r) + 2;
+  return rotSprites(g, degs, px, py, half * 2, half * 2, half - px, half - py).map((t) => {
+    const cut = crop(t);
+    return { rows: despeckle(cut.rows), x: half - cut.x, y: half - cut.y };
+  });
 }
 
 /** The frame's filled box: where to crop it to, and where its old (0, 0) went. */
@@ -360,26 +404,25 @@ export function fillPoly(c: Cells, pts: readonly (readonly [number, number])[], 
  * goes - no stray dot left for the actor pass to ring with outline.
  */
 export function despeckle(g: Grid): string[] {
-  const c = cellsOf(g);
-  const h = c.length;
-  const w = c[0]?.length ?? 0;
-  const at = (x: number, y: number): string => (y >= 0 && y < h && x >= 0 && x < w ? c[y][x] : '.');
+  const p = planeOf(g);
+  const { w, h, c } = p;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const l = c[y][x];
-      const n = at(x, y - 1);
-      const s = at(x, y + 1);
-      const wl = at(x - 1, y);
-      const e = at(x + 1, y);
-      if (l === '.') {
+      const i = y * w + x;
+      const l = c[i];
+      const n = y > 0 ? c[i - w] : EMPTY;
+      const s = y < h - 1 ? c[i + w] : EMPTY;
+      const wl = x > 0 ? c[i - 1] : EMPTY;
+      const e = x < w - 1 ? c[i + 1] : EMPTY;
+      if (l === EMPTY) {
         // A pinhole: filled from its side, or the light would show through as a dot.
-        if (n !== '.' && s !== '.' && wl !== '.' && e !== '.') c[y][x] = wl === e || wl === n ? wl : e;
+        if (n !== EMPTY && s !== EMPTY && wl !== EMPTY && e !== EMPTY) c[i] = wl === e || wl === n ? wl : e;
         continue;
       }
-      if (n !== l && n === s && n === wl && n === e) c[y][x] = n;
+      if (n !== l && n === s && n === wl && n === e) c[i] = n;
     }
   }
-  return rowsOf(c);
+  return rowsOfPlane(p);
 }
 
 /**
@@ -454,20 +497,26 @@ export class BigSheet<F extends string> {
     return s;
   }
 
+  private flipped(s: Baked): HTMLCanvasElement {
+    if (!s.flip) {
+      const { canvas, ctx: f } = makeCanvas(s.w, s.h);
+      f.translate(s.w, 0);
+      f.scale(-1, 1);
+      f.drawImage(s.img, 0, 0);
+      s.flip = canvas;
+    }
+    return s.flip;
+  }
+
+  /** A frame's canvases made now, both ways round - so its first showing costs nothing. */
+  bake(frame: F, palette = ''): void {
+    this.flipped(this.sprite(frame, palette));
+  }
+
   /** As Sheet.draw: the pivot column (px) on x, the pivot row line (py) on y, mirrored about that column for facing -1. */
   draw(ctx: CanvasRenderingContext2D, frame: F, x: number, y: number, px: number, py: number, facing: 1 | -1 = 1, palette = ''): void {
     const s = this.sprite(frame, palette);
-    let img = s.img;
-    if (facing < 0) {
-      if (!s.flip) {
-        const { canvas, ctx: f } = makeCanvas(s.w, s.h);
-        f.translate(s.w, 0);
-        f.scale(-1, 1);
-        f.drawImage(s.img, 0, 0);
-        s.flip = canvas;
-      }
-      img = s.flip;
-    }
+    const img = facing < 0 ? this.flipped(s) : s.img;
     const col = facing < 0 ? s.w - 1 - px : px;
     ctx.drawImage(img, snap(x - ART / 2) - col * ART, snap(y) - py * ART, s.w * ART, s.h * ART);
   }

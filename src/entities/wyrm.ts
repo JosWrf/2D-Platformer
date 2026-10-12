@@ -3,7 +3,7 @@ import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
-import { CRACKS, DROOL, PILLAR_FLAMES, PILLAR_STEPS, POOLS, TONGUES, TONGUE_STEPS, drawCinder, drawPlate, drawWyrmHead, shimmer } from './wyrm-art';
+import { CRACKS, DROOL, POOLS, drawCinder, drawPillarFlame, drawPlate, drawTongue, drawWyrmHead, shimmer, warmWyrm } from './wyrm-art';
 
 /**
  * 44, down from 58. With the windows below a hero who reads him lands about
@@ -186,6 +186,8 @@ export class Wyrm extends Enemy {
   private slumpX = 0;
   /** Counts down to the next time a swing on the plates says where to hit. */
   private hintTimer = 0;
+  /** All his frames worked out (see warmWyrm). */
+  private ready = false;
 
   override castLight = false;
 
@@ -403,6 +405,9 @@ export class Wyrm extends Enemy {
   /* --------------------------------------------------------------- update */
 
   override update(dt: number, world: World): void {
+    // His frames are worked out a little at a time from the moment he is in
+    // view, long before the fight needs them.
+    if (!this.ready) this.ready = warmWyrm(2);
     this.updateCommon(dt);
     const player = world.player;
     this.headFlash = Math.max(0, this.headFlash - dt * 5);
@@ -1007,7 +1012,7 @@ export class Wyrm extends Enemy {
         if (fh < 1.5) continue;
         const n = fh < 4 ? 0 : fh < 6 ? 1 : 2;
         const flick = Math.floor(this.anim * 10 + i + 1) % 2;
-        TONGUES.draw(ctx, `t${n}_${flick}`, pool.x + i * 11, this.floorY - 2, 2, TONGUE_STEPS[n]);
+        drawTongue(ctx, n, flick, pool.x + i * 11, this.floorY - 2);
       }
     }
   }
@@ -1019,7 +1024,7 @@ export class Wyrm extends Enemy {
       if (k <= 0.02) continue;
       const step = k < 0.37 ? 0 : k < 0.62 ? 1 : k < 0.87 ? 2 : 3;
       const flick = Math.floor(this.anim * 12 + p.x * 0.05) % 2;
-      PILLAR_FLAMES.draw(ctx, `w${step}_${flick}`, p.x, this.floorY, 8, PILLAR_STEPS[step]);
+      drawPillarFlame(ctx, step, flick, p.x, this.floorY);
     }
   }
 

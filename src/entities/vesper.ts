@@ -8,7 +8,7 @@ import type { World } from '../world/context';
 import { Bat, Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
 import { dashLine4, floorRing } from './puppet';
-import { type BodyFrame, MOON, MOON_R, STARS, type VesperLook, type WholeFrame, diveFrame, drawVesper, drawVesperWhole, wingFrame } from './vesper-art';
+import { type BodyFrame, MOON, MOON_R, STARS, type VesperLook, type WholeFrame, diveFrame, drawVesper, drawVesperWhole, warmVesper, wingFrame } from './vesper-art';
 
 const VESPER_HP = 56;
 /** Damage taken in the air before he drops out of it. */
@@ -91,6 +91,8 @@ export class Vesper extends Enemy {
   private fade = 1;
   /** Moves since his bats were last called. */
   private sinceSwarm = 2;
+  /** All his frames worked out (see warmVesper). */
+  private ready = false;
 
   override castLight = false;
 
@@ -229,6 +231,9 @@ export class Vesper extends Enemy {
   /* --------------------------------------------------------------- update */
 
   override update(dt: number, world: World): void {
+    // His frames are worked out a little at a time from the moment he is in
+    // view, long before the fight needs them.
+    if (!this.ready) this.ready = warmVesper(2);
     this.updateCommon(dt);
     const player = world.player;
     this.wing += dt * (this.state === 'dive' ? 2 : this.state === 'grounded' || this.state === 'stunned' ? 1.5 : 9);
