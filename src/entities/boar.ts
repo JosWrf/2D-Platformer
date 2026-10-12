@@ -1,9 +1,11 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
+import { type BoarFrame, RIDGE, STARS, drawBoar } from './boar-art';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
+import { ROCK } from './projectile-art';
 
 /**
  * Health before the hero is sized up - with Gallert's core alone that is what
@@ -876,344 +878,102 @@ export class Boar extends Enemy {
     return out;
   }
 
+
   /* -------------------------------------------------------------- drawing */
 
   override draw(ctx: CanvasRenderingContext2D): void {
-    this.drawWaves(ctx);
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, W * 0.95, 0.38);
-      ctx.scale(this.facing, 1);
-      this.drawBoar(ctx);
-      ctx.restore();
-    });
-    for (const l of this.lobs) this.drawRock(ctx, l);
+    this.drawRidges(ctx);
+    const facing = this.facing > 0 ? 1 : -1;
+    const frame = this.frame();
+    // About to come - scraping, charging, rearing, digging, off a wall: the
+    // ember of his eye goes white-hot (and its light flares, see lights()).
+    const hot = this.eyeHeat > 0.5 && this.state !== 'dazed' && this.state !== 'dying' && this.state !== 'dormant';
+    shadow(ctx, this.cx, this.bottom, W * 0.95, 0.38);
+    // Struck: his silhouette in white for the first two frames, then himself.
+    const white = this.flash >= HIT_WHITE;
+    withHitFlash(
+      ctx,
+      white ? this.flash : 0,
+      (c) => drawBoar(c, frame, this.cx, this.bottom, facing, hot),
+      white ? { x: this.cx - 58, y: this.bottom - 76, w: 116, h: 80 } : undefined,
+    );
+    if (this.state === 'dazed') this.drawStars(ctx);
+    for (const l of this.lobs) {
+      const turn = ((Math.floor((l.spin * 0.5 * 8) / (Math.PI * 2)) % 8) + 8) % 8;
+      ROCK.draw(ctx, `r${turn}`, l.x, l.y, 6, 6, 1);
+    }
   }
 
-  /** The rock on its way up, drawn as the Projectile it becomes draws itself. */
-  private drawRock(ctx: CanvasRenderingContext2D, l: Lob): void {
-    ctx.save();
-    ctx.translate(l.x, l.y);
-    ctx.rotate(l.spin * 0.5);
-    ctx.fillStyle = '#6b5747';
-    ctx.beginPath();
-    ctx.moveTo(-10, -4);
-    ctx.lineTo(-3, -10);
-    ctx.lineTo(8, -6);
-    ctx.lineTo(10, 4);
-    ctx.lineTo(1, 10);
-    ctx.lineTo(-8, 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#8a7460';
-    ctx.fillRect(-4, -4, 5, 4);
-    ctx.restore();
+  /** Which of his frames this moment of the fight is. */
+  private frame(): BoarFrame {
+    const t = this.anim;
+    switch (this.state) {
+      case 'dormant':
+        // Asleep in his wallow, his flank rising and falling.
+        return Math.floor(t / 0.85) % 2 ? 'sleep1' : 'sleep0';
+      case 'intro':
+        // Up out of the wallow, and a squeal at the one who woke him.
+        return this.timer > 1 ? 'sleep0' : this.timer > 0.8 ? 'wake' : this.timer > 0.3 ? 'roar' : 'stand0';
+      case 'trot':
+      case 'runoff':
+        if (Math.abs(this.vx) > 25) return TROT_FRAMES[Math.floor(this.gait * 0.6) % 4];
+        return Math.sin(t * 3) > 0 ? 'stand0' : 'stand1';
+      case 'scrape':
+        return SCRAPE_FRAMES[Math.floor(t * 7.2) % 3];
+      case 'charge':
+        return GALLOP_FRAMES[Math.floor(this.gait * 0.26) % 4];
+      case 'turn':
+        // Off the wall: a shake of the head, then round, scraping.
+        if (!this.turned) return Math.floor(t * 14) % 2 ? 'shake1' : 'shake0';
+        return SCRAPE_FRAMES[Math.floor(t * 7.2) % 3];
+      case 'dazed':
+        return Math.floor(t * 3) % 2 ? 'dazed1' : 'dazed0';
+      case 'rear':
+        if (this.rearUp < 0.45) return 'rear0';
+        return Math.floor(t * 10) % 2 ? 'rear2' : 'rear1';
+      case 'dig':
+        return this.dig < 0.5 ? 'dig0' : 'dig1';
+      case 'recover':
+        // The blow's own pose for a breath, then head low, flanks heaving.
+        if (this.slamPose > 0.25) return this.lastMove === 'stomp' ? 'slam' : 'toss';
+        return Math.sin(t * 9) > 0 ? 'pant0' : 'pant1';
+      case 'stagger':
+        return 'stagger';
+      case 'dying':
+        return this.fall < 0.3 ? 'fall0' : this.fall < 0.7 ? 'fall1' : 'fall2';
+    }
   }
 
-  private drawWaves(ctx: CanvasRenderingContext2D): void {
+  /**
+   * The ridges of earth running out from the stomp: a crest of dirt at the
+   * height the ridge has, rising in, at full height while it runs, sinking
+   * away at the end.
+   */
+  private drawRidges(ctx: CanvasRenderingContext2D): void {
     for (const w of this.waves) {
       const k = clamp(w.life / 0.2, 0, 1);
       const rise = clamp((WAVE_LIFE - w.life) / 0.06, 0, 1);
-      const h = WAVE_H * k * (0.5 + 0.5 * rise);
-      const y = this.floorY;
-      glow(ctx, w.x, y - 8, 34, 'rgba(220,180,120,0.35)', k);
-      ctx.save();
-      ctx.translate(w.x, y);
-      ctx.scale(w.dir, 1);
-      ctx.fillStyle = '#5a4430';
-      ctx.beginPath();
-      ctx.moveTo(-18, 0);
-      ctx.quadraticCurveTo(-6, -h * 0.6, 4, -h);
-      ctx.quadraticCurveTo(10, -h * 0.7, 13, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#a0845e';
-      ctx.beginPath();
-      ctx.moveTo(-6, -h * 0.45);
-      ctx.quadraticCurveTo(0, -h * 0.85, 4, -h);
-      ctx.quadraticCurveTo(7, -h * 0.75, 8, -h * 0.4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const h = k * (0.5 + 0.5 * rise);
+      const f = h > 0.8 ? 'r3' : h > 0.55 ? 'r2' : h > 0.3 ? 'r1' : 'r0';
+      RIDGE.draw(ctx, f, w.x, this.floorY, 6, RIDGE_H[f], w.dir);
     }
-  }
-
-  private drawBoar(ctx: CanvasRenderingContext2D): void {
-    const sleeping = this.state === 'dormant' ? 1 : this.state === 'intro' ? clamp((this.timer - (INTRO - 0.6)) / 0.6, 0, 1) : 0;
-    ctx.save();
-    if (this.rearUp > 0 || this.slamPose > 0) {
-      // Up on his hind legs, pivoting on the hind hooves.
-      ctx.translate(-20, 0);
-      ctx.rotate(-this.rearUp * 0.5 + this.slamPose * 0.05);
-      ctx.translate(20, 0);
-    }
-    if (this.state === 'dazed') ctx.rotate(Math.sin(this.anim * 8) * 0.05);
-    const breath = this.state === 'recover' ? Math.sin(this.anim * 9) * 0.03 : Math.sin(this.anim * 3) * 0.012;
-    const sy = 1 - this.lower * 0.15 - sleeping * 0.22 - this.fall * 0.2 + breath;
-    const sx = 1 + this.lower * 0.05;
-    ctx.translate(0, sleeping * 2);
-    ctx.scale(sx, sy);
-    if (sleeping < 0.6) this.drawLegs(ctx, true);
-    this.drawBody(ctx);
-    if (sleeping < 0.6) this.drawLegs(ctx, false);
-    this.drawHead(ctx, sleeping);
-    ctx.restore();
-    if (this.state === 'dazed') this.drawStars(ctx);
-  }
-
-  /** Swing and lift of one leg, for the pose he is in. */
-  private legPose(front: boolean, far: boolean, phase: number): { swing: number; lift: number } {
-    switch (this.state) {
-      case 'trot':
-      case 'runoff': {
-        const t = this.gait + phase;
-        return { swing: Math.sin(t) * 0.42, lift: Math.max(0, -Math.cos(t)) * 4 };
-      }
-      case 'charge': {
-        const t = this.gait + (front ? 0 : Math.PI * 0.6) + (far ? 0.5 : 0);
-        return { swing: Math.sin(t) * 0.75, lift: Math.max(0, -Math.cos(t)) * 6 };
-      }
-      case 'scrape':
-      case 'turn':
-        if (front && !far) {
-          const t = this.anim * 15;
-          return { swing: -0.25 + Math.sin(t) * 0.45, lift: Math.max(0, Math.cos(t)) * 4 };
-        }
-        return { swing: front ? -0.1 : 0.15, lift: 0 };
-      case 'rear':
-        if (front) return { swing: 0.6 + Math.sin(this.anim * 12 + (far ? 1 : 0)) * 0.3, lift: 5 };
-        return { swing: 0.25, lift: 0 };
-      case 'dazed':
-        return { swing: Math.sin(this.anim * 3 + phase) * 0.14, lift: 0 };
-      case 'dying':
-        return { swing: (front ? 0.9 : -0.9) * this.fall, lift: 0 };
-      default:
-        if (this.dig > 0.1) return { swing: front ? 0.3 * this.dig : -0.15 * this.dig, lift: 0 };
-        return { swing: 0, lift: 0 };
-    }
-  }
-
-  private drawLegs(ctx: CanvasRenderingContext2D, far: boolean): void {
-    const legs: [number, number][] = far
-      ? [
-          [-15, 0],
-          [17, Math.PI],
-        ]
-      : [
-          [-21, Math.PI],
-          [11, 0],
-        ];
-    ctx.lineCap = 'round';
-    for (const [hx, phase] of legs) {
-      const front = hx > 0;
-      const { swing, lift } = this.legPose(front, far, phase);
-      const len = 15;
-      const footX = hx + Math.sin(swing) * len;
-      const footY = Math.min(0, -16 + Math.cos(swing) * len + 1) - lift;
-      ctx.strokeStyle = far ? '#140e0b' : '#261b15';
-      ctx.lineWidth = front ? 6 : 7;
-      ctx.beginPath();
-      ctx.moveTo(hx, -18);
-      ctx.lineTo(footX, footY - 3);
-      ctx.stroke();
-      // Mud to the knee.
-      ctx.strokeStyle = far ? 'rgba(60,46,30,0.9)' : 'rgba(86,66,44,0.9)';
-      ctx.lineWidth = front ? 5 : 6;
-      ctx.beginPath();
-      ctx.moveTo(hx + (footX - hx) * 0.55, -18 + (footY - 3 + 18) * 0.55);
-      ctx.lineTo(footX, footY - 3);
-      ctx.stroke();
-      ctx.fillStyle = '#0c0807';
-      ctx.fillRect(footX - 3, footY - 3.5, 6, 3.5);
-    }
-  }
-
-  /** The back's line, for the bristles: high over the shoulders, sloping to the rump. */
-  private backY(x: number): number {
-    if (x < 8) return -40 + ((x - 8) / 31) ** 2 * 5;
-    return -40 + ((x - 8) / 12) ** 2 * 6;
-  }
-
-  private drawBody(ctx: CanvasRenderingContext2D): void {
-    const g = ctx.createLinearGradient(0, -40, 0, -10);
-    g.addColorStop(0, '#2a1f19');
-    g.addColorStop(0.55, '#4a3628');
-    g.addColorStop(1, '#6b5038');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-31, -16);
-    ctx.quadraticCurveTo(-35, -30, -23, -35);
-    ctx.quadraticCurveTo(-6, -40, 8, -40);
-    ctx.quadraticCurveTo(19, -40, 21, -30);
-    ctx.quadraticCurveTo(22, -17, 15, -12);
-    ctx.quadraticCurveTo(-3, -9, -21, -12);
-    ctx.quadraticCurveTo(-30, -12, -31, -16);
-    ctx.closePath();
-    ctx.fill();
-
-    // Mud caked on the belly and the flanks.
-    ctx.fillStyle = 'rgba(78,60,40,0.8)';
-    for (const [mx, my, rx, ry] of [
-      [-20, -14, 8, 3],
-      [-5, -11, 7, 2.6],
-      [9, -13, 6, 3],
-      [-26, -20, 3.5, 4],
-    ]) {
-      ctx.beginPath();
-      ctx.ellipse(mx, my, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // A rim of light along the back, so his line reads against the dark.
-    ctx.strokeStyle = 'rgba(190,160,128,0.3)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(-30, -20);
-    ctx.quadraticCurveTo(-33, -30, -23, -34);
-    ctx.stroke();
-
-    // The crest: a ridge of black bristles down the spine, highest over the
-    // shoulders, standing straight up when he means it.
-    const up = this.bristle;
-    ctx.fillStyle = '#0f0907';
-    ctx.beginPath();
-    ctx.moveTo(-27, this.backY(-27) + 2);
-    for (let i = 0; i <= 16; i++) {
-      const bx = -27 + i * 2.75;
-      const by = this.backY(bx) + 1.5;
-      const tall = (2.5 + (bx > -8 && bx < 15 ? 3 : 0) + (i % 2 ? 0 : 1.5)) * (1 + up * 0.7);
-      const lean = (0.55 - up * 0.4) * tall;
-      ctx.lineTo(bx - lean, by - tall);
-      ctx.lineTo(bx + 1.4, by);
-    }
-    ctx.lineTo(17, this.backY(17) + 3);
-    ctx.lineTo(-27, this.backY(-27) + 3);
-    ctx.closePath();
-    ctx.fill();
-
-    // The tail: a thin twist with a tuft.
-    ctx.strokeStyle = '#1a120e';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-31, -27);
-    ctx.quadraticCurveTo(-37, -29 + Math.sin(this.anim * 6) * 2, -36, -22);
-    ctx.stroke();
-  }
-
-  private drawHead(ctx: CanvasRenderingContext2D, sleeping: number): void {
-    const dazed = this.state === 'dazed';
-    const dying = this.state === 'dying';
-    ctx.save();
-    ctx.translate(13, -29);
-    const angle =
-      this.lower * 0.42 + this.dig * 0.8 - this.rearUp * 0.3 + sleeping * 0.35 + (dazed ? Math.sin(this.anim * 7) * 0.12 : 0) + this.fall * 0.3;
-    ctx.rotate(angle);
-
-    // The ear, behind the brow.
-    ctx.fillStyle = '#20170f';
-    ctx.beginPath();
-    ctx.moveTo(-4, -9);
-    ctx.lineTo(-3 - this.bristle * 2, -19);
-    ctx.lineTo(5, -10);
-    ctx.closePath();
-    ctx.fill();
-
-    const hg = ctx.createLinearGradient(0, -11, 0, 17);
-    hg.addColorStop(0, '#2a1e17');
-    hg.addColorStop(1, '#5e4632');
-    ctx.fillStyle = hg;
-    ctx.beginPath();
-    ctx.moveTo(-7, -11);
-    ctx.quadraticCurveTo(7, -11, 21, 5);
-    ctx.lineTo(23.5, 15);
-    ctx.quadraticCurveTo(13, 18, 3, 14);
-    ctx.quadraticCurveTo(-7, 10, -9, 0);
-    ctx.closePath();
-    ctx.fill();
-    // The grizzled cheek, pale under the eye.
-    ctx.fillStyle = 'rgba(170,150,128,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(5, 6, 7, 4.5, 0.35, 0, Math.PI * 2);
-    ctx.fill();
-
-    // The snout's disc and nostrils.
-    ctx.fillStyle = '#8a6658';
-    ctx.beginPath();
-    ctx.ellipse(23, 10, 2.8, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2a1612';
-    ctx.fillRect(22.5, 7, 1.6, 2.2);
-    ctx.fillRect(22.5, 11.5, 1.6, 2.2);
-
-    // The tongue, hanging out of a dazed or a dying boar.
-    if (dazed || dying) {
-      ctx.fillStyle = '#d0707e';
-      ctx.beginPath();
-      ctx.ellipse(12, 17 + Math.sin(this.anim * 5) * 1, 2.4, 4, 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Tusks, pale and curved up past the snout.
-    ctx.fillStyle = '#efe5cb';
-    ctx.beginPath();
-    ctx.moveTo(12, 14);
-    ctx.quadraticCurveTo(21, 15.5, 22.5, 2);
-    ctx.quadraticCurveTo(19, 10.5, 11, 11);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#bfb08e';
-    ctx.beginPath();
-    ctx.moveTo(15, 13.5);
-    ctx.quadraticCurveTo(20, 13.5, 21, 7);
-    ctx.lineTo(19.5, 10);
-    ctx.closePath();
-    ctx.fill();
-
-    // The eye: small and red - and hotter when he is about to come.
-    if (sleeping > 0.5 || dying) {
-      ctx.strokeStyle = '#120c09';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(6, -3);
-      ctx.lineTo(10, -2);
-      ctx.stroke();
-    } else if (dazed) {
-      ctx.strokeStyle = '#ffe9a8';
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.moveTo(6.5, -4.5);
-      ctx.lineTo(10, -1);
-      ctx.moveTo(10, -4.5);
-      ctx.lineTo(6.5, -1);
-      ctx.stroke();
-    } else {
-      const heat = this.eyeHeat;
-      if (heat > 0.05) glow(ctx, 8, -3, 6 + heat * 6, `rgba(255,80,50,${(0.5 * heat).toFixed(2)})`);
-      ctx.fillStyle = heat > 0.5 ? '#ff5a40' : '#c8382c';
-      ctx.beginPath();
-      ctx.ellipse(8, -3, 1.9, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
   }
 
   /** Stars round the head of a dazed boar, so the window reads from across the den. */
   private drawStars(ctx: CanvasRenderingContext2D): void {
+    const hx = this.cx + this.facing * 24;
+    const hy = this.bottom - 54;
     for (let i = 0; i < 4; i++) {
       const a = this.anim * 4.5 + (i * Math.PI) / 2;
-      const sx = 16 + Math.cos(a) * 15;
-      const sy = -48 + Math.sin(a) * 4;
-      const r = 2.6 + (Math.sin(a) > 0 ? 0.8 : 0);
-      ctx.fillStyle = i % 2 ? '#ffe27a' : '#fff4c4';
-      ctx.beginPath();
-      for (let k = 0; k < 8; k++) {
-        const rr = k % 2 ? r * 0.4 : r;
-        const aa = (k * Math.PI) / 4;
-        if (k === 0) ctx.moveTo(sx + Math.cos(aa) * rr, sy + Math.sin(aa) * rr);
-        else ctx.lineTo(sx + Math.cos(aa) * rr, sy + Math.sin(aa) * rr);
-      }
-      ctx.closePath();
-      ctx.fill();
+      const front = Math.sin(a) > 0;
+      STARS.draw(ctx, front ? 'big' : 'small', hx + Math.cos(a) * 16, hy + Math.sin(a) * 4, front ? 2 : 1, front ? 2 : 1);
     }
   }
 }
+
+/** Above this his flash is a white silhouette (two frames of a blow); below it, nothing. */
+const HIT_WHITE = 0.8;
+const TROT_FRAMES: readonly BoarFrame[] = ['trot0', 'trot1', 'trot2', 'trot3'];
+const GALLOP_FRAMES: readonly BoarFrame[] = ['gallop0', 'gallop1', 'gallop2', 'gallop3'];
+const SCRAPE_FRAMES: readonly BoarFrame[] = ['scrape0', 'scrape1', 'scrape2'];
+const RIDGE_H = { r0: 3, r1: 5, r2: 8, r3: 10 } as const;
