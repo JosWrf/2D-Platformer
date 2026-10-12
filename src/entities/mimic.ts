@@ -1,8 +1,10 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { ART, snap } from '../render/pixel';
+import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
+import { TONGUE, WRECK, drawChest, lidFrame } from './mimic-art';
 import { Projectile } from './projectile';
 
 /**
@@ -791,6 +793,7 @@ export class Mimic extends Enemy {
     return out;
   }
 
+
   /* -------------------------------------------------------------- drawing */
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -798,198 +801,79 @@ export class Mimic extends Enemy {
       this.drawPlanks(ctx);
       return;
     }
-    const t = this.tongueRect();
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      shadow(ctx, 0, 0, W * 0.62, 0.34);
-      ctx.scale(this.facing, 1);
-      const sq = this.squash;
-      ctx.scale(1 + sq * 0.12, 1 - sq * 0.14);
-      this.drawInside(ctx);
-      this.drawBase(ctx);
-      if (t) this.drawTongue(ctx);
-      this.drawLid(ctx);
-      ctx.restore();
-    });
+    const facing = this.facing > 0 ? 1 : -1;
+    // Shut, it squashes and stretches on its hops as drawn frames.
+    let frame = lidFrame(this.lid);
+    if (frame === 'shut' && this.squash > 0.25) frame = 'land';
+    else if (frame === 'shut' && this.squash < -0.25) frame = 'jump';
+    // Jammed wide, it rocks, trying to slam a lid that will not.
+    if (this.state === 'jammed' && Math.floor(this.anim * 6) % 2) frame = 'open2';
+    // The tell: the eye looking out through the keyhole and the gap; a glint
+    // of the hoard through the keyhole now and then while it sleeps.
+    const palette = this.eye > 0.3 ? 'eye' : this.coinGlint > 0.05 ? 'glint' : '';
+    shadow(ctx, this.cx, this.bottom, W * 0.62, 0.34);
+    const white = this.flash >= HIT_WHITE;
+    withHitFlash(
+      ctx,
+      white ? this.flash : 0,
+      (c) => {
+        drawChest(c, frame, this.cx, this.bottom, facing, palette);
+        if (this.tongue >= 8) this.drawTongue(c, facing);
+      },
+      white ? { x: this.cx - 60 - this.tongue, y: this.bottom - 100, w: 120 + this.tongue * 2, h: 104 } : undefined,
+    );
   }
 
-  /** Oak, dark with age, in planks. */
-  private plankFill(ctx: CanvasRenderingContext2D, y0: number, y1: number): void {
-    const g = ctx.createLinearGradient(0, y0, 0, y1);
-    g.addColorStop(0, '#7a4a2a');
-    g.addColorStop(0.5, '#5a3218');
-    g.addColorStop(1, '#3a1e0e');
-    ctx.fillStyle = g;
-  }
-
-  private drawBase(ctx: CanvasRenderingContext2D): void {
-    const hw = W / 2;
-    this.plankFill(ctx, -BASE_H, 0);
-    ctx.fillRect(-hw, -BASE_H, W, BASE_H);
-    // Plank seams.
-    ctx.fillStyle = 'rgba(20,8,2,0.5)';
-    for (const y of [-19, -10]) ctx.fillRect(-hw + 2, y, W - 4, 1.5);
-    // Gold bands and corners.
-    ctx.fillStyle = '#c8952e';
-    for (const bx of [-hw + 10, hw - 16]) ctx.fillRect(bx, -BASE_H, 6, BASE_H);
-    ctx.fillStyle = '#f2c14e';
-    for (const bx of [-hw + 10, hw - 16]) ctx.fillRect(bx, -BASE_H, 2, BASE_H);
-    ctx.fillStyle = '#9a6a1e';
-    ctx.fillRect(-hw, -4, W, 4);
-    ctx.fillRect(-hw, -BASE_H, W, 3);
-    // Rivets.
-    ctx.fillStyle = '#ffe8a0';
-    for (const bx of [-hw + 13, hw - 13]) {
-      for (const by of [-23, -8]) ctx.fillRect(bx - 1, by - 1, 2, 2);
-    }
-    // The lower teeth along the rim, there whether it is open or not.
-    if (this.lid > 0.08) {
-      ctx.fillStyle = '#f4ead2';
-      for (let i = 0; i < 7; i++) {
-        const tx = -hw + 8 + i * 8.5;
-        ctx.beginPath();
-        ctx.moveTo(tx - 3, -BASE_H + 1);
-        ctx.lineTo(tx, -BASE_H - 6 * Math.min(1, this.lid * 2));
-        ctx.lineTo(tx + 3, -BASE_H + 1);
-        ctx.closePath();
-        ctx.fill();
+  /**
+   * Thick, wet, and a long way out: out of the throat over the front of the
+   * box, down to the floor and along it to a tip that curls up - drawn column
+   * by column on whole pixels, four deep: its underside, the meat, a line of
+   * wet light along the top, undulating a pixel up and down as it lashes.
+   */
+  private drawTongue(ctx: CanvasRenderingContext2D, facing: 1 | -1): void {
+    const ox = snap(this.cx);
+    const oy = snap(this.bottom);
+    // From just behind the rim, over it, down the front of the box to the
+    // floor and along it to the tip: art pixels forward of the middle.
+    const from = 14;
+    const rim = 18;
+    const tip = Math.max(rim + 2, Math.round(13.5 + this.tongue / ART));
+    const drop = 8;
+    const col = (c: number): number => (facing > 0 ? ox + c * ART : ox - (c + 1) * ART);
+    for (let c = from; c <= tip; c++) {
+      const k = Math.max(0, Math.min(1, (c - rim) / drop));
+      let y = Math.round(-14 + 11 * k * k * (3 - 2 * k));
+      if (k >= 1) y += Math.round(Math.sin(c * 0.35 + this.anim * 14));
+      // The tip curls up.
+      const left = tip - c;
+      if (left < 3) y -= 3 - left;
+      const x = col(c);
+      const thin = left < 1;
+      ctx.fillStyle = TONGUE.top;
+      ctx.fillRect(x, oy + (y - 2) * ART, ART, ART);
+      ctx.fillStyle = TONGUE.body;
+      ctx.fillRect(x, oy + (y - 1) * ART, ART, (thin ? 1 : 2) * ART);
+      if (!thin) {
+        ctx.fillStyle = TONGUE.under;
+        ctx.fillRect(x, oy + (y + 1) * ART, ART, ART);
+      }
+      // A glint of wet along the top, every few pixels.
+      if ((c + Math.floor(this.anim * 10)) % 7 === 0) {
+        ctx.fillStyle = TONGUE.gloss;
+        ctx.fillRect(x, oy + (y - 2) * ART, ART, ART);
       }
     }
   }
 
-  /** The mouth: dark red, the hoard in the back of it, and the eye. */
-  private drawInside(ctx: CanvasRenderingContext2D): void {
-    if (this.lid < 0.05) return;
-    const hw = W / 2;
-    const depth = 10 + this.lid * 16;
-    ctx.fillStyle = '#2a0610';
-    ctx.beginPath();
-    ctx.moveTo(-hw + 3, -BASE_H);
-    ctx.quadraticCurveTo(0, -BASE_H - depth * 1.6, hw - 3, -BASE_H);
-    ctx.closePath();
-    ctx.fill();
-    // Coins heaped in the throat.
-    const glint = 0.5 + this.coinGlint;
-    for (let i = -3; i <= 3; i++) {
-      ctx.fillStyle = i % 2 ? `rgba(242,193,78,${Math.min(1, 0.6 * glint).toFixed(2)})` : `rgba(255,230,150,${Math.min(1, 0.7 * glint).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(i * 7, -BASE_H - 2 - Math.abs(i) * -0.5, 4, 1.8, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // The eye, in the back of the lid's shadow.
-    const ey = -BASE_H - depth * 0.7;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, -6, ey, 14 + this.eye * 10, `rgba(255,110,60,${(0.4 + this.eye * 0.4).toFixed(2)})`);
-    ctx.restore();
-    ctx.fillStyle = '#ffdc6a';
-    ctx.beginPath();
-    ctx.ellipse(-6, ey, 6, 4.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#1a0408';
-    ctx.fillRect(-7, ey - 4, 2, 8);
-  }
-
-  private drawLid(ctx: CanvasRenderingContext2D): void {
-    const hw = W / 2;
-    const lidH = H - BASE_H;
-    ctx.save();
-    // Hinged along the back edge of the box.
-    ctx.translate(-hw, -BASE_H);
-    ctx.rotate(-this.lid * 1.25);
-    // The lid's own underside, with its row of teeth, seen as it opens.
-    if (this.lid > 0.08) {
-      ctx.fillStyle = '#3a0a14';
-      ctx.fillRect(1, -2, W - 2, 4);
-      ctx.fillStyle = '#f4ead2';
-      for (let i = 0; i < 7; i++) {
-        const tx = 8 + i * 8.5;
-        ctx.beginPath();
-        ctx.moveTo(tx - 3, 0);
-        ctx.lineTo(tx, 6 * Math.min(1, this.lid * 2));
-        ctx.lineTo(tx + 3, 0);
-        ctx.closePath();
-        ctx.fill();
-      }
-    }
-    // The vaulted top.
-    this.plankFill(ctx, -lidH, 0);
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, -lidH * 0.55);
-    ctx.quadraticCurveTo(hw, -lidH * 1.45, W, -lidH * 0.55);
-    ctx.lineTo(W, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,230,180,0.12)';
-    ctx.beginPath();
-    ctx.moveTo(4, -lidH * 0.6);
-    ctx.quadraticCurveTo(hw, -lidH * 1.3, W - 4, -lidH * 0.6);
-    ctx.quadraticCurveTo(hw, -lidH * 1.12, 4, -lidH * 0.6);
-    ctx.fill();
-    // Bands over the vault.
-    ctx.strokeStyle = '#c8952e';
-    ctx.lineWidth = 5;
-    for (const bx of [13, W - 13]) {
-      ctx.beginPath();
-      ctx.moveTo(bx, 0);
-      ctx.lineTo(bx, -lidH * (0.55 + 0.5 * Math.sin((bx / W) * Math.PI)));
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#9a6a1e';
-    ctx.fillRect(0, -3, W, 3);
-    // The lock plate and its keyhole, which is where the eye looks out.
-    ctx.fillStyle = '#e0a83a';
-    ctx.beginPath();
-    ctx.moveTo(W - 4, -2);
-    ctx.lineTo(W - 4, -14);
-    ctx.lineTo(W + 3, -11);
-    ctx.lineTo(W + 3, 3);
-    ctx.closePath();
-    ctx.fill();
-    const keyhole = Math.max(this.eye * (this.lid < 0.4 ? 1 : 0), this.coinGlint);
-    ctx.fillStyle = keyhole > 0.05 ? `rgba(255,${Math.round(120 + 100 * (1 - this.eye))},70,${(0.5 + keyhole * 0.5).toFixed(2)})` : '#2a1206';
-    ctx.fillRect(W - 1, -9, 2.4, 5);
-    ctx.restore();
-  }
-
-  /** Thick, wet, and a long way out. */
-  private drawTongue(ctx: CanvasRenderingContext2D): void {
-    const hw = W / 2;
-    const len = this.tongue;
-    const wave = Math.sin(this.anim * 14) * 3;
-    ctx.save();
-    const g = ctx.createLinearGradient(hw, 0, hw + len, 0);
-    g.addColorStop(0, '#8a1e4a');
-    g.addColorStop(1, '#d0507a');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(hw - 14, -BASE_H + 2);
-    ctx.quadraticCurveTo(hw + len * 0.3, -BASE_H + 10 + wave, hw + len - 6, -7);
-    ctx.quadraticCurveTo(hw + len + 4, -4, hw + len - 4, -1);
-    ctx.quadraticCurveTo(hw + len * 0.4, -1 - wave, hw - 10, -BASE_H + 12);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,170,200,0.45)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(hw - 6, -BASE_H + 6);
-    ctx.quadraticCurveTo(hw + len * 0.35, -BASE_H + 11 + wave, hw + len - 10, -5);
-    ctx.stroke();
-    ctx.restore();
-  }
-
+  /** The chest gone to pieces: planks and bits of its gold, tumbling in four drawn turns. */
   private drawPlanks(ctx: CanvasRenderingContext2D): void {
     for (const pl of this.planks) {
-      ctx.save();
-      ctx.translate(pl.x, pl.y);
-      ctx.rotate(pl.rot);
-      ctx.fillStyle = pl.gold ? '#c8952e' : '#5a3218';
-      ctx.fillRect(-pl.w / 2, -pl.h / 2, pl.w, pl.h);
-      ctx.fillStyle = pl.gold ? '#f2c14e' : 'rgba(255,220,170,0.15)';
-      ctx.fillRect(-pl.w / 2, -pl.h / 2, pl.w, 1.5);
-      ctx.restore();
+      const turn = ((Math.round(pl.rot / (Math.PI / 4)) % 4) + 4) % 4;
+      const kind = pl.gold ? (pl.h > 6 ? 'lock' : 'band') : pl.w > 22 ? 'long' : 'short';
+      WRECK.draw(ctx, `${kind}${turn}`, pl.x, pl.y, 4, 2, 1);
     }
   }
 }
+
+/** Above this its flash is a white silhouette (two frames of a blow); below it, nothing. */
+const HIT_WHITE = 0.8;
