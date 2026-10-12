@@ -1587,12 +1587,13 @@ export class Gloom extends Enemy {
 
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
+    // His shadow first, under the crystals: laid over one, it would blend into a colour of no palette.
+    const lift = this.floorY - this.bottom;
+    if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64, 0.3 * clamp(1 - lift / 150, 0, 1));
     for (const c of this.crystals) this.drawLightEdge(ctx, c);
     for (const c of this.crystals) this.drawCrystal(ctx, c);
     this.drawPool(ctx);
     this.drawWaves(ctx);
-    const lift = this.floorY - this.bottom;
-    if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64, 0.3 * clamp(1 - lift / 150, 0, 1));
     this.drawNyktos(ctx);
     if (this.state === 'gather') this.drawGathering(ctx);
     for (const o of this.orbs) this.drawOrb(ctx, o);
