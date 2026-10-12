@@ -382,13 +382,15 @@ export function fillRoundRect(
 
 /* ------------------------------------------------------------ hit flash */
 
-/** Above this a struck sprite is drawn all white; below it the white fades. */
+/** Above this a struck sprite is drawn all white; below it, as it is. */
 const FLASH_SOLID = 0.8;
 const flashLayers = new Map<string, { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }>();
 
 /**
- * A sprite taking a hit: all white for its first two or three frames, then a
- * fading white laid over it, which the palette turns into a dither.
+ * A sprite taking a hit: all white for its first two or three frames, then
+ * as it is - the way a palette of a few colours flashes. (The white used to
+ * fade out over it, which the palette pass could only draw as a dither
+ * crawling over the sprite.)
  *
  * The sprite is drawn into a layer of its own - the size of the canvas it is
  * meant for, under the same transform - whitened there with source-atop, so
@@ -408,7 +410,7 @@ export function withHitFlash(
   draw: (ctx: CanvasRenderingContext2D) => void,
   bounds?: { x: number; y: number; w: number; h: number },
 ): void {
-  if (flash <= 0) {
+  if (flash < FLASH_SOLID) {
     draw(ctx);
     return;
   }
@@ -443,7 +445,7 @@ export function withHitFlash(
   f.setTransform(m);
   draw(f);
   f.setTransform(1, 0, 0, 1, 0, 0);
-  f.globalAlpha = flash >= FLASH_SOLID ? 1 : (flash / FLASH_SOLID) * 0.35;
+  f.globalAlpha = 1;
   f.globalCompositeOperation = 'source-atop';
   f.fillStyle = '#ffffff';
   f.fillRect(rx, ry, rw, rh);
