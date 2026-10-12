@@ -1,9 +1,41 @@
 import { audio } from '../core/audio';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { oval, ring } from '../render/pen';
+import { ART, PixelSprite, snap } from '../render/pixel';
+import { shadow } from '../render/sprites';
 import type { World } from '../world/context';
 import { TILE } from '../world/tiles';
+import { line4, runLine } from './boss-pixels';
 import { Enemy, type GlowLight } from './enemy';
+import {
+  CHURN,
+  CHURN_TIME,
+  CRYSTAL_X,
+  CRYSTAL_Y,
+  HEAD_LENS,
+  HEAD_STEPS,
+  MOUTHS,
+  RING_PHASES,
+  SHADOW,
+  SWIPE_C,
+  WAVE_KEY,
+  bodyEyeAt,
+  bodySprite,
+  clawSprite,
+  crystalSprite,
+  headEyeAt,
+  headSprite,
+  lightRing,
+  orbSprite,
+  ringPeriod,
+  swipeSprite,
+  tone,
+  waveFrame,
+  type BodySpec,
+  type CrystalLook,
+  type PaintName,
+} from './gloom-art';
 
 /**
  * Health before the hero is sized up; with the five relics of the road he has
@@ -215,62 +247,6 @@ const BODY_EYES: readonly (readonly [number, number, number])[] = [
   [-18, -40, 0.9],
   [14, -50, 1.0],
   [-10, -20, 0.7],
-];
-
-/** The smoke he is made of, as puffs round his middle: x, y, radius, phase. */
-const PUFFS: readonly (readonly [number, number, number, number])[] = [
-  [-21, -38, 15, 0.0],
-  [-8, -50, 17, 1.3],
-  [8, -46, 15, 2.1],
-  [-14, -24, 15, 2.9],
-  [3, -30, 17, 3.7],
-  [15, -30, 12, 4.4],
-  [-25, -20, 10, 5.2],
-  [-3, -14, 13, 0.7],
-  [11, -15, 10, 1.9],
-  [-12, -60, 11, 2.6],
-  [3, -61, 10, 3.3],
-  [-27, -50, 9, 4.1],
-  [18, -45, 9, 5.0],
-];
-
-/** The veins that show when he is flesh. */
-const VEINS: readonly (readonly (readonly [number, number])[])[] = [
-  [
-    [8, -52],
-    [0, -44],
-    [-8, -34],
-    [-12, -22],
-    [-10, -9],
-  ],
-  [
-    [0, -44],
-    [-14, -47],
-    [-25, -40],
-  ],
-  [
-    [-8, -34],
-    [-20, -30],
-    [-29, -22],
-  ],
-  [
-    [10, -48],
-    [13, -36],
-    [6, -24],
-    [8, -11],
-  ],
-  [
-    [6, -24],
-    [-3, -18],
-  ],
-  [
-    [-12, -22],
-    [-21, -13],
-  ],
-  [
-    [-4, -56],
-    [-10, -64],
-  ],
 ];
 
 /**
@@ -1582,10 +1558,29 @@ export class Gloom extends Enemy {
     }
     for (const w of this.waves) out.push({ x: w.x, y: this.floorY - 12, radius: 66, rgb: '160,120,240', strength: 0.62, tint: 0.3 });
     for (const o of this.orbs) out.push({ x: o.x, y: o.y, radius: 46, rgb: '170,130,245', strength: 0.55, tint: 0.3 });
+    if (this.state === 'gather') {
+      for (let i = 0; i < 3; i++) {
+        const at = this.orbSpot(i);
+        out.push({ x: at.x, y: at.y, radius: 26 + 20 * this.gather, rgb: '150,110,240', strength: 0.4 * this.gather, tint: 0.3 });
+      }
+    }
+    const meal = this.state === 'eat' || this.state === 'swipe' ? this.crystals[this.target] : undefined;
+    if (meal) {
+      // The crystal's light, seen through the flesh it is going into.
+      out.push({ x: meal.x, y: meal.surface - 24, radius: 40 + this.gulp * 14, rgb: '255,214,130', strength: 0.3 + this.gulp * 0.25, tint: 0.3 });
+    }
     return out;
   }
 
   /* -------------------------------------------------------------- drawing */
+
+  /*
+   * Everything here is laid on the art grid (gloom-art.ts): his body in the
+   * frames of its churning, his head at sixteen angles, the crystals, the
+   * pool's claws, the wave and the orbs as sprites made once; what moves on
+   * them - eyes, glints, the arm, the ring at a light's edge - in whole art
+   * pixels of the palette. The light of the grotto is all in lights().
+   */
 
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
@@ -1595,148 +1590,71 @@ export class Gloom extends Enemy {
     this.drawWaves(ctx);
     const lift = this.floorY - this.bottom;
     if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64, 0.3 * clamp(1 - lift / 150, 0, 1));
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      ctx.scale(this.facing, 1);
-      this.drawNyktos(ctx);
-      ctx.restore();
-    });
-    if (this.state === 'eat' || this.state === 'swipe') this.drawSwallowed(ctx);
+    this.drawNyktos(ctx);
     if (this.state === 'gather') this.drawGathering(ctx);
     for (const o of this.orbs) this.drawOrb(ctx, o);
     if (this.state === 'blinded') this.drawDazzle(ctx);
   }
 
   /**
-   * The edge of a lit crystal's light: a ring of dust where the rule ends. Only
-   * the dust - a haze filled over the whole disc as well cost a fill the size
-   * of the light, twice with two crystals burning, for a tint the light pass
-   * already gives.
+   * The edge of a lit crystal's light, where the rule ends: a ring of dashes
+   * turning slowly round it, warm on the inside and a step darker outside -
+   * the light stepping down to the dark he lives in.
    */
   private drawLightEdge(ctx: CanvasRenderingContext2D, c: Crystal): void {
     const k = this.glowOf(c);
     if (k <= 0.05) return;
-    const r = this.reachOf(c);
-    const cy = c.surface - 18;
-    ctx.fillStyle = `rgba(255,240,196,${(0.6 * k).toFixed(3)})`;
-    for (let i = 0; i < 30; i++) {
-      const a = (i / 30) * TAU + this.anim * 0.25 * (c.ledge ? -1 : 1);
-      const x = c.x + Math.cos(a) * r;
-      const y = cy + Math.sin(a) * r;
-      if (y > c.surface - 1) continue;
-      const s = i % 3 === 0 ? 2 : 1.4;
-      ctx.fillRect(x - s / 2, y - s / 2, s, s);
-    }
+    const r = Math.round(this.reachOf(c) / ART);
+    if (r < 3) return;
+    const period = ringPeriod(r);
+    const turn = ((((this.anim * 0.25 * (c.ledge ? -1 : 1)) % period) + period) % period) / period;
+    const s = lightRing(r, Math.floor(turn * RING_PHASES) % RING_PHASES, k > 0.5);
+    s.draw(ctx, snap(c.x) - (r + 2) * ART, snap(c.surface - 18) - (r + 2) * ART);
   }
 
   private drawCrystal(ctx: CanvasRenderingContext2D, c: Crystal): void {
     const k = this.glowOf(c);
     const lit = Math.min(1, k + c.flare * 0.4);
-    ctx.save();
-    ctx.translate(c.x, c.surface);
-    // The rock it grows out of.
-    ctx.fillStyle = '#13111b';
-    ctx.beginPath();
-    ctx.ellipse(0, -1, 16, 5, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#211e2c';
-    ctx.beginPath();
-    ctx.ellipse(-3, -3, 10, 3, 0, Math.PI, TAU);
-    ctx.fill();
-    // Three shards, the tall one last.
-    this.drawShard(ctx, -7, 18, 8, -0.34, lit, c.spent > 0);
-    this.drawShard(ctx, 7, 15, 7, 0.4, lit, c.spent > 0);
-    this.drawShard(ctx, 0, 31, 10, 0.03, lit, c.spent > 0);
-    ctx.globalCompositeOperation = 'lighter';
+    const look: CrystalLook = lit < 0.05 ? (c.spent > 0 ? 'spent' : 0) : lit < 0.45 ? 1 : lit < 0.8 ? 2 : 3;
+    const s = crystalSprite(look);
+    const x = snap(c.x);
+    const y = snap(c.surface);
+    s.draw(ctx, x - CRYSTAL_X * ART, y - CRYSTAL_Y * ART);
     if (lit > 0.02) {
-      glow(ctx, 0, -16, 18 + 8 * lit + c.flare * 14, `rgba(255,228,150,${(0.4 * lit).toFixed(3)})`);
-      // Glints that travel up the shards.
+      // Glints that travel up the shards: little crosses of light.
       for (let i = 0; i < 3; i++) {
         const t = (this.anim * 0.7 + i / 3) % 1;
-        const gx = [-7, 0, 7][i] + Math.sin(i * 2 + this.anim) * 1.5;
-        const gy = -4 - t * [16, 28, 13][i];
-        ctx.fillStyle = `rgba(255,255,236,${(lit * (1 - t) * 0.9).toFixed(3)})`;
-        ctx.fillRect(gx - 0.8, gy - 2.2, 1.6, 4.4);
-        ctx.fillRect(gx - 2.2, gy - 0.8, 4.4, 1.6);
+        const v = lit * (1 - t);
+        if (v < 0.25) continue;
+        const gx = snap(c.x + [-7, 0, 7][i] + Math.sin(i * 2 + this.anim) * 1.5);
+        const gy = snap(c.surface - 4 - t * [16, 28, 13][i]);
+        ctx.fillStyle = v > 0.6 ? WHITE : RAMP.fire[4];
+        ctx.fillRect(gx - ART, gy, ART * 3, ART);
+        ctx.fillRect(gx, gy - ART, ART, ART * 3);
       }
-    } else {
+    } else if (c.spent <= 0 && Math.sin(this.anim * 1.6 + c.x * 0.01) > 0.35) {
       // Asleep in it, a seed of what it held: enough to say "strike here".
-      const pulse = 0.5 + 0.5 * Math.sin(this.anim * 1.6 + c.x * 0.01);
-      const seed = c.spent > 0 ? 0.04 : 0.12 + pulse * 0.1;
-      glow(ctx, 0, -14, 9, `rgba(255,214,140,${seed.toFixed(3)})`);
+      ctx.fillStyle = RAMP.earth[3];
+      ctx.fillRect(x - ART, y - 16, ART * 2, ART);
     }
-    if (c.flare > 0) {
-      ctx.strokeStyle = `rgba(255,244,200,${(c.flare * 0.8).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, -16, 12 + (1 - c.flare) * 46, 0, TAU);
-      ctx.stroke();
+    if (c.flare > 0.05) {
+      ring(ctx, x, y - 16, 12 + (1 - c.flare) * 46, c.flare > 0.5 ? RAMP.fire[4] : RAMP.earth[4]);
     }
-    ctx.restore();
-    if (c.spent > 0) {
+    if (c.spent > 0.3) {
       // Emptied: a thread of smoke still coming out of it.
-      ctx.save();
-      ctx.strokeStyle = `rgba(30,20,44,${(0.5 * Math.min(1, c.spent / 0.8)).toFixed(3)})`;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.surface - 30);
-      ctx.quadraticCurveTo(c.x + Math.sin(this.anim * 3) * 6, c.surface - 42, c.x + Math.sin(this.anim * 2) * 4, c.surface - 54);
-      ctx.stroke();
-      ctx.restore();
+      let px = c.x;
+      let py = c.surface - 30;
+      for (let i = 1; i <= 3; i++) {
+        const nx = c.x + Math.sin(this.anim * (2 + i * 0.5) + i) * (2 + i * 1.5);
+        const ny = c.surface - 30 - i * 8;
+        thread(ctx, px, py, nx, ny, RAMP.slate[1]);
+        px = nx;
+        py = ny;
+      }
     }
   }
 
-  /** One shard of a crystal: a six-sided prism standing on its base, dark slate or pale gold. */
-  private drawShard(ctx: CanvasRenderingContext2D, dx: number, h: number, w: number, tilt: number, lit: number, spent: boolean): void {
-    ctx.save();
-    ctx.translate(dx, -2);
-    ctx.rotate(tilt);
-    const hw = w / 2;
-    const dark = spent ? [22, 20, 30] : [30, 34, 52];
-    const pale = [246, 220, 142];
-    const side = mixRgb(dark, pale, lit);
-    const face = mixRgb(spent ? [30, 28, 40] : [46, 52, 76], [255, 247, 214], lit);
-    const edge = mixRgb(spent ? [52, 50, 64] : [86, 96, 132], [255, 255, 240], lit);
-    ctx.fillStyle = side;
-    ctx.beginPath();
-    ctx.moveTo(-hw, 0);
-    ctx.lineTo(-hw, -h * 0.7);
-    ctx.lineTo(0, -h);
-    ctx.lineTo(hw, -h * 0.7);
-    ctx.lineTo(hw, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = face;
-    ctx.beginPath();
-    ctx.moveTo(-hw * 0.2, 0);
-    ctx.lineTo(-hw * 0.2, -h * 0.74);
-    ctx.lineTo(0, -h);
-    ctx.lineTo(-hw, -h * 0.7);
-    ctx.lineTo(-hw, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(-hw, -h * 0.7);
-    ctx.lineTo(0, -h);
-    ctx.lineTo(hw, -h * 0.7);
-    ctx.stroke();
-    if (spent) {
-      ctx.strokeStyle = 'rgba(8,6,12,0.9)';
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(-hw * 0.6, -h * 0.25);
-      ctx.lineTo(hw * 0.1, -h * 0.45);
-      ctx.lineTo(-hw * 0.2, -h * 0.62);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  /** The Schattengriff: the pool, and the claws out of it. */
+  /** The Schattengriff: the pool, its eyes, and the claws out of it. */
   private drawPool(ctx: CanvasRenderingContext2D): void {
     const pool = this.pool;
     if (!pool) return;
@@ -1744,356 +1662,143 @@ export class Gloom extends Enemy {
     const grow = clamp(t / 0.25, 0, 1);
     const held = t >= GRIP_FOLLOW;
     const end = t > GRIP_FOLLOW + GRIP_HOLD + GRIP_CLAW ? clamp(1 - (t - GRIP_FOLLOW - GRIP_HOLD - GRIP_CLAW) / 0.35, 0, 1) : 1;
-    const rx = (24 + (held ? 8 : 4 * Math.sin(t * 12))) * grow;
-    ctx.save();
-    ctx.translate(pool.x, pool.surface);
-    ctx.globalAlpha = end;
-    ctx.fillStyle = 'rgba(3,1,7,0.94)';
-    ctx.beginPath();
-    ctx.ellipse(0, -1, rx, 5.5 * grow, 0, 0, TAU);
-    ctx.fill();
+    const k = grow * end;
+    if (k < 0.08) return;
+    const rx = (24 + (held ? 8 : 4 * Math.sin(t * 12))) * k;
+    const x = snap(pool.x);
+    const y = snap(pool.surface) - ART;
     // The edge churns while it follows; once it stops, it beats.
-    const beat = held ? 0.65 + 0.35 * Math.abs(Math.sin(t * 22)) : 0.38;
-    ctx.strokeStyle = `rgba(168,128,250,${beat.toFixed(3)})`;
-    ctx.lineWidth = held ? 2 : 1.4;
-    ctx.beginPath();
-    ctx.ellipse(0, -1, rx + 1, 6 * grow, 0, 0, TAU);
-    ctx.stroke();
+    const beat = held && Math.sin(t * 22) > 0;
+    oval(ctx, x, y, rx + ART, 6 * k + ART, beat ? SHADOW.rim : SHADOW.rimDim);
+    oval(ctx, x, y, rx, 5.5 * k, SHADOW.void);
     // His eyes in it, looking up.
-    ctx.fillStyle = 'rgba(236,228,255,0.85)';
+    ctx.fillStyle = SHADOW.eye;
     for (let i = 0; i < 4; i++) {
-      const ex = (-12 + i * 8 + Math.sin(t * 5 + i) * 2) * grow;
-      ctx.fillRect(ex - 0.8, -2 + (i % 2), 1.6, 1.4);
+      const ex = snap(x + (-12 + i * 8 + Math.sin(t * 5 + i) * 2) * k);
+      ctx.fillRect(ex, y - ART * (i % 2), ART * 2, ART);
     }
     const up = this.clawsUp(pool);
-    if (up > 0) {
-      // Four claws, bone-pale out of a black root, curling in over the middle:
-      // a hand closing on whoever stayed.
+    if (up > 0.05) {
+      // Four claws, bone-pale out of a black root, hooking in over the middle.
       for (let i = 0; i < 4; i++) {
         const bx = [-21, -8, 7, 20][i];
-        const hgt = GRIP_H * up * [0.8, 1, 0.95, 0.78][i];
-        const hook = bx < 0 ? 1 : -1;
-        const g = ctx.createLinearGradient(0, 0, 0, -hgt);
-        g.addColorStop(0, '#0b0712');
-        g.addColorStop(0.45, '#4a3d5e');
-        g.addColorStop(1, '#e2d8ee');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(bx - 4.5, 0);
-        ctx.quadraticCurveTo(bx - 5 - hook, -hgt * 0.55, bx + hook * 3, -hgt);
-        ctx.quadraticCurveTo(bx + hook * 8, -hgt * 0.9, bx + hook * 6.5, -hgt * 0.72);
-        ctx.quadraticCurveTo(bx + 1.5, -hgt * 0.45, bx + 4.5, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(196,166,255,0.75)';
-        ctx.lineWidth = 1.1;
-        ctx.stroke();
+        const step = clamp(Math.round(up * [0.8, 1, 0.95, 0.78][i] * 4) - 1, 0, 3);
+        const s = clawSprite(step, bx < 0 ? 1 : -1);
+        s.draw(ctx, snap(x + bx) - (s.w / 2) * ART, snap(pool.surface) - s.h * ART);
       }
     }
-    ctx.restore();
   }
 
-  /** The Finsterwelle: a low rolling crest of dark along the floor, rimmed in violet. */
+  /** The Finsterwelle: a crest of dark rolling along the floor, rimmed in violet. */
   private drawWaves(ctx: CanvasRenderingContext2D): void {
     for (const w of this.waves) {
-      const y = this.floorY;
-      ctx.save();
-      ctx.translate(w.x, y);
-      ctx.scale(w.dir, 1);
-      // What it leaves behind: a smear of dark along the floor.
-      const g = ctx.createLinearGradient(-60, 0, 0, 0);
-      g.addColorStop(0, 'rgba(6,3,12,0)');
-      g.addColorStop(1, 'rgba(6,3,12,0.75)');
-      ctx.fillStyle = g;
-      ctx.fillRect(-60, -6, 60, 6);
-      const wob = Math.sin(this.anim * 18 + w.x * 0.05) * 1.5;
-      ctx.fillStyle = '#07040d';
-      ctx.beginPath();
-      ctx.moveTo(-22, 0);
-      ctx.quadraticCurveTo(-12, -WAVE_H * 0.7, 2, -WAVE_H - wob);
-      ctx.quadraticCurveTo(10, -WAVE_H * 0.8, 14, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(176,140,255,0.75)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(-14, -WAVE_H * 0.55);
-      ctx.quadraticCurveTo(-6, -WAVE_H * 0.95, 2, -WAVE_H - wob);
-      ctx.quadraticCurveTo(9, -WAVE_H * 0.8, 12, -WAVE_H * 0.3);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(236,228,255,0.9)';
-      ctx.fillRect(1, -WAVE_H * 0.6, 1.6, 1.4);
-      ctx.fillRect(-6, -WAVE_H * 0.4, 1.4, 1.2);
-      ctx.restore();
+      const k = (Math.floor(this.anim * 9 + w.x * 0.02) % 4 + 4) % 4;
+      const f = waveFrame(k);
+      waveSprites[k] ??= new PixelSprite(f.grid, WAVE_KEY);
+      const s = waveSprites[k];
+      const x = snap(w.x);
+      s.draw(ctx, w.dir > 0 ? x - f.ox * ART : x - (s.w - f.ox) * ART, snap(this.floorY) - f.oy * ART, w.dir);
     }
   }
 
   private drawOrb(ctx: CanvasRenderingContext2D, o: Orb): void {
     const batted = o.batted > 0;
     const k = batted ? clamp(o.batted / 0.4, 0, 1) : clamp(o.life / 0.4, 0, 1);
-    const r = ORB_R * (batted ? 0.6 + 0.4 * k : 1) * Math.min(1, k * 2);
-    ctx.save();
-    ctx.translate(o.x, o.y);
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 0, 0, r * 2.4, `rgba(150,110,240,${(0.35 * k).toFixed(3)})`);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.rotate(this.anim * (batted ? 14 : 3));
-    ctx.fillStyle = '#08040f';
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(180,150,255,${(0.7 * k).toFixed(3)})`;
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, 0.2, 2.2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.55, 3.2, 4.9);
-    ctx.stroke();
-    ctx.restore();
-    if (!batted) {
+    const r = Math.round((ORB_R * (batted ? 0.6 + 0.4 * k : 1) * Math.min(1, k * 2)) / ART);
+    if (r < 1) return;
+    const turn = Math.floor((this.anim * (batted ? 14 : 3)) / (TAU / 8)) & 7;
+    const s = orbSprite(r, turn);
+    const x = snap(o.x);
+    const y = snap(o.y);
+    s.draw(ctx, x - Math.floor(s.w / 2) * ART, y - Math.floor(s.h / 2) * ART);
+    if (!batted && r >= 3) {
       // One pale eye in each, looking where it goes.
       const d = Math.hypot(o.vx, o.vy) || 1;
-      ctx.fillStyle = '#f2ecff';
-      ctx.beginPath();
-      ctx.arc(o.x + (o.vx / d) * r * 0.45, o.y + (o.vy / d) * r * 0.45, 1.8, 0, TAU);
-      ctx.fill();
+      ctx.fillStyle = SHADOW.eye;
+      ctx.fillRect(snap(o.x + (o.vx / d) * r * ART * 0.45) - ART, snap(o.y + (o.vy / d) * r * ART * 0.45), ART * 2, ART);
     }
   }
 
-  /** The orbs forming round his head during the tell. */
+  /** The orbs forming round his head during the tell: whole rings, growing. */
   private drawGathering(ctx: CanvasRenderingContext2D): void {
-    const k = this.gather;
+    const r = Math.round((ORB_R * this.gather) / ART);
+    if (r < 1) return;
+    const s = orbSprite(r, 0, true);
     for (let i = 0; i < 3; i++) {
       const at = this.orbSpot(i);
-      const r = ORB_R * k;
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, at.x, at.y, r * 2.6 + 4, `rgba(150,110,240,${(0.4 * k).toFixed(3)})`);
-      ctx.restore();
-      ctx.fillStyle = '#08040f';
-      ctx.beginPath();
-      ctx.arc(at.x, at.y, r, 0, TAU);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(180,150,255,${(0.6 * k).toFixed(3)})`;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      s.draw(ctx, snap(at.x) - Math.floor(s.w / 2) * ART, snap(at.y) - Math.floor(s.h / 2) * ART);
     }
-  }
-
-  /** The crystal's light, seen through the flesh it is going into. */
-  private drawSwallowed(ctx: CanvasRenderingContext2D): void {
-    const c = this.crystals[this.target];
-    if (!c) return;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, c.x, c.surface - 22, 30 + this.gulp * 10, `rgba(255,214,130,${(0.18 + this.gulp * 0.16).toFixed(3)})`);
-    glow(ctx, c.x, c.surface - 24, 11, `rgba(255,246,210,${(0.22 + this.gulp * 0.22).toFixed(3)})`);
-    ctx.restore();
   }
 
   /** Blinded: points of light stuck in him, wheeling. */
   private drawDazzle(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 5; i++) {
       const a = this.anim * 3.6 + (i * TAU) / 5;
-      const x = this.cx + Math.cos(a) * 30;
-      const y = this.bottom - 48 + Math.sin(a) * 7;
-      const s = 2.4 + (Math.sin(a) > 0 ? 0.9 : 0);
-      ctx.fillStyle = i % 2 ? 'rgba(255,236,170,0.95)' : 'rgba(255,252,230,0.95)';
-      ctx.fillRect(x - s, y - 0.7, s * 2, 1.4);
-      ctx.fillRect(x - 0.7, y - s, 1.4, s * 2);
+      const x = snap(this.cx + Math.cos(a) * 30);
+      const y = snap(this.bottom - 48 + Math.sin(a) * 7);
+      const arm = Math.sin(a) > 0 ? 2 : 1;
+      ctx.fillStyle = i % 2 ? RAMP.fire[4] : RAMP.earth[7];
+      ctx.fillRect(x - arm * ART, y, (arm * 2 + 1) * ART, ART);
+      ctx.fillRect(x, y - arm * ART, ART, (arm * 2 + 1) * ART);
     }
-    ctx.restore();
   }
 
-  /** The puffs of his body for this frame: breathing, shifting, squashed to the pose. */
-  private puffs(sx: number, sy: number, lean: number): { x: number; y: number; r: number }[] {
-    const t = this.anim;
-    return PUFFS.map(([x, y, r, ph]) => ({
-      x: x * sx + Math.sin(t * 1.3 + ph) * 2.2 + lean * (-y / 60),
-      y: y * sy + Math.cos(t * 1.1 + ph * 1.7) * 1.8,
-      r: r * (0.94 + Math.sin(t * 2 + ph) * 0.06) * ((sx + sy) / 2),
-    }));
-  }
-
-  /** Nyktos himself, in his own space: facing right, his bottom at the origin. */
-  private drawNyktos(ctx: CanvasRenderingContext2D): void {
+  /** The body's pose for this frame, put to the steps its frames are drawn at. */
+  private bodySpec(): BodySpec {
     const awake = this.wakeT;
-    const fl = this.flesh;
-    const gone = 1 - this.fade;
     const sy = lerp(0.36, 1, awake) * (1 - this.slump * 0.42) * (1 + this.rise * 0.16) * (1 - this.squash * 0.28);
     const sx = lerp(1.5, 1, awake) * (1 + this.slump * 0.3) * (1 - this.rise * 0.08) * (1 + this.squash * 0.22);
-    const lean = this.hunch * 7;
-    const puffs = this.puffs(sx, sy, lean);
-    // How far down the veil of smoke under him can trail before it meets the floor.
-    const down = this.state === 'eat' || this.state === 'swipe' || this.state === 'blinded' || this.state === 'dormant' ? 0 : this.floorY - this.bottom;
-    if (this.fade > 0) ctx.translate(0, -this.fade * 10);
-    this.drawVeil(ctx, sx, sy, fl, gone, down);
-    if (fl < 0.99) this.drawSmoke(ctx, puffs, (1 - fl) * gone, sy);
-    if (fl > 0.01) this.drawFlesh(ctx, puffs, fl * gone, sy);
-    if (this.reach > 0.02 || this.sweep > 0.02) this.drawArm(ctx, fl, gone);
-    const head = this.headPose(sx, sy);
-    this.drawHead(ctx, head, fl, gone);
-    this.drawEyes(ctx, head, sx, sy, fl, awake, gone);
+    const down = this.floorY - this.bottom;
+    const low = this.state === 'eat' || this.state === 'swipe' || this.state === 'blinded' || this.state === 'dormant' || this.slump > 0.5 || down < 18;
+    return {
+      sx: Math.round(sx * 8) / 8,
+      sy: Math.round(sy * 8) / 8,
+      lean: Math.round(this.hunch * 2) * 3.5,
+      k: Math.floor(this.anim / CHURN_TIME) % CHURN,
+      veil: low ? 'floor' : this.rise > 0.4 ? 'pulled' : 'hang',
+      flesh: this.flesh > 0.5,
+      gone: this.fade > 0.15 ? clamp(Math.ceil((this.fade - 0.15) / 0.2), 1, 4) : 0,
+    };
   }
 
-  /**
-   * What he trails instead of legs: a ragged veil of smoke, wisps of every
-   * length streaming back from under him and thinning as they go. Over a meal
-   * it spreads along the floor; before the slam it is drawn up into him.
-   */
-  private drawVeil(ctx: CanvasRenderingContext2D, sx: number, sy: number, fl: number, gone: number, down: number): void {
-    const t = this.anim;
-    const pull = Math.max(this.rise, this.slump * 0.8);
-    const spread = Math.max(this.hunch, this.slump);
-    // Going forward, it streams out behind him.
-    const trail = clamp((this.vx * this.facing) / 150, -1, 1);
-    // Ring by ring down the wisps, each ring one path: 7 wisps, 5 puffs each.
-    for (let k = 1; k <= 5; k++) {
-      const u = k / 5;
-      const r = lerp(5.5, 1.6, u) * (1 - spread * 0.3);
-      const smoke = new Path2D();
-      const flesh = new Path2D();
-      for (let i = 0; i < 7; i++) {
-        const rx = (-21 + i * 7) * sx;
-        const ry = (-14 + Math.abs(i - 3) * 1.5) * sy;
-        const len = (16 + ((i * 5) % 4) * 6) * (1 - pull * 0.75) * lerp(0.3, 1, this.wakeT);
-        const sway = Math.sin(t * 2.2 + i * 1.3 - u * 2.5) * 5 * u;
-        const x = rx + sway - (6 + trail * 10) * u * u + spread * rx * 0.9 * u;
-        const y = Math.min(lerp(ry + len * u, ry + 2 * u, spread), down - 2);
-        smoke.moveTo(x + r, y);
-        smoke.arc(x, y, r, 0, TAU);
-        flesh.moveTo(x + r * 0.72, y);
-        flesh.arc(x, y, r * 0.72, 0, TAU);
-      }
-      if (fl < 0.99) {
-        ctx.fillStyle = `rgba(7,4,13,${((1 - u * 0.7) * 0.9 * (1 - fl) * gone).toFixed(3)})`;
-        ctx.fill(smoke);
-      }
-      if (fl > 0.01) {
-        // As flesh, they are thin grey feelers with dark ends.
-        ctx.fillStyle = u > 0.7 ? `rgba(46,32,52,${(fl * gone).toFixed(3)})` : `rgba(124,112,128,${(fl * gone).toFixed(3)})`;
-        ctx.fill(flesh);
-      }
-    }
+  /** His paint: smoke, flesh, the moment between - and white for the frame a blow lands. */
+  private paint(): PaintName {
+    if (this.flash > 0.78) return 'flash';
+    if (this.flesh > 0.7) return this.state === 'eat' ? 'fleshEat' : 'flesh';
+    return this.flesh > 0.3 ? 'half' : 'smoke';
   }
 
-  /** One path of every puff, grown or shrunk: a layer of him, filled in one go. */
-  private puffPath(ctx: CanvasRenderingContext2D, puffs: { x: number; y: number; r: number }[], k: number, add = 0, dx = 0, dy = 0): void {
-    ctx.beginPath();
-    for (const p of puffs) {
-      const r = p.r * k + add;
-      ctx.moveTo(p.x + dx * p.r + r, p.y + dy * p.r);
-      ctx.arc(p.x + dx * p.r, p.y + dy * p.r, r, 0, TAU);
-    }
-  }
-
-  /**
-   * Smoke: soft at the edge and black at the heart, so it reads as something
-   * that has no surface - and a faint violet rim along the top of the whole
-   * mass, so the black still has a shape against black rock. Each layer is one
-   * path: a gradient per puff cost a millisecond and a half a frame.
-   */
-  private drawSmoke(ctx: CanvasRenderingContext2D, puffs: { x: number; y: number; r: number }[], alpha: number, sy: number): void {
-    if (alpha <= 0.01) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    for (const [k, colour] of [
-      [1.42, 'rgba(26,18,48,0.3)'],
-      [1.16, 'rgba(12,8,24,0.6)'],
-      [0.8, '#05030a'],
-    ] as const) {
-      ctx.fillStyle = colour;
-      this.puffPath(ctx, puffs, k);
-      ctx.fill();
-    }
-    // Depth: the heart of the smoke is a breath lighter than its skin.
-    const g = ctx.createRadialGradient(-6, -44 * sy, 2, -4, -38 * sy, 30);
-    g.addColorStop(0, 'rgba(52,40,86,0.55)');
-    g.addColorStop(1, 'rgba(52,40,86,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(-4, -38 * sy, 30, 0, TAU);
-    ctx.fill();
-    // The rim: only the topmost puffs, where light from above would catch.
-    ctx.strokeStyle = 'rgba(176,156,240,0.3)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    for (const p of puffs) {
-      if (p.y > -46 * sy) continue;
-      const a0 = Math.PI * 1.12;
-      ctx.moveTo(p.x + Math.cos(a0) * p.r * 1.05, p.y + Math.sin(a0) * p.r * 1.05);
-      ctx.arc(p.x, p.y, p.r * 1.05, a0, Math.PI * 1.7);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  /**
-   * Flesh: the same lumps, grey and slack, a dark skin round them, lit from
-   * above and gone dark underneath, mottled and veined - the smoke made into
-   * something a blade can open.
-   */
-  private drawFlesh(ctx: CanvasRenderingContext2D, puffs: { x: number; y: number; r: number }[], alpha: number, sy: number): void {
-    if (alpha <= 0.01) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#20151f';
-    this.puffPath(ctx, puffs, 1, 1.6);
-    ctx.fill();
-    this.puffPath(ctx, puffs, 1);
-    const body = ctx.createLinearGradient(0, -70 * sy, 0, 0);
-    body.addColorStop(0, '#988d99');
-    body.addColorStop(0.55, '#7a6f7e');
-    body.addColorStop(1, '#43384b');
-    ctx.fillStyle = body;
-    ctx.fill();
-    ctx.clip();
-    // The top of every lump catches the light; the mottling sits in the skin.
-    ctx.fillStyle = 'rgba(190,180,186,0.55)';
-    this.puffPath(ctx, puffs, 0.52, 0, -0.32, -0.38);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(214,206,210,0.45)';
-    this.puffPath(ctx, puffs, 0.24, 0, -0.4, -0.5);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(60,44,66,0.3)';
-    ctx.beginPath();
-    for (const [i, p] of puffs.entries()) {
-      const x = p.x + ((i * 5) % 7) - 3;
-      const y = p.y + ((i * 3) % 5) + 2;
-      ctx.moveTo(x + p.r * 0.16, y);
-      ctx.arc(x, y, p.r * 0.16, 0, TAU);
-    }
-    ctx.fill();
-    // The veins - and while he eats, the light running in them.
-    const eating = this.state === 'eat' ? 0.5 + this.gulp * 0.5 : 0;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    for (const [pass, colour, width] of [
-      [0, 'rgba(48,24,50,0.85)', 1.4],
-      [1, `rgba(255,214,120,${(eating * 0.9).toFixed(3)})`, 0.9],
-    ] as const) {
-      if (pass === 1 && eating <= 0) continue;
-      ctx.strokeStyle = colour;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      for (const vein of VEINS) {
-        for (const [i, [vx, vy]] of vein.entries()) {
-          const x = vx + this.hunch * 7 * (-vy / 60);
-          const y = vy * sy + Math.sin(this.anim * 1.1 + i) * 0.6;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-      }
-      ctx.stroke();
-    }
-    ctx.restore();
+  /** Nyktos himself: the body, the arm of the swipe, the head, and the eyes all over him. */
+  private drawNyktos(ctx: CanvasRenderingContext2D): void {
+    const spec = this.bodySpec();
+    const paint = this.paint();
+    const facing: 1 | -1 = this.facing < 0 ? -1 : 1;
+    const ox = snap(this.cx);
+    const oy = snap(this.bottom - this.fade * 10);
+    const body = bodySprite(spec, paint);
+    body.sprite.draw(ctx, ox - (facing > 0 ? body.part.ox : body.sprite.w - body.part.ox) * ART, oy - body.part.oy * ART, facing);
+    if (this.reach > 0.02 || this.sweep > 0.02) this.drawArm(ctx, ox, oy, facing, paint);
+    // The head on its neck, turned to the nearest of its sixteen angles.
+    const awake = this.wakeT;
+    let a = lerp(0.04, 0.28 + Math.sin(this.anim * 1.4) * 0.07, awake);
+    a = lerp(a, 1.95, this.hunch);
+    a -= this.rise * 0.6;
+    a = lerp(a, 0.7, this.slump);
+    const step = ((Math.round(a / (TAU / HEAD_STEPS)) % HEAD_STEPS) + HEAD_STEPS) % HEAD_STEPS;
+    const len = lerp(lerp(30, 40, awake), 27, this.hunch) < 34 ? HEAD_LENS[0] : HEAD_LENS[1];
+    const gapeBy = 5 + this.gape * 8 + this.rise * 4 + this.gulp * 1.5;
+    const mouth = MOUTHS[clamp(Math.round((gapeBy - 5) / 4), 0, MOUTHS.length - 1)];
+    const rootX = Math.round((lerp(12, 9, this.hunch) * spec.sx) / ART);
+    const rootY = Math.round((lerp(-50, -56, this.hunch) * spec.sy) / ART);
+    const head = headSprite(step, len, mouth, spec.flesh, paint);
+    const hx = ox + facing * rootX * ART;
+    const hy = oy + rootY * ART;
+    head.sprite.draw(ctx, hx - (facing > 0 ? head.part.ox : head.sprite.w - head.part.ox) * ART, hy - head.part.oy * ART, facing);
+    if (paint !== 'flash') this.drawEyes(ctx, spec, ox, oy, hx, hy, step, len, facing);
   }
 
   /** The arm of the swipe: drawn back over him in the tell, flung forward when it goes. */
-  private drawArm(ctx: CanvasRenderingContext2D, fl: number, gone: number): void {
+  private drawArm(ctx: CanvasRenderingContext2D, ox: number, oy: number, facing: 1 | -1, paint: PaintName): void {
     const sh = { x: 12, y: -40 };
     const rest = { x: 30, y: -30 };
     const back = { x: -6, y: -88 };
@@ -2105,235 +1810,80 @@ export class Gloom extends Enemy {
       tip = { x: lerp(back.x, fwd.x, u), y: lerp(back.y, fwd.y, u) };
     } else {
       const k = easeOut(this.reach, 2);
-      tip = { x: lerp(rest.x, back.x, k) + Math.sin(this.anim * 30) * k, y: lerp(rest.y, back.y, k) };
+      tip = { x: lerp(rest.x, back.x, k) + Math.round(Math.sin(this.anim * 30) * k) * ART, y: lerp(rest.y, back.y, k) };
     }
     const mid = { x: (sh.x + tip.x) / 2 + 10, y: (sh.y + tip.y) / 2 - 8 };
-    ctx.save();
-    ctx.lineCap = 'round';
-    const dark = `rgba(8,5,15,${((1 - fl) * gone).toFixed(3)})`;
-    const pale = `rgba(150,138,152,${(fl * gone).toFixed(3)})`;
-    for (const [colour, w] of [
-      ['rgba(64,48,104,0.35)', 13],
-      [dark, 10],
-      [pale, 8],
-    ] as const) {
-      ctx.strokeStyle = colour;
-      ctx.lineWidth = w;
-      ctx.beginPath();
-      ctx.moveTo(sh.x, sh.y);
-      ctx.quadraticCurveTo(mid.x, mid.y, tip.x, tip.y);
-      ctx.stroke();
-    }
+    const at = (t: number): [number, number] => {
+      const u = 1 - t;
+      return [ox + facing * (u * u * sh.x + 2 * u * t * mid.x + t * t * tip.x), oy + u * u * sh.y + 2 * u * t * mid.y + t * t * tip.y];
+    };
+    const pts = [at(0), at(0.34), at(0.67), at(1)];
+    const dark = tone(paint, 'D');
+    const body = tone(paint, 'L');
+    for (let i = 0; i < 3; i++) runLine(ctx, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], dark, [5, 4, 4][i]);
+    for (let i = 0; i < 3; i++) runLine(ctx, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], body, [3, 2, 2][i]);
     // Three hooked claws at the end of it, pale: they have to be seen coming.
     const ang = Math.atan2(tip.y - mid.y, tip.x - mid.x);
+    const claw = tone(paint, 'T');
+    const [tx, ty] = pts[3];
     for (let i = -1; i <= 1; i++) {
       const a = ang + i * 0.42;
-      ctx.strokeStyle = `rgba(236,228,250,${(0.92 * gone).toFixed(3)})`;
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(tip.x, tip.y);
-      ctx.quadraticCurveTo(tip.x + Math.cos(a) * 10, tip.y + Math.sin(a) * 10, tip.x + Math.cos(a + 0.9) * 13, tip.y + Math.sin(a + 0.9) * 13);
-      ctx.stroke();
+      const kx = tx + facing * Math.cos(a) * 10;
+      const ky = ty + Math.sin(a) * 10;
+      thread(ctx, tx, ty, kx, ky, claw);
+      thread(ctx, kx, ky, tx + facing * Math.cos(a + 0.9) * 13, ty + Math.sin(a + 0.9) * 13, claw);
     }
     if (this.swung && this.sweep > 0.05) {
       // The streak it leaves through the air.
-      ctx.strokeStyle = `rgba(220,210,255,${(this.sweep * 0.6).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath();
-        ctx.arc(12, -30, 48 + i * 7, -1.4, 1.0);
-        ctx.stroke();
-      }
+      const s = swipeSprite();
+      s.draw(ctx, ox + facing * 12 - SWIPE_C * ART, oy - 30 - SWIPE_C * ART, facing);
     }
-    ctx.restore();
   }
 
-  /** Where the head is in this pose: its root, its angle, its length and its mouth. */
-  private headPose(sx: number, sy: number): { bx: number; by: number; a: number; len: number; mouth: number } {
-    const awake = this.wakeT;
-    const idle = 0.28 + Math.sin(this.anim * 1.4) * 0.07;
-    let a = lerp(0.04, idle, awake);
-    a = lerp(a, 1.95, this.hunch);
-    a -= this.rise * 0.6;
-    a = lerp(a, 0.7, this.slump);
-    const bx = lerp(12, 9, this.hunch) * sx;
-    const by = lerp(-50, -56, this.hunch) * sy;
-    const len = lerp(lerp(30, 40, awake), 27, this.hunch);
-    const mouth = 5 + this.gape * 8 + this.rise * 4 + this.gulp * 1.5;
-    return { bx, by, a, len, mouth };
-  }
-
-  /** The skull's outline in its own space: a brow, a long falling snout, a sunken cheek. */
-  private headPath(ctx: CanvasRenderingContext2D, len: number): void {
-    ctx.beginPath();
-    ctx.moveTo(-8, -9);
-    ctx.quadraticCurveTo(0, -16.5, 11, -12.5);
-    ctx.quadraticCurveTo(16, -10.5, 20, -9);
-    ctx.quadraticCurveTo(len * 0.7, -6.5, len, -3.6);
-    ctx.quadraticCurveTo(len + 2.5, -2.5, len + 2.5, 0);
-    ctx.quadraticCurveTo(len + 2.5, 2.5, len, 3.6);
-    ctx.quadraticCurveTo(len * 0.66, 5, 24, 5.5);
-    ctx.lineTo(20, 7.5);
-    ctx.quadraticCurveTo(12, 4.5, 8, 9);
-    ctx.quadraticCurveTo(0, 11.5, -8, 9);
-    ctx.closePath();
-  }
-
-  /** The long gaunt head, and the round mouth at the end of it. */
-  private drawHead(ctx: CanvasRenderingContext2D, head: { bx: number; by: number; a: number; len: number; mouth: number }, fl: number, gone: number): void {
-    const { len, mouth } = head;
-    ctx.save();
-    ctx.translate(head.bx, head.by);
-    ctx.rotate(head.a);
-    if (fl < 0.99) {
-      ctx.globalAlpha = (1 - fl) * gone;
-      ctx.strokeStyle = 'rgba(64,48,104,0.32)';
-      ctx.lineWidth = 6;
-      this.headPath(ctx, len);
-      ctx.stroke();
-      ctx.fillStyle = '#05030a';
-      ctx.fill();
-      // The ridge of the skull, catching what light there is.
-      ctx.strokeStyle = 'rgba(180,160,244,0.5)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(-5, -11.5);
-      ctx.quadraticCurveTo(0, -16, 11, -12.2);
-      ctx.quadraticCurveTo(16, -10.2, 20, -8.7);
-      ctx.quadraticCurveTo(len * 0.7, -6.2, len - 1, -3.6);
-      ctx.stroke();
-    }
-    if (fl > 0.01) {
-      ctx.globalAlpha = fl * gone;
-      ctx.strokeStyle = '#20151f';
-      ctx.lineWidth = 3.2;
-      this.headPath(ctx, len);
-      ctx.stroke();
-      const g = ctx.createLinearGradient(0, -12, 0, 9);
-      g.addColorStop(0, '#b6acb1');
-      g.addColorStop(0.55, '#827786');
-      g.addColorStop(1, '#43384c');
-      ctx.fillStyle = g;
-      ctx.fill();
-      // Bone under thin skin: the brow, ridges down the snout, the hollow cheek.
-      ctx.strokeStyle = 'rgba(46,26,48,0.8)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (const x of [len * 0.55, len * 0.7, len * 0.84]) {
-        const top = -9 + ((x - 20) / Math.max(1, len - 20)) * 5;
-        ctx.moveTo(x, top + 0.6);
-        ctx.quadraticCurveTo(x + 1.2, top + 3, x + 0.4, top + 5);
-      }
-      ctx.moveTo(14, 5);
-      ctx.quadraticCurveTo(18, 2, 24, 3.5);
-      ctx.stroke();
-    }
-    // The socket the eyes crowd round: a hollow in either state.
-    ctx.globalAlpha = gone;
-    ctx.fillStyle = fl > 0.5 ? '#2a1726' : '#000000';
-    ctx.beginPath();
-    ctx.ellipse(13, -4, 6.5, 4.5, -0.15, 0, TAU);
-    ctx.fill();
-    // The mouth: a lamprey's round disc, ringed with teeth, wide open to eat.
-    ctx.translate(len + 1.5, 0);
-    ctx.fillStyle = fl > 0.5 ? '#3a2232' : '#120a14';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, mouth * 0.45, mouth, 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = fl > 0.5 ? 'rgba(32,18,30,0.9)' : 'rgba(176,156,240,0.45)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = '#040106';
-    ctx.beginPath();
-    ctx.ellipse(0.5, 0, mouth * 0.28, mouth * 0.62, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = fl > 0.5 ? '#efe6d8' : 'rgba(232,224,244,0.9)';
-    const teeth = 12;
-    for (let i = 0; i < teeth; i++) {
-      const ang = (i / teeth) * TAU;
-      const ox = Math.cos(ang) * mouth * 0.45;
-      const oy = Math.sin(ang) * mouth;
-      const ix = Math.cos(ang) * mouth * 0.24;
-      const iy = Math.sin(ang) * mouth * 0.56;
-      const px = -Math.sin(ang) * 1.2;
-      const py = Math.cos(ang) * 1.2;
-      ctx.beginPath();
-      ctx.moveTo(ox + px, oy + py);
-      ctx.lineTo(ox - px, oy - py);
-      ctx.lineTo(ix, iy);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  private drawEyes(
-    ctx: CanvasRenderingContext2D,
-    head: { bx: number; by: number; a: number; len: number },
-    sx: number,
-    sy: number,
-    fl: number,
-    awake: number,
-    gone: number,
-  ): void {
+  /**
+   * His eyes: crowded round the socket and strung along the snout, and a
+   * scatter over the front of the smoke - white in the dark, each blinking
+   * on its own; in the light, squinting beads. Dying, they go out one by one.
+   */
+  private drawEyes(ctx: CanvasRenderingContext2D, spec: BodySpec, ox: number, oy: number, hx: number, hy: number, step: number, len: number, facing: 1 | -1): void {
     const t = this.anim;
-    const cos = Math.cos(head.a);
-    const sin = Math.sin(head.a);
-    const stretch = head.len / 40;
+    const fleshy = this.flesh > 0.5;
     const blinded = this.state === 'blinded';
-    ctx.save();
+    const wide = this.heat > 0.5 ? 1 : 0;
     for (const [i, e] of this.eyes.entries()) {
-      // Dying, they go out one by one.
       if (this.fade > 0 && this.fade > 0.1 + (i / this.eyes.length) * 0.8) continue;
-      let x: number;
-      let y: number;
-      if (e.head) {
-        const hx = e.x <= 18 ? e.x : 18 + (e.x - 18) * stretch;
-        x = head.bx + hx * cos - e.y * sin;
-        y = head.by + hx * sin + e.y * cos;
-      } else {
-        x = e.x * sx + this.hunch * 7 * (-e.y / 60) + Math.sin(t * 1.3 + e.phase) * 1.2;
-        y = e.y * sy + Math.cos(t + e.phase) * 0.8;
-      }
-      const shut = blinded || Math.sin(t * e.rate + e.phase) > 0.97 || awake < 0.5 + (e.phase / TAU) * 0.5;
+      const [ex, ey] = e.head ? headEyeAt(step, len, e.x, e.y) : bodyEyeAt(e.x, e.y, spec);
+      const bx = e.head ? hx : ox;
+      const by = e.head ? hy : oy;
+      const shut = blinded || Math.sin(t * e.rate + e.phase) > 0.97 || this.wakeT < 0.5 + (e.phase / TAU) * 0.5;
+      const w = 2 + (e.size > 1.15 ? wide : 0);
+      const h = shut ? 1 : e.size > 1.15 || wide ? 2 : 1;
+      const cx = Math.round(ex - w / 2);
+      const cy = Math.round(ey - h / 2);
+      const x = bx + (facing > 0 ? cx : -cx - w) * ART;
+      const y = by + cy * ART;
       if (shut) {
-        ctx.strokeStyle = `rgba(200,190,230,${(0.4 * gone).toFixed(3)})`;
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        ctx.moveTo(x - e.size, y);
-        ctx.lineTo(x + e.size, y);
-        ctx.stroke();
-        continue;
-      }
-      const r = e.size * (1 + this.heat * 0.45) * (fl > 0.5 ? 0.8 : 1);
-      if (fl > 0.5) {
-        // In the light: wet beads, squinting against it.
-        ctx.fillStyle = 'rgba(36,18,32,0.95)';
-        ctx.beginPath();
-        ctx.arc(x, y, r + 0.9, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#fff1e2';
-        ctx.beginPath();
-        ctx.ellipse(x, y, r, r * 0.55, 0, 0, TAU);
-        ctx.fill();
+        ctx.fillStyle = fleshy ? RAMP.grey[4] : RAMP.slate[2];
+        ctx.fillRect(x, y, w * ART, ART);
+      } else if (fleshy) {
+        // In the light: wet beads, squinting against it, a dark lid over each.
+        ctx.fillStyle = RAMP.plum[0];
+        ctx.fillRect(x, y - ART, w * ART, ART);
+        ctx.fillStyle = RAMP.earth[7];
+        ctx.fillRect(x, y, w * ART, ART);
       } else {
-        if (e.size > 1.25) {
-          ctx.globalCompositeOperation = 'lighter';
-          glow(ctx, x, y, r * 3.4, `rgba(200,188,255,${((0.34 + this.heat * 0.32) * gone).toFixed(3)})`);
-          ctx.globalCompositeOperation = 'source-over';
-        }
-        ctx.fillStyle = `rgba(248,244,255,${gone.toFixed(3)})`;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, TAU);
-        ctx.fill();
+        ctx.fillStyle = WHITE;
+        ctx.fillRect(x, y, w * ART, h * ART);
       }
     }
-    ctx.restore();
   }
 }
 
-/** A colour between two, as a css rgb(). */
-function mixRgb(a: readonly number[], b: readonly number[], t: number): string {
-  const k = clamp(t, 0, 1);
-  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * k)},${Math.round(a[1] + (b[1] - a[1]) * k)},${Math.round(a[2] + (b[2] - a[2]) * k)})`;
+const WHITE = '#ffffff';
+const waveSprites: PixelSprite[] = [];
+
+/** A line one art pixel wide from one logical point to another, its pixels meeting edge to edge: no pixel of it stands alone. */
+function thread(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, color: string): void {
+  ctx.fillStyle = color;
+  for (const [x, y] of line4(Math.floor(x0 / ART), Math.floor(y0 / ART), Math.floor(x1 / ART), Math.floor(y1 / ART))) ctx.fillRect(x * ART, y * ART, ART, ART);
 }
