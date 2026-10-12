@@ -54,7 +54,7 @@ const HALF: Paint = {
 };
 
 const FLESH: Paint = {
-  R: RAMP.earth[7],
+  R: WHITE,
   L: RAMP.grey[6],
   M: RAMP.grey[5],
   S: RAMP.grey[4],
@@ -118,15 +118,21 @@ const VEINS: readonly (readonly number[])[] = [
   [-12, -22, -21, -13],
 ];
 
+/**
+ * How much bigger than his box he is drawn: smoke has no edge a blade could
+ * find, so the mass of him towers over the part of him that can be cut.
+ */
+export const GROW = 1.7;
+
 /** How many frames his churning takes, and how long each holds. */
-export const CHURN = 6;
-export const CHURN_TIME = 0.26;
+export const CHURN = 4;
+export const CHURN_TIME = 0.3;
 
 /** A body frame's grid: his bottom's middle at cell (OX, OY). */
-const BW = 56;
-const BH = 54;
-const OX = 28;
-const OY = 46;
+const BW = 100;
+const BH = 92;
+const OX = 50;
+const OY = 74;
 
 /** What the veil under him does: hang, lie spread on the floor, or draw up into him. */
 export type Veil = 'hang' | 'floor' | 'pulled';
@@ -157,21 +163,23 @@ function puffAt(p: readonly number[], s: BodySpec): [number, number, number] {
   const th = (s.k / CHURN) * Math.PI * 2;
   const [x, y, r, ph] = p;
   return [
-    (x * s.sx + Math.sin(th + ph) * 2.2 + s.lean * (-y / 60)) / 2,
-    (y * s.sy + Math.cos(th + ph * 1.7) * 1.8) / 2,
-    (r * (0.95 + Math.sin(th + ph) * 0.05) * ((s.sx + s.sy) / 2)) / 2,
+    ((x * s.sx + Math.sin(th + ph) * 2.2 + s.lean * (-y / 60)) * GROW) / 2,
+    ((y * s.sy + Math.cos(th + ph * 1.7) * 1.8) * GROW) / 2,
+    (r * (0.95 + Math.sin(th + ph) * 0.05) * ((s.sx + s.sy) / 2) * GROW) / 2,
   ];
 }
 
 /** The lumps of a frame, for his eyes to sit on: centres in art cells. */
 export function bodyEyeAt(x: number, y: number, s: BodySpec): [number, number] {
   const th = (s.k / CHURN) * Math.PI * 2;
-  return [(x * s.sx + s.lean * (-y / 60) + Math.sin(th + x) * 1.2) / 2, (y * s.sy + Math.cos(th + y) * 0.8) / 2];
+  return [((x * s.sx + s.lean * (-y / 60) + Math.sin(th + x) * 1.2) * GROW) / 2, ((y * s.sy + Math.cos(th + y) * 0.8) * GROW) / 2];
 }
 
 /** A tone for a cell of a lump, by which way that part of it faces: lit from above and a little from the left. */
 function lumpTone(nx: number, ny: number): string {
   const l = -0.5 * nx - 0.86 * ny;
+  // A cap of light on the top of every lump, so that each reads as its own.
+  if (l > 0.5 && nx * nx + ny * ny > 0.3) return 'R';
   if (l > -0.6) return 'L';
   if (l > -0.86) return 'M';
   return 'S';
@@ -187,16 +195,16 @@ function buildBody(s: BodySpec): Part {
   };
   // The veil first: seven wisps, thinning as they go.
   const spread = s.veil === 'floor' ? 1 : 0;
-  const pull = s.veil === 'pulled' ? 1 : 0;
+  const pull = s.veil === 'pulled' ? 1 : Math.min(1, s.gone * 0.25);
   for (let i = 0; i < 7; i++) {
-    const rx = (-21 + i * 7) * s.sx;
-    const ry = (-14 + Math.abs(i - 3) * 1.5) * s.sy;
-    const len = (16 + ((i * 5) % 4) * 6) * (1 - pull * 0.75);
-    for (let k = 1; k <= 6; k++) {
-      const u = k / 6;
-      const r = (u < 0.5 ? 2.4 : u < 0.84 ? 1.6 : 1) * (1 - spread * 0.3);
-      const sway = Math.sin(th + i * 1.3 - u * 2.5) * 5 * u;
-      const x = (rx + sway - 6 * u * u + spread * rx * 0.9 * u) / 2;
+    const rx = (-21 + i * 7) * s.sx * GROW;
+    const ry = (-14 + Math.abs(i - 3) * 1.5) * s.sy * GROW;
+    const len = (16 + ((i * 5) % 4) * 6) * (1 - pull * 0.75) * GROW;
+    for (let k = 1; k <= 8; k++) {
+      const u = k / 8;
+      const r = (u < 0.5 ? 2.4 : u < 0.84 ? 1.6 : 1) * (1 - spread * 0.3) * (GROW * 0.8);
+      const sway = Math.sin(th + i * 1.3 - u * 2.5) * 5 * u * GROW;
+      const x = (rx + sway - 6 * u * u * GROW + spread * rx * 0.9 * u) / 2;
       const y = Math.min(spread ? ry + 2 * u : ry + len * u, spread ? -1 : 99) / 2;
       const c = u > 0.8 ? 'D' : u > 0.55 ? 'S' : 'M';
       for (let dy = -Math.ceil(r); dy <= Math.ceil(r); dy++) {
@@ -216,8 +224,10 @@ function buildBody(s: BodySpec): Part {
         const nx = (x + 0.5 - cx) / r;
         const ny = (y + 0.5 - cy) / r;
         // Where its edge lies over a lump behind it, a crease: each lump reads as its own.
-        const edge = ny > 0.25 && ((!inside(x + 1, y) && under(x + 1, y)) || (!inside(x - 1, y) && under(x - 1, y)) || (!inside(x, y + 1) && under(x, y + 1)));
-        lump.push([x, y, edge ? 'S' : lumpTone(nx, ny)]);
+        const over = (ax: number, ay: number): boolean => !inside(ax, ay) && under(ax, ay);
+        const edge = ny > 0.2 && (over(x + 1, y) || over(x - 1, y) || over(x, y + 1));
+        const near = !edge && ny > 0.35 && (over(x + 2, y) || over(x - 2, y) || over(x, y + 2));
+        lump.push([x, y, edge ? 'S' : near ? 'M' : lumpTone(nx, ny)]);
       }
     }
     for (const [x, y, c] of lump) set(x, y, c);
@@ -233,27 +243,40 @@ function buildBody(s: BodySpec): Part {
     });
     for (const v of VEINS) {
       for (let i = 0; i + 3 < v.length; i += 2) {
-        const at = (j: number): [number, number] => [Math.floor((v[j] + s.lean * (-v[j + 1] / 60)) / 2), Math.floor((v[j + 1] * s.sy) / 2)];
+        const at = (j: number): [number, number] => [Math.floor(((v[j] * s.sx + s.lean * (-v[j + 1] / 60)) * GROW) / 2), Math.floor((v[j + 1] * s.sy * GROW) / 2)];
         const [x0, y0] = at(i);
         const [x1, y1] = at(i + 2);
         for (const [x, y] of line4(x0, y0, x1, y1)) if ('LMSX'.includes(cells[y + OY]?.[x + OX] ?? '.')) set(x, y, 'W');
       }
     }
   }
+  // A cell of nothing walled in on all four sides by him is a gap between lumps, not air: shut it.
+  for (let y = 1; y < BH - 1; y++) {
+    for (let x = 1; x < BW - 1; x++) {
+      if (cells[y][x] !== '.') continue;
+      const around = [cells[y - 1][x], cells[y + 1][x], cells[y][x - 1], cells[y][x + 1]];
+      if (!around.includes('.')) cells[y][x] = around.includes('S') ? 'S' : 'M';
+    }
+  }
+  if (s.gone > 0) {
+    // Dying, he goes from the outside in: the smoke peels off him a layer at a time, and what is
+    // left of him stays whole - no holes for the night to show through.
+    for (let pass = 0; pass < s.gone * 3; pass++) {
+      const edge: [number, number][] = [];
+      for (let y = 0; y < BH; y++) {
+        for (let x = 0; x < BW; x++) {
+          if (cells[y][x] === '.') continue;
+          if (y === 0 || x === 0 || y === BH - 1 || x === BW - 1 || cells[y - 1][x] === '.' || cells[y + 1][x] === '.' || cells[y][x - 1] === '.' || cells[y][x + 1] === '.') {
+            if (hash2(x + pass * 7, y) < 0.8) edge.push([x, y]);
+          }
+        }
+      }
+      for (const [x, y] of edge) cells[y][x] = '.';
+    }
+  }
   // The rim: the top of him catches what light there is.
   for (let y = BH - 1; y >= 1; y--) {
     for (let x = 0; x < BW; x++) if (cells[y][x] === 'L' && cells[y - 1][x] === '.') cells[y][x] = 'R';
-  }
-  if (s.gone > 0) {
-    // Coming apart: lumps of him let go, the edges first.
-    for (let y = 0; y < BH; y++) {
-      for (let x = 0; x < BW; x++) {
-        if (cells[y][x] === '.') continue;
-        const block = hash2(x >> 1, (y >> 1) + 97);
-        const edge = y > 0 && y < BH - 1 && x > 0 && x < BW - 1 && [cells[y - 1][x], cells[y + 1][x], cells[y][x - 1], cells[y][x + 1]].includes('.') ? 0.15 : 0;
-        if (block + edge < s.gone * 0.22) cells[y][x] = '.';
-      }
-    }
   }
   return { grid: despeckle(rows(cells)), ox: OX, oy: OY };
 }
@@ -265,7 +288,7 @@ export const HEAD_STEPS = 16;
 /** Its lengths: hunched and stretched out. */
 export const HEAD_LENS = [30, 38] as const;
 /** How wide the maw is open, in four steps. */
-export const MOUTHS = [5, 9, 13, 17] as const;
+export const MOUTHS = [8, 11, 14, 17] as const;
 
 /** The skull's outline in its own space (along it, across it): a brow, a long falling snout, a sunken cheek. */
 function skull(len: number): number[] {
@@ -293,7 +316,7 @@ function skull(len: number): number[] {
 }
 
 /** The head's grid is this size, the root of the neck at its middle. */
-const HS = 52;
+const HS = 84;
 
 function buildHead(step: number, len: number, mouth: number, flesh: boolean): Part {
   const a = (step / HEAD_STEPS) * Math.PI * 2;
@@ -304,14 +327,14 @@ function buildHead(step: number, len: number, mouth: number, flesh: boolean): Pa
   const local = (gx: number, gy: number): [number, number] => {
     const x = (gx + 0.5 - HS / 2) * 2;
     const y = (gy + 0.5 - HS / 2) * 2;
-    return [x * c + y * s, -x * s + y * c];
+    return [(x * c + y * s) / GROW, (-x * s + y * c) / GROW];
   };
   const outline = skull(len);
   const mx = len + 1.5;
   for (let gy = 0; gy < HS; gy++) {
     for (let gx = 0; gx < HS; gx++) {
       const [x, y] = local(gx, gy);
-      const ox = (x - mx) / (mouth * 0.45);
+      const ox = (x - mx) / (mouth * 0.55);
       const oy = y / mouth;
       const inMouth = ox * ox + oy * oy <= 1;
       if (!insidePoly(outline, x, y) && !inMouth) continue;
@@ -325,7 +348,7 @@ function buildHead(step: number, len: number, mouth: number, flesh: boolean): Pa
       if (ex * ex + ey * ey <= 1) t = 'V';
       if (inMouth) {
         // A lamprey's round maw, ringed with teeth.
-        const ix = (x - mx - 0.5) / (mouth * 0.28);
+        const ix = (x - mx - 0.5) / (mouth * 0.34);
         const iy = y / (mouth * 0.62);
         const d = ix * ix + iy * iy;
         if (d <= 1) t = 'V';
@@ -357,13 +380,13 @@ function buildHead(step: number, len: number, mouth: number, flesh: boolean): Pa
 export function headEyeAt(step: number, len: number, x: number, y: number): [number, number] {
   const a = (step / HEAD_STEPS) * Math.PI * 2;
   const hx = x <= 18 ? x : 18 + (x - 18) * (len / 40);
-  const [px, py] = turned([hx, y], a);
+  const [px, py] = turned([hx * GROW, y * GROW], a);
   return [px / 2, py / 2];
 }
 
 /** The tip of the maw, for what comes out of it: in art cells from the root of the neck. */
 export function mouthAt(step: number, len: number): [number, number] {
-  const [px, py] = turned([len + 1.5, 0], (step / HEAD_STEPS) * Math.PI * 2);
+  const [px, py] = turned([(len + 1.5) * GROW, 0], (step / HEAD_STEPS) * Math.PI * 2);
   return [px / 2, py / 2];
 }
 

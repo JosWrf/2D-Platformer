@@ -11,6 +11,7 @@ import { Enemy, type GlowLight } from './enemy';
 import {
   CHURN,
   CHURN_TIME,
+  GROW,
   CRYSTAL_X,
   CRYSTAL_Y,
   HEAD_LENS,
@@ -1589,7 +1590,7 @@ export class Gloom extends Enemy {
     if (this.floorY === 0) return;
     // His shadow first, under the crystals: laid over one, it would blend into a colour of no palette.
     const lift = this.floorY - this.bottom;
-    if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64, 0.3 * clamp(1 - lift / 150, 0, 1));
+    if (this.state !== 'dormant') shadow(ctx, this.cx, this.floorY, 64 * GROW * 0.85, 0.3 * clamp(1 - lift / 150, 0, 1));
     for (const c of this.crystals) this.drawLightEdge(ctx, c);
     for (const c of this.crystals) this.drawCrystal(ctx, c);
     this.drawPool(ctx);
@@ -1642,7 +1643,7 @@ export class Gloom extends Enemy {
       ctx.fillRect(x - ART, y - 16, ART * 2, ART);
     }
     if (c.flare > 0.05) {
-      ring(ctx, x, y - 16, 12 + (1 - c.flare) * 46, c.flare > 0.5 ? RAMP.fire[4] : RAMP.earth[4]);
+      ring(ctx, x, y - 16, 12 + (1 - c.flare) * 46, c.flare > 0.5 ? RAMP.fire[4] : RAMP.earth[4], 2);
     }
     if (c.spent > 0.3) {
       // Emptied: a thread of smoke still coming out of it.
@@ -1738,8 +1739,8 @@ export class Gloom extends Enemy {
   private drawDazzle(ctx: CanvasRenderingContext2D): void {
     for (let i = 0; i < 5; i++) {
       const a = this.anim * 3.6 + (i * TAU) / 5;
-      const x = snap(this.cx + Math.cos(a) * 30);
-      const y = snap(this.bottom - 48 + Math.sin(a) * 7);
+      const x = snap(this.cx + Math.cos(a) * 30 * GROW);
+      const y = snap(this.bottom - 48 * GROW + Math.sin(a) * 7 * GROW);
       const arm = Math.sin(a) > 0 ? 2 : 1;
       ctx.fillStyle = i % 2 ? RAMP.fire[4] : RAMP.earth[7];
       ctx.fillRect(x - arm * ART, y, (arm * 2 + 1) * ART, ART);
@@ -1792,8 +1793,8 @@ export class Gloom extends Enemy {
     const len = lerp(lerp(30, 40, awake), 27, this.hunch) < 34 ? HEAD_LENS[0] : HEAD_LENS[1];
     const gapeBy = 5 + this.gape * 8 + this.rise * 4 + this.gulp * 1.5;
     const mouth = MOUTHS[clamp(Math.round((gapeBy - 5) / 4), 0, MOUTHS.length - 1)];
-    const rootX = Math.round((lerp(12, 9, this.hunch) * spec.sx) / ART);
-    const rootY = Math.round((lerp(-50, -56, this.hunch) * spec.sy) / ART);
+    const rootX = Math.round((lerp(12, 9, this.hunch) * spec.sx * GROW) / ART);
+    const rootY = Math.round((lerp(-50, -56, this.hunch) * spec.sy * GROW) / ART);
     const head = headSprite(step, len, mouth, spec.flesh, paint);
     const hx = ox + facing * rootX * ART;
     const hy = oy + rootY * ART;
@@ -1803,9 +1804,10 @@ export class Gloom extends Enemy {
 
   /** The arm of the swipe: drawn back over him in the tell, flung forward when it goes. */
   private drawArm(ctx: CanvasRenderingContext2D, ox: number, oy: number, facing: 1 | -1, paint: PaintName): void {
-    const sh = { x: 12, y: -40 };
-    const rest = { x: 30, y: -30 };
-    const back = { x: -6, y: -88 };
+    // His shoulder and the arm drawn back are his size; where it lands is the swipe's own reach.
+    const sh = { x: 12 * GROW, y: -40 * GROW };
+    const rest = { x: 30 * GROW, y: -30 * GROW };
+    const back = { x: -6 * GROW, y: -88 * GROW };
     // Down off the perch to the chest of a hero on the floor under it.
     const fwd = { x: 60, y: 26 };
     let tip: { x: number; y: number };
@@ -1840,7 +1842,7 @@ export class Gloom extends Enemy {
     if (this.swung && this.sweep > 0.05) {
       // The streak it leaves through the air.
       const s = swipeSprite();
-      s.draw(ctx, ox + facing * 12 - SWIPE_C * ART, oy - 30 - SWIPE_C * ART, facing);
+      s.draw(ctx, ox + facing * 14 - SWIPE_C * ART, oy - 50 - SWIPE_C * ART, facing);
     }
   }
 
@@ -1860,19 +1862,20 @@ export class Gloom extends Enemy {
       const bx = e.head ? hx : ox;
       const by = e.head ? hy : oy;
       const shut = blinded || Math.sin(t * e.rate + e.phase) > 0.97 || this.wakeT < 0.5 + (e.phase / TAU) * 0.5;
-      const w = 2 + (e.size > 1.15 ? wide : 0);
-      const h = shut ? 1 : e.size > 1.15 || wide ? 2 : 1;
+      // Each in a dark socket: the big ones three wide, all of them wider still when he is about to strike.
+      const w = (e.size > 1.15 ? 3 : 2) + wide;
+      const h = 2;
       const cx = Math.round(ex - w / 2);
       const cy = Math.round(ey - h / 2);
       const x = bx + (facing > 0 ? cx : -cx - w) * ART;
       const y = by + cy * ART;
+      ctx.fillStyle = fleshy ? RAMP.plum[0] : RAMP.slate[0];
+      ctx.fillRect(x - ART, y - ART, (w + 2) * ART, (h + 1) * ART);
       if (shut) {
         ctx.fillStyle = fleshy ? RAMP.grey[4] : RAMP.slate[2];
         ctx.fillRect(x, y, w * ART, ART);
       } else if (fleshy) {
-        // In the light: wet beads, squinting against it, a dark lid over each.
-        ctx.fillStyle = RAMP.plum[0];
-        ctx.fillRect(x, y - ART, w * ART, ART);
+        // In the light: wet beads, squinting against it, under a dark lid.
         ctx.fillStyle = RAMP.earth[7];
         ctx.fillRect(x, y, w * ART, ART);
       } else {
