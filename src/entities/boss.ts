@@ -1,10 +1,26 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap } from '../core/math';
-import { PALETTE } from '../render/palette';
-import { glow, shadow, slashArc, withHitFlash } from '../render/sprites';
+import { rect, sector } from '../render/pen';
+import { ART } from '../render/pixel';
+import { glow, shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
+import { angleStep, blit, solidFlash } from './boss-art';
 import { Body } from './entity';
 import { Skeleton, bossScale } from './enemy';
+import {
+  BLOOD,
+  type KnightLook,
+  type KnightPose,
+  SWORD_STEPS,
+  armPart,
+  elbowOf,
+  eyesAt,
+  gemAt,
+  gemSprite,
+  knightBody,
+  shouldersOf,
+  swordPart,
+} from './knight-art';
 import { Projectile } from './projectile';
 
 export const BOSS_MAX_HP = 68;
@@ -692,202 +708,138 @@ export class Boss extends Body {
 
   /* ------------------------------------------------------------- drawing */
 
+  /*
+   * Drawn for the grid (knight-art.ts): a body sprite per pose - at rest with
+   * a breath, four steps of a walk, the sword raised, crouched to charge,
+   * bent into the slam, the charge itself, the leap, two sways of reeling, on
+   * one knee as he falls - with a cape in four tattered frames; two arms of
+   * two segments each from the shoulders to the grip; the greatsword at 32
+   * drawn angles. His aura and his eyes are lights (glow() only registers a
+   * light now); struck, he is white for two frames; felled, he sinks to a
+   * knee and burns away from the crown down.
+   */
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const dyingFade = this.state === 'dying' ? clamp(this.deathTimer / 2.6, 0, 1) : 1;
+    const fade = this.state === 'dying' ? clamp(this.deathTimer / 2.6, 0, 1) : 1;
+    shadow(ctx, this.cx, this.bottom + 2, this.w * 1.1, 0.4 * fade);
+    // The dark aura, stronger in later phases: a light, not paint.
+    const aura = this.phase === 3 ? 0.5 : this.phase === 2 ? 0.32 : 0.2;
+    glow(ctx, this.cx, this.cy, 70 + Math.sin(this.auraPulse) * 8, `rgba(200,40,40,${(aura * fade).toFixed(3)})`);
 
-    shadow(ctx, this.cx, this.bottom + 2, this.w * 1.1, 0.4 * dyingFade);
-
-    // Dark aura, stronger in later phases.
-    const auraStrength = this.phase === 3 ? 0.5 : this.phase === 2 ? 0.32 : 0.2;
-    glow(
-      ctx,
-      this.cx,
-      this.cy,
-      70 + Math.sin(this.auraPulse) * 8,
-      `rgba(200,40,40,${(auraStrength * dyingFade).toFixed(3)})`,
-    );
-
-    // A raised blade belongs behind the knight so it never hides his helmet.
-    const bladeBehind = this.swordAngle < -1.2;
-    if (bladeBehind) this.drawGreatsword(ctx, dyingFade * 0.9);
-
-    ctx.globalAlpha = dyingFade;
-    withHitFlash(ctx, this.flash, (ctx) => {
+    const bounds = { x: this.cx - 130, y: this.bottom - 150, w: 260, h: 156 };
+    if (fade < 0.55) {
+      // Burning away from the crown down, a white-hot row along the edge.
+      const top = Math.floor((this.bottom - 132 * (fade / 0.55)) / ART) * ART;
       ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      const stagger = this.state === 'stagger' ? Math.sin(this.anim * 22) * 0.07 : 0;
-      ctx.rotate(stagger);
-      ctx.scale(this.facing, 1);
+      ctx.beginPath();
+      ctx.rect(this.cx - 140, top, 280, this.bottom - top + 8);
+      ctx.clip();
       this.drawKnight(ctx);
       ctx.restore();
-    });
-    ctx.globalAlpha = 1;
-
-    if (!bladeBehind) this.drawGreatsword(ctx, dyingFade);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.cx - 140, top, 280, ART);
+      ctx.clip();
+      withHitFlash(ctx, 1, (c) => this.drawKnight(c), bounds);
+      ctx.restore();
+    } else {
+      withHitFlash(ctx, solidFlash(this.flash), (c) => this.drawKnight(c), bounds);
+    }
 
     if (this.state === 'slamWindup' || this.state === 'dashWindup') {
-      // Telegraph so the fight stays readable.
+      // Where it will land, marked on the grid so the fight stays readable.
       const t = 1 - clamp(this.timer / 0.62, 0, 1);
-      ctx.globalAlpha = 0.25 + t * 0.45;
-      ctx.strokeStyle = '#ff4d3d';
-      ctx.lineWidth = 2;
       const box = this.state === 'slamWindup' ? this.slamRect() : { x: this.x + this.facing * 150, y: this.y, w: this.w, h: this.h };
-      ctx.strokeRect(box.x, box.y, box.w, box.h);
-      ctx.globalAlpha = 1;
+      dashedRect(ctx, box.x, box.y, box.w, box.h, t > 0.5 ? BLOOD[3] : BLOOD[2], Math.floor(this.anim * 12));
     }
+    if (this.state === 'dash') {
+      // The cut he carries in front of him, as two bands of red.
+      const a = this.facing > 0 ? 0 : Math.PI;
+      sector(ctx, this.cx, this.cy, 64, 72, a - 0.9, a + 0.9, BLOOD[3]);
+      sector(ctx, this.cx, this.cy, 58, 64, a - 0.75, a + 0.75, BLOOD[2]);
+    }
+  }
+
+  /** His pose and frame, from what he is doing. */
+  private knightLook(): KnightLook {
+    const st = this.state;
+    let pose: KnightPose = 'stand';
+    let frame = Math.floor(this.anim * 1.4) & 1;
+    if (st === 'walk') {
+      pose = 'walk';
+      frame = Math.floor(this.anim * 8) & 3;
+    } else if (st === 'slamWindup' || st === 'summon' || st === 'cast' || st === 'intro') pose = 'raise';
+    else if (st === 'dashWindup') pose = 'crouch';
+    else if (st === 'slam') pose = 'strike';
+    else if (st === 'dash') pose = 'charge';
+    else if (st === 'leap') pose = 'air';
+    else if (st === 'stagger') {
+      pose = 'reel';
+      frame = Math.sin(this.anim * 22) > 0 ? 1 : 0;
+    } else if (st === 'dying') pose = 'kneel';
+    return { pose, frame, cape: Math.floor(this.anim * 6) & 3 };
   }
 
   private drawKnight(ctx: CanvasRenderingContext2D): void {
-    const h = this.h;
-    const breathe = Math.sin(this.anim * 2.2) * 1.5;
-
-    // Cape.
-    const capeSway = Math.sin(this.anim * 2.4) * 5 - this.vx * 0.03;
-    ctx.fillStyle = '#5c1620';
-    ctx.beginPath();
-    ctx.moveTo(-8, -h + 20);
-    ctx.quadraticCurveTo(-36 - capeSway, -h * 0.55, -28 - capeSway, -2);
-    ctx.lineTo(-2, -10);
-    ctx.lineTo(0, -h + 18);
-    ctx.closePath();
-    ctx.fill();
-
-    // Legs / greaves.
-    ctx.fillStyle = PALETTE.boss;
-    ctx.fillRect(-19, -37, 13, 37);
-    ctx.fillRect(6, -37, 13, 37);
-    ctx.fillStyle = PALETTE.bossPlate;
-    ctx.fillRect(-20, -39, 15, 9);
-    ctx.fillRect(5, -39, 15, 9);
-    ctx.fillStyle = '#15111a';
-    ctx.fillRect(-22, -7, 18, 7);
-    ctx.fillRect(4, -7, 18, 7);
-
-    // Torso.
-    const torsoY = -h + 24 + breathe;
-    const g = ctx.createLinearGradient(0, torsoY, 0, -34);
-    g.addColorStop(0, PALETTE.bossPlate);
-    g.addColorStop(1, PALETTE.boss);
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(-23, torsoY);
-    ctx.lineTo(23, torsoY);
-    ctx.lineTo(17, -34);
-    ctx.lineTo(-17, -34);
-    ctx.closePath();
-    ctx.fill();
-
-    // Chest emblem.
-    ctx.fillStyle = PALETTE.bossTrim;
-    ctx.beginPath();
-    ctx.moveTo(0, torsoY + 8);
-    ctx.lineTo(9, torsoY + 20);
-    ctx.lineTo(0, torsoY + 32);
-    ctx.lineTo(-9, torsoY + 20);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#ffb4a0';
-    ctx.beginPath();
-    ctx.arc(0, torsoY + 20, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Pauldrons.
-    ctx.fillStyle = PALETTE.bossPlate;
-    for (const s of [-1, 1]) {
-      ctx.save();
-      ctx.scale(s, 1);
-      ctx.beginPath();
-      ctx.moveTo(14, torsoY - 2);
-      ctx.quadraticCurveTo(32, torsoY + 2, 28, torsoY + 18);
-      ctx.lineTo(14, torsoY + 14);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = PALETTE.bossTrim;
-      ctx.fillRect(18, torsoY + 2, 9, 3);
-      ctx.fillStyle = PALETTE.bossPlate;
-      ctx.restore();
+    const look = this.knightLook();
+    const f = this.facing;
+    const flip = f < 0;
+    const bx = Math.floor(this.cx / ART) * ART + ART / 2;
+    const by = Math.floor((this.bottom - 1) / ART) * ART + ART / 2;
+    const at = (x: number, y: number): [number, number] => [bx + f * x, by + y];
+    // The sword: where the hands hold it - at the hip, or up at the shoulder
+    // when it is raised - and which way it points.
+    const a = this.state === 'dying' ? 1.2 : this.swordAngle;
+    const u = clamp((-1.2 - a) / 1.2, 0, 1);
+    const px = 18 - 8 * u;
+    const py = -42 - 38 * u;
+    const dx = Math.cos(a);
+    const dy = Math.sin(a);
+    const step = angleStep(a, SWORD_STEPS);
+    const sword = swordPart(step, this.phase === 3 ? 1 : 0, this.guardFlash > 0.35);
+    const behind = a < -1.2;
+    const [sfar, snear] = shouldersOf(look);
+    const arm = (s: [number, number], hx: number, hy: number, far: boolean): void => {
+      const [ex, ey] = elbowOf(s[0], s[1], hx, hy);
+      const [ax, ay] = at(s[0], s[1]);
+      const [cx, cy] = at(ex, ey);
+      blit(ctx, armPart('upper', angleStep(Math.atan2(ey - s[1], ex - s[0]), SWORD_STEPS), far), ax, ay, flip);
+      blit(ctx, armPart('fore', angleStep(Math.atan2(hy - ey, hx - ex), SWORD_STEPS), far), cx, cy, flip);
+    };
+    const [wx, wy] = at(px, py);
+    if (behind) blit(ctx, sword, wx, wy, flip);
+    arm(sfar, px - dx * 13, py - dy * 13, true);
+    blit(ctx, knightBody(look), bx, by, flip);
+    // The eyes in the slot - dim while he reels - and the gem on his breast.
+    const [ex, ey] = eyesAt(look);
+    const eye = this.state === 'stagger' ? BLOOD[1] : BLOOD[3];
+    for (const o of [-5, 6]) {
+      const [x, y] = at(ex + o, ey);
+      rect(ctx, x - 2, y - 1, 4, 2, eye);
+      glow(ctx, x, y, 10, 'rgba(255,70,50,0.5)');
     }
-
-    // Helmet.
-    const headY = torsoY - 20;
-    ctx.fillStyle = PALETTE.boss;
-    ctx.beginPath();
-    ctx.moveTo(-13, headY + 20);
-    ctx.lineTo(-13, headY + 4);
-    ctx.quadraticCurveTo(0, headY - 8, 13, headY + 4);
-    ctx.lineTo(13, headY + 20);
-    ctx.closePath();
-    ctx.fill();
-    // Horns.
-    ctx.fillStyle = PALETTE.bossPlate;
-    for (const s of [-1, 1]) {
-      ctx.save();
-      ctx.scale(s, 1);
-      ctx.beginPath();
-      ctx.moveTo(9, headY + 2);
-      ctx.quadraticCurveTo(26, headY - 8, 22, headY - 22);
-      ctx.quadraticCurveTo(16, headY - 8, 7, headY + 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-    // Visor slit with burning eyes.
-    ctx.fillStyle = '#0a070c';
-    ctx.fillRect(-11, headY + 8, 22, 6);
-    const eyeGlow = this.state === 'stagger' ? 0.35 : 1;
-    ctx.globalAlpha = eyeGlow;
-    ctx.fillStyle = PALETTE.bossEye;
-    ctx.fillRect(-8, headY + 9, 6, 3.5);
-    ctx.fillRect(3, headY + 9, 6, 3.5);
-    ctx.globalAlpha = 1;
-    glow(ctx, -5, headY + 11, 10, 'rgba(255,70,50,0.5)');
-    glow(ctx, 6, headY + 11, 10, 'rgba(255,70,50,0.5)');
+    const winding = this.state === 'slamWindup' || this.state === 'dashWindup' || this.state === 'cast' || this.state === 'summon';
+    const gem = gemSprite(this.phase === 3 ? 2 : winding ? 1 : 0);
+    const [gx, gy] = at(gemAt(look)[0], gemAt(look)[1]);
+    gem.draw(ctx, gx - (gem.w * ART) / 2, gy - (gem.h * ART) / 2);
+    if (!behind) blit(ctx, sword, wx, wy, flip);
+    arm(snear, px - dx * 4, py - dy * 4, false);
   }
+}
 
-  private drawGreatsword(ctx: CanvasRenderingContext2D, alpha: number): void {
-    const pivotX = this.cx + this.facing * 18;
-    const pivotY = this.y + 50;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(pivotX, pivotY);
-    ctx.rotate(this.swordAngle * this.facing);
-    ctx.scale(this.facing, 1);
-
-    const len = 98;
-    ctx.fillStyle = '#241a20';
-    ctx.fillRect(-18, -4.5, 20, 9);
-    ctx.fillStyle = PALETTE.bossTrim;
-    ctx.fillRect(0, -15, 7, 30);
-    const grad = ctx.createLinearGradient(0, 0, len, 0);
-    grad.addColorStop(0, '#3b3444');
-    grad.addColorStop(0.5, '#75697f');
-    grad.addColorStop(1, '#c7bcd4');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.moveTo(7, -10);
-    ctx.lineTo(len - 18, -8);
-    ctx.lineTo(len, 0);
-    ctx.lineTo(len - 18, 8);
-    ctx.lineTo(7, 10);
-    ctx.closePath();
-    ctx.fill();
-    // Glowing rune down the fuller.
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = this.phase === 3 ? 'rgba(255,90,60,0.9)' : 'rgba(200,60,60,0.6)';
-    ctx.fillRect(10, -1.5, len - 26, 3);
-    // The blade lights up along its whole length when it has just turned a
-    // crescent aside, so the reason the crescent vanished is on the screen.
-    if (this.guardFlash > 0) {
-      ctx.fillStyle = `rgba(255,236,180,${(0.75 * this.guardFlash).toFixed(2)})`;
-      ctx.fillRect(7, -9, len - 12, 18);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.restore();
-
-    if (this.state === 'dash') {
-      slashArc(ctx, this.cx, this.cy, 70, -0.9, 0.9, 14, 'rgba(255,80,60,0.6)', 0.6 * alpha);
-    }
-    ctx.globalAlpha = 1;
-  }
+/** A rectangle's outline in dashes on whole art pixels, the dashes running round it with `phase`. */
+function dashedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, phase: number): void {
+  const x0 = Math.round(x / ART);
+  const y0 = Math.round(y / ART);
+  const x1 = Math.round((x + w) / ART) - 1;
+  const y1 = Math.round((y + h) / ART) - 1;
+  ctx.fillStyle = color;
+  let i = phase;
+  const put = (px: number, py: number): void => {
+    if (i++ % 5 < 3) ctx.fillRect(px * ART, py * ART, ART, ART);
+  };
+  for (let px = x0; px <= x1; px++) put(px, y0);
+  for (let py = y0 + 1; py <= y1; py++) put(x1, py);
+  for (let px = x1 - 1; px >= x0; px--) put(px, y1);
+  for (let py = y1 - 1; py > y0; py--) put(x0, py);
 }
