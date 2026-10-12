@@ -1,10 +1,37 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, damp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { disc, line, poly, rect, ring, sector } from '../render/pen';
+import { ART } from '../render/pixel';
+import { hash2 } from '../render/sheet';
+import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { capHeight, drawText } from '../ui/pixelfont';
 import { TILE } from '../world/tiles';
+import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Enemy, type GlowLight } from './enemy';
+import {
+  FROST,
+  GLAIVE_STEPS,
+  LUNA_SHOULDER,
+  type LunaLook,
+  MOONLIGHT,
+  SUN,
+  type SolLook,
+  beam,
+  crescentPart,
+  flameSprite,
+  frostSprite,
+  glaivePart,
+  icicleSprite,
+  lunaHead,
+  lunaPart,
+  solDrop,
+  solHead,
+  solPart,
+  solShoulder,
+  sparkleSprite,
+  starSprite,
+} from './twins-art';
 
 /**
  * Health of each twin before they size the hero up: 60 between them, which
@@ -110,6 +137,14 @@ const DYING = 2.8;
  * lags him by 35 - 440 keeps the box drawn with room to spare.
  */
 const VIEW_REACH = 440;
+
+/** The two tones of each kind of flare, hot and cooling: Sol's landing and call, the eclipse, Luna's call. */
+const FLARE: Record<string, readonly [string, string]> = {
+  '255,206,120': [SUN[4], SUN[2]],
+  '255,214,140': [SUN[4], SUN[2]],
+  '255,240,210': [SUN[5], SUN[4]],
+  '200,220,255': [MOONLIGHT[4], MOONLIGHT[2]],
+};
 
 type Who = 'sol' | 'luna';
 
@@ -267,28 +302,6 @@ interface Flare {
   rgb: string;
   /** A ring in the air rather than one lying on the floor. */
   round: boolean;
-}
-
-/** A crescent moon, open towards angle rot. */
-function crescentPath(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number): void {
-  const ix = x + Math.cos(rot) * r * 0.5;
-  const iy = y + Math.sin(rot) * r * 0.5;
-  ctx.beginPath();
-  ctx.arc(x, y, r, rot + 1.05, rot + Math.PI * 2 - 1.05);
-  ctx.arc(ix, iy, r * 0.82, rot + Math.PI * 2 - 1.45, rot + 1.45, true);
-  ctx.closePath();
-}
-
-/** A star with n points. */
-function starPath(ctx: CanvasRenderingContext2D, x: number, y: number, outer: number, inner: number, n: number, rot: number): void {
-  ctx.beginPath();
-  for (let i = 0; i < n * 2; i++) {
-    const r = i % 2 === 0 ? outer : inner;
-    const a = rot + (i / (n * 2)) * Math.PI * 2;
-    if (i === 0) ctx.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-    else ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
-  }
-  ctx.closePath();
 }
 
 /**
@@ -1771,6 +1784,16 @@ export class Twins extends Enemy {
     t.ha = damp(t.ha, a, k, dt);
   }
 
+  /*
+   * Drawn for the grid (twins-art.ts). Each twin is a body sprite per pose and
+   * frame - Sol's crouch in three steps, his run in two strides, his cape and
+   * Luna's hem in four frames - with the working arm and what it holds laid
+   * on over it, and a halo ring behind each head that brightens with every
+   * wind-up: Sol's grows a second ring and rays, Luna's a ring of frost. What
+   * they leave on the floor and throw through the air is drawn with the pen
+   * and from sprites, in their two ramps; every glow is a light (lights()).
+   * A struck twin is white for two frames.
+   */
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
     this.drawGround(ctx);
@@ -1785,24 +1808,18 @@ export class Twins extends Enemy {
   private drawGround(ctx: CanvasRenderingContext2D): void {
     const F = this.floorY;
     const s = this.sol;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const beat = Math.floor(this.anim * 12);
     if (this.mark) {
-      // The ring of sunlight he will land on: faint while it follows the
-      // hero, bright once it stops - and filling in as he comes down.
-      const k = this.mark.locked ? 1 : clamp(1 - s.timer / LEAP_TELL, 0, 1);
-      const a = this.mark.locked ? 0.8 : 0.2 + k * 0.4;
-      ctx.strokeStyle = `rgba(255,206,120,${a.toFixed(3)})`;
-      ctx.lineWidth = this.mark.locked ? 2.5 : 1.6;
-      ctx.beginPath();
-      ctx.ellipse(this.mark.x, F - 2, LEAP_RADIUS, 9, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      // The ring of sunlight he will land on: dashes chasing round it while it
+      // follows the hero, solid once it stops - and a second ring filling out
+      // to meet it as he comes down.
       if (this.mark.locked) {
         const u = clamp(s.t / Math.max(0.01, s.flight), 0, 1);
-        ctx.fillStyle = `rgba(255,214,140,${(0.1 + u * 0.25).toFixed(3)})`;
-        ctx.beginPath();
-        ctx.ellipse(this.mark.x, F - 2, LEAP_RADIUS * (0.35 + u * 0.65), 4 + u * 5, 0, 0, Math.PI * 2);
-        ctx.fill();
+        ovalRing(ctx, this.mark.x, F - 2, LEAP_RADIUS, 9, 1, SUN[4]);
+        ovalRing(ctx, this.mark.x, F - 2, LEAP_RADIUS * (0.3 + u * 0.6), 3 + u * 5, 1, SUN[2]);
+      } else {
+        const k = clamp(1 - s.timer / LEAP_TELL, 0, 1);
+        dashedOval(ctx, this.mark.x, F - 2, LEAP_RADIUS, 9, 3, 2, k > 0.5 ? SUN[3] : SUN[2], this.anim * 2);
       }
     }
     if (s.state === 'dashWind') {
@@ -1811,73 +1828,46 @@ export class Twins extends Enemy {
       const from = s.x + s.dir * 18;
       const to = s.toX + s.dir * 15;
       const n = Math.max(0, Math.floor(Math.abs(to - from) / 14));
+      const hot = k > 0.5 ? 1 : 0;
       for (let i = 0; i <= n; i++) {
-        const x = from + s.dir * i * 14;
-        const flick = 0.5 + 0.5 * Math.sin(this.anim * 18 + i * 1.7);
-        ctx.fillStyle = `rgba(255,${Math.round(120 + 80 * flick)},60,${((0.18 + k * 0.5) * (0.6 + flick * 0.4)).toFixed(3)})`;
-        ctx.fillRect(x - 3, F - 3 - flick * 2 * k, 6, 3 + flick * 2 * k);
+        const up = hash2(i, beat) > 0.5 ? 1 : 0;
+        const h = (1 + up + hot) * ART;
+        rect(ctx, from + s.dir * i * 14 - 2, F - h, 4, h, SUN[1 + up + hot * 2]);
       }
-      ctx.fillStyle = `rgba(255,190,90,${(0.3 + k * 0.5).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(to + s.dir * 8, F - 5);
-      ctx.lineTo(to - s.dir * 2, F - 11);
-      ctx.lineTo(to - s.dir * 2, F + 1);
-      ctx.closePath();
-      ctx.fill();
+      poly(ctx, [to + s.dir * 8, F - 5, to - s.dir * 2, F - 11, to - s.dir * 2, F + 1], SUN[2 + hot * 2]);
     }
     for (const f of this.flames) {
       const k = clamp(f.life / 0.35, 0, 1) * (f.out ? 0.5 : 1);
-      const h = (12 + Math.sin(this.anim * 13 + f.seed) * 4) * k;
-      const lean = Math.sin(this.anim * 9 + f.seed) * 2;
-      ctx.fillStyle = `rgba(255,120,40,${(0.65 * k).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(f.x - 9, F);
-      ctx.quadraticCurveTo(f.x - 3, F - h * 1.2, f.x + lean, F - h * 1.6);
-      ctx.quadraticCurveTo(f.x + 3, F - h * 0.8, f.x + 9, F);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,226,140,${(0.6 * k).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(f.x - 4, F);
-      ctx.quadraticCurveTo(f.x, F - h * 0.9, f.x + lean * 0.5, F - h);
-      ctx.quadraticCurveTo(f.x + 1, F - h * 0.5, f.x + 4, F);
-      ctx.closePath();
-      ctx.fill();
+      if (k <= 0.05) continue;
+      const sp = flameSprite(k > 0.66 ? 2 : k > 0.33 ? 1 : 0, beat + Math.floor(f.seed * 3), f.out);
+      sp.draw(ctx, f.x - (sp.w * ART) / 2, F - sp.h * ART);
     }
     for (const ic of this.icicles) {
       if (ic.fell) continue;
       // A ring of frost where it will land, and a second one closing on it:
       // the count, read off the floor.
       const k = clamp(ic.t / ICE_TELL, 0, 1);
-      const a = ic.cancelled ? clamp(ic.fade / 0.3, 0, 1) * 0.4 : 0.35 + k * 0.5;
-      ctx.strokeStyle = `rgba(180,222,255,${a.toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(ic.x, ic.surface - 1, ICE_HALF + 4, 5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.ellipse(ic.x, ic.surface - 1, (ICE_HALF + 4) * (1 - k) + 3, 5 * (1 - k) + 1.5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      for (let i = 0; i < 3; i++) {
-        const ang = (i / 3) * Math.PI;
-        ctx.moveTo(ic.x - Math.cos(ang) * 5, ic.surface - 1 - Math.sin(ang) * 2);
-        ctx.lineTo(ic.x + Math.cos(ang) * 5, ic.surface - 1 + Math.sin(ang) * 2);
+      const y = ic.surface - 1;
+      if (ic.cancelled) {
+        if (ic.fade > 0.15) ovalRing(ctx, ic.x, y, ICE_HALF + 4, 5, 1, MOONLIGHT[1]);
+        continue;
       }
-      ctx.stroke();
+      ovalRing(ctx, ic.x, y, ICE_HALF + 4, 5, 1, MOONLIGHT[k < 0.4 ? 2 : k < 0.75 ? 3 : 4]);
+      if (k < 0.97) ovalRing(ctx, ic.x, y, (ICE_HALF + 4) * (1 - k) + 3, 5 * (1 - k) + 2, 1, FROST[3]);
+      const m = frostSprite();
+      m.draw(ctx, ic.x - (m.w * ART) / 2, y - ART * 1.5);
     }
     for (const f of this.flares) {
+      // A ring of light going out: hot, then a step down the ramp, then gone.
       const u = clamp(f.t / f.life, 0, 1);
+      if (u > 0.85) continue;
       const r = f.radius * (0.4 + u * 0.7);
-      ctx.strokeStyle = `rgba(${f.rgb},${(0.8 * (1 - u)).toFixed(3)})`;
-      ctx.lineWidth = 3 * (1 - u) + 1;
-      ctx.beginPath();
-      if (f.round) ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-      else ctx.ellipse(f.x, f.y, r, Math.max(4, r * 0.14), 0, 0, Math.PI * 2);
-      ctx.stroke();
+      const tones = FLARE[f.rgb] ?? [SUN[4], SUN[2]];
+      const color = u < 0.45 ? tones[0] : tones[1];
+      const thick = u < 0.3 ? 2 : 1;
+      if (f.round) ring(ctx, f.x, f.y, r, color, thick);
+      else ovalRing(ctx, f.x, f.y, r, Math.max(4, r * 0.14), thick, color);
     }
-    ctx.restore();
     for (const r of this.rings) this.drawRing(ctx, r);
     if (this.revive) this.drawRevive(ctx);
   }
@@ -1888,92 +1878,60 @@ export class Twins extends Enemy {
    */
   private drawRing(ctx: CanvasRenderingContext2D, r: Ring): void {
     const F = this.floorY;
-    const back = -r.dir;
-    ctx.fillStyle = 'rgba(14,6,30,0.62)';
-    ctx.beginPath();
-    ctx.moveTo(r.x + back * 6, F);
-    ctx.lineTo(r.x + back * 6, F - RING_H + 6);
-    ctx.quadraticCurveTo(r.x + back * 34, F - RING_H * 0.55, r.x + back * 70, F);
-    ctx.closePath();
-    ctx.fill();
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const flick = 0.85 + Math.sin(this.anim * 30 + r.x) * 0.15;
-    glow(ctx, r.x, F - RING_H / 2, 34, `rgba(255,226,160,${(0.45 * flick).toFixed(3)})`);
-    ctx.fillStyle = `rgba(255,224,160,${(0.7 * flick).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.moveTo(r.x + back * 16, F);
-    ctx.quadraticCurveTo(r.x + back * 10, F - RING_H, r.x + r.dir * 2, F - RING_H);
-    ctx.quadraticCurveTo(r.x + r.dir * 8, F - RING_H * 0.5, r.x + r.dir * 6, F);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = `rgba(255,253,240,${(0.9 * flick).toFixed(3)})`;
-    ctx.fillRect(r.x - 1.5, F - RING_H, 3, RING_H);
-    ctx.restore();
+    const b = -r.dir;
+    const d = r.dir;
+    const x = Math.floor(r.x / ART) * ART;
+    const top = F - RING_H;
+    poly(ctx, [x + b * 6, F, x + b * 6, top + 6, ...quad(x + b * 6, top + 6, x + b * 34, F - RING_H * 0.55, x + b * 70, F, 6).slice(2)], '#1a1932');
+    const flick = Math.floor(this.anim * 20) & 1;
+    poly(ctx, [...quad(x + b * 16, F, x + b * 10, top, x + d * 2, top, 6), ...quad(x + d * 2, top, x + d * 8, F - RING_H * 0.5, x + d * 6, F, 6).slice(2)], SUN[3]);
+    poly(ctx, [...quad(x + b * 9, F, x + b * 6, top + 5, x + d * 1, top + 4, 5), ...quad(x + d * 1, top + 4, x + d * 5, F - RING_H * 0.45, x + d * 3, F, 5).slice(2)], SUN[4 + flick]);
+    rect(ctx, x - 1, top, 2, RING_H, SUN[5]);
   }
 
-  /** The call: a ring filling around the star, and a thread of light from the hands. */
+  /** The call: a ring filling round the star, and a banded tether from the hands that call. */
   private drawRevive(ctx: CanvasRenderingContext2D): void {
     const r = this.revive;
     if (!r) return;
     const c = r.channeler;
+    const sol = c.who === 'sol';
     const k = clamp(1 - r.left / REVIVE, 0, 1);
-    const rgb = c.who === 'sol' ? '255,206,120' : '190,212,255';
-    const x = r.fallen.x;
+    const x = Math.floor(r.fallen.x / ART) * ART + ART / 2;
     const y = this.floorY - 9;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = `rgba(${rgb},0.22)`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x, y, 22, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = `rgba(${rgb},0.95)`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
-    ctx.stroke();
-    const hx = c.x + c.facing * c.hx;
-    const hy = c.y + c.hy;
-    ctx.strokeStyle = `rgba(${rgb},${(0.35 + 0.2 * Math.sin(this.anim * 10)).toFixed(3)})`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(hx, hy);
-    ctx.quadraticCurveTo((hx + x) / 2, Math.min(hy, y) - 30, x, y);
-    ctx.stroke();
-    ctx.restore();
+    ring(ctx, x, y, 22, sol ? SUN[0] : MOONLIGHT[0], 2);
+    if (k > 0.01) sector(ctx, x, y, 18, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k, sol ? SUN[4] : MOONLIGHT[4]);
+    const [hx, hy] = this.handOf(c);
+    const pts = quad(hx, hy, (hx + x) / 2, Math.min(hy, y) - 30, x, y, 14);
+    beam(ctx, pts, sol ? SUN[2] : MOONLIGHT[1], sol ? SUN[3] : MOONLIGHT[2], sol ? SUN[5] : MOONLIGHT[4], -Math.floor(this.anim * 16));
   }
 
   /** The moon sliding over the sun, between them. */
   private drawEclipse(ctx: CanvasRenderingContext2D): void {
     if (this.eclipse <= 0.01) return;
     const k = this.eclipse;
-    const x = (this.sol.x + this.luna.x) / 2;
+    const x = Math.floor((this.sol.x + this.luna.x) / 2 / ART) * ART + ART / 2;
     const y = this.floorY - 70;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, x, y, 40 + 60 * k, `rgba(255,236,190,${(0.55 * k).toFixed(3)})`);
-    ctx.fillStyle = `rgba(255,214,130,${(0.9 * k).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(x, y, 14 * k + 1, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(255,248,226,${(0.8 * k).toFixed(3)})`;
-    ctx.lineWidth = 1.5;
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2 + this.anim * 0.8;
-      const r0 = 16 * k + 2;
-      const r1 = r0 + (i % 2 ? 6 : 12) * k;
-      ctx.beginPath();
-      ctx.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0);
-      ctx.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
-      ctx.stroke();
+    const R = Math.max(ART, Math.round((14 * k + 1) / ART) * ART);
+    const twinkle = Math.floor(this.anim * 8) & 1;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const r0 = R + ART * 2;
+      const r1 = r0 + ((i + twinkle) % 2 ? 6 : 12) * k;
+      line(ctx, x + Math.cos(a) * r0, y + Math.sin(a) * r0, x + Math.cos(a) * r1, y + Math.sin(a) * r1, SUN[4], i % 2 ? 2 : 1);
     }
-    ctx.restore();
+    disc(ctx, x, y, R, SUN[3]);
+    disc(ctx, x, y, R * 0.65, SUN[4]);
+    if (R >= ART * 3) disc(ctx, x, y, R * 0.3, SUN[5]);
     const from = this.luna.x >= this.sol.x ? 1 : -1;
-    ctx.fillStyle = `rgba(6,4,16,${(0.96 * k).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(x + from * (1 - k) * 18, y, 13.5 * k + 0.5, 0, Math.PI * 2);
-    ctx.fill();
+    disc(ctx, x + Math.round(from * (1 - k) * 9) * ART, y, Math.max(ART / 2, R - ART), '#0e071b');
+  }
+
+  /** Where a twin's working hand is drawn, in the world. */
+  private handOf(t: Twin): [number, number] {
+    const bx = Math.floor(t.x / ART) * ART + ART / 2;
+    const by = Math.floor((t.y - 1) / ART) * ART + ART / 2;
+    const drop = t.who === 'sol' ? solDrop(this.solLook(t)) : 0;
+    return [bx + t.facing * t.hx, by + t.hy + drop];
   }
 
   private drawTwin(ctx: CanvasRenderingContext2D, t: Twin): void {
@@ -1984,13 +1942,11 @@ export class Twins extends Enemy {
     }
     const air = Math.max(0, F - t.y);
     shadow(ctx, t.x, F, (t.who === 'sol' ? 34 : 28) * clamp(1 - air / 220, 0.35, 1), 0.32 * clamp(1 - air / 260, 0.3, 1));
-    withHitFlash(ctx, t.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(t.x, t.y);
-      ctx.scale(t.facing, 1);
-      if (t.who === 'sol') this.drawSol(ctx, t);
-      else this.drawLuna(ctx, t);
-      ctx.restore();
+    withHitFlash(ctx, solidFlash(t.flash), (c) => (t.who === 'sol' ? this.drawSol(c, t) : this.drawLuna(c, t)), {
+      x: t.x - 70,
+      y: t.y - 100,
+      w: 140,
+      h: 104,
     });
   }
 
@@ -2014,287 +1970,107 @@ export class Twins extends Enemy {
     }
   }
 
-  /** The sun knight: gold over bronze, a crown of rays, a short glaive. */
+  /** Sol's pose and frame, from what he is doing. */
+  private solLook(s: Twin): SolLook {
+    const st = s.state;
+    const pose = st === 'dash' ? 'run' : st === 'leap' || st === 'hop' || st === 'vault' ? 'air' : st === 'stagger' ? 'reel' : 'stand';
+    const c = this.crouchOf(s);
+    const crouch = pose === 'reel' ? 2 : pose !== 'stand' ? 0 : c < 0.08 ? 0 : c < 0.22 ? 1 : c < 0.4 ? 2 : 3;
+    return {
+      pose,
+      crouch,
+      lean: pose === 'run' ? 4 : pose === 'reel' ? -4 : st === 'dashWind' ? 2 : 0,
+      breath: pose === 'stand' && crouch === 0 && Math.floor(this.anim * 1.3) % 2 === 1 ? 1 : 0,
+      stride: Math.floor(this.anim * 10) % 2 === 1 ? 1 : 0,
+      cape: Math.floor(this.anim * 7) & 3,
+      heat: s.glow > 0.6 ? 2 : s.glow > 0.05 ? 1 : 0,
+      lit: this.awake > 0.65,
+    };
+  }
+
+  /** The sun knight: gold over red, a crown of rays, a halo, a short glaive. */
   private drawSol(ctx: CanvasRenderingContext2D, s: Twin): void {
-    const awake = this.awake;
-    const time = this.anim;
-    const crouch = this.crouchOf(s);
-    ctx.save();
-    ctx.scale(1 + crouch * 0.1, 1 - crouch * 0.22);
-    const by = s.state === 'idle' ? Math.sin(time * 2.6) * 0.7 : 0;
-
-    // Cape, streaming back while he runs.
-    ctx.fillStyle = '#8e2f17';
-    ctx.beginPath();
-    ctx.moveTo(-4, -33 + by);
-    ctx.quadraticCurveTo(-14 - (s.state === 'dash' ? 8 : 0), -22 + by, -13 + Math.sin(time * 3.2) * 1.6 - (s.state === 'dash' ? 10 : 0), -5);
-    ctx.lineTo(-4, -8);
-    ctx.closePath();
-    ctx.fill();
-
-    // Greaves and sabatons.
-    ctx.fillStyle = '#6a4718';
-    ctx.fillRect(-8, -15, 6, 14);
-    ctx.fillRect(2, -15, 6, 14);
-    ctx.fillStyle = '#d6a23e';
-    ctx.fillRect(-8, -10, 6, 2);
-    ctx.fillRect(2, -10, 6, 2);
-    ctx.fillStyle = '#3f2a10';
-    ctx.fillRect(-9, -2, 8, 2);
-    ctx.fillRect(1, -2, 9, 2);
-
-    // Tabard, with a gold stripe down it.
-    ctx.fillStyle = '#c24d26';
-    ctx.beginPath();
-    ctx.moveTo(-9, -20 + by);
-    ctx.lineTo(9, -20 + by);
-    ctx.lineTo(11, -9);
-    ctx.lineTo(-11, -9);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#ffd46e';
-    ctx.fillRect(-1, -20 + by, 2, 11);
-
-    // Breastplate.
-    ctx.fillStyle = '#d29b36';
-    ctx.beginPath();
-    ctx.moveTo(-10, -32 + by);
-    ctx.quadraticCurveTo(0, -35 + by, 10, -32 + by);
-    ctx.lineTo(9, -18 + by);
-    ctx.quadraticCurveTo(0, -16 + by, -9, -18 + by);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,238,180,0.5)';
-    ctx.beginPath();
-    ctx.moveTo(-7, -31 + by);
-    ctx.quadraticCurveTo(0, -33 + by, 6, -31 + by);
-    ctx.lineTo(4, -27 + by);
-    ctx.quadraticCurveTo(-1, -28 + by, -6, -27 + by);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#8f5e1a';
-    ctx.fillRect(-9, -19 + by, 18, 2);
-
-    // Pauldrons.
-    ctx.fillStyle = '#e4b04a';
-    ctx.beginPath();
-    ctx.ellipse(-9, -31 + by, 5, 3.6, -0.3, 0, Math.PI * 2);
-    ctx.ellipse(9, -31 + by, 5, 3.6, 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // The sun on his breast: it brightens with every wind-up.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 1, -26 + by, 10 + s.glow * 9, `rgba(255,200,90,${((0.35 + s.glow * 0.45) * awake).toFixed(3)})`);
-    ctx.restore();
-    ctx.fillStyle = '#fff2c2';
-    ctx.beginPath();
-    ctx.arc(1, -26 + by, 2.6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Helm, cheek guards, the slit of the visor.
-    ctx.fillStyle = '#e4b04a';
-    ctx.beginPath();
-    ctx.arc(0, -38 + by, 6.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#a8742a';
-    ctx.fillRect(-6, -37 + by, 12, 4);
-    ctx.fillStyle = `rgba(255,${Math.round(170 + 60 * s.glow)},90,${(0.45 + 0.55 * awake).toFixed(3)})`;
-    ctx.fillRect(1, -39 + by, 6, 2);
-
-    this.drawRays(ctx, s, by, awake);
-    this.drawGlaive(ctx, s, by);
-    ctx.restore();
-  }
-
-  /** His crown: rays around the helm, longer and brighter while he winds up. */
-  private drawRays(ctx: CanvasRenderingContext2D, s: Twin, by: number, awake: number): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    const cy = -41 + by;
-    const n = 9;
-    const heat = (0.45 + s.glow * 0.55) * awake;
-    ctx.strokeStyle = `rgba(255,${Math.round(196 + 40 * s.glow)},100,${heat.toFixed(3)})`;
-    for (let i = 0; i < n; i++) {
-      const a = -Math.PI + (i + 0.5) * (Math.PI / n) + Math.sin(this.anim * 1.5 + i) * 0.05;
-      const len = (i % 2 ? 5 : 9) + s.glow * 5 + Math.sin(this.anim * 5 + i * 1.3) * 1.2;
-      ctx.lineWidth = i % 2 ? 1.4 : 2.2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 7, cy + Math.sin(a) * 7);
-      ctx.lineTo(Math.cos(a) * (7 + len), cy + Math.sin(a) * (7 + len));
-      ctx.stroke();
+    const look = this.solLook(s);
+    const f = s.facing;
+    const bx = Math.floor(s.x / ART) * ART + ART / 2;
+    const by = Math.floor((s.y - 1) / ART) * ART + ART / 2;
+    // The halo, a ring with a crown of rays: short and dim at rest, long and
+    // white-hot as he winds up - twinkling, the long ones and the short by turns.
+    const [ox, oy] = solHead(look);
+    const cx = bx + f * ox;
+    const cy = by + oy;
+    if (!look.lit) ring(ctx, cx, cy, 18, SUN[0], 1);
+    else {
+      ring(ctx, cx, cy, 18, SUN[2 + look.heat], look.heat === 2 ? 2 : 1);
+      const twinkle = Math.floor(this.anim * 10) & 1;
+      for (const i of [0, 4, 5, 6, 7]) {
+        const a = (i / 8) * Math.PI * 2;
+        const len = [2, 4, 6][look.heat] * ART - (look.heat > 0 ? ((i + twinkle) % 2) * ART * 2 : 0);
+        const r0 = 20;
+        line(ctx, cx + Math.cos(a) * r0, cy + Math.sin(a) * r0, cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len), SUN[[1, 3, 4][look.heat]], i % 2 ? 2 : 1);
+      }
     }
-    ctx.restore();
+    blit(ctx, solPart(look), bx, by, f < 0);
+    // The working arm, and the glaive in its hand.
+    const [sx, sy] = solShoulder(look);
+    const [hx, hy] = this.handOf(s);
+    line(ctx, bx + f * sx, by + sy, hx, hy, SUN[1], 2);
+    blit(ctx, glaivePart(angleStep(s.ha, GLAIVE_STEPS), look.heat), hx, hy, f < 0);
   }
 
-  private drawGlaive(ctx: CanvasRenderingContext2D, s: Twin, by: number): void {
-    const hx = s.hx;
-    const hy = s.hy + by * 0.5;
-    const ca = Math.cos(s.ha);
-    const sa = Math.sin(s.ha);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#b07a26';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(5, -30 + by);
-    ctx.lineTo(hx, hy);
-    ctx.stroke();
-    ctx.strokeStyle = '#4e3216';
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(hx - ca * 12, hy - sa * 12);
-    ctx.lineTo(hx + ca * 22, hy + sa * 22);
-    ctx.stroke();
-    // The blade: a curve of sun-steel past the end of the shaft.
-    const bx = hx + ca * 22;
-    const bY = hy + sa * 22;
-    const nx = -sa;
-    const ny = ca;
-    ctx.fillStyle = '#ffe9b0';
-    ctx.beginPath();
-    ctx.moveTo(bx + nx * 2.5, bY + ny * 2.5);
-    ctx.quadraticCurveTo(bx + ca * 9 + nx * 7, bY + sa * 9 + ny * 7, bx + ca * 15 + nx, bY + sa * 15 + ny);
-    ctx.quadraticCurveTo(bx + ca * 7 - nx, bY + sa * 7 - ny, bx - nx * 2.5, bY - ny * 2.5);
-    ctx.closePath();
-    ctx.fill();
-    if (s.glow > 0.05) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, bx + ca * 8, bY + sa * 8, 12 + s.glow * 10, `rgba(255,190,90,${(0.55 * s.glow).toFixed(3)})`);
-      ctx.restore();
-    }
-    ctx.fillStyle = '#e0ac48';
-    ctx.beginPath();
-    ctx.arc(hx, hy, 2.4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  /** The moon priestess: robes of moonlight, a crescent for a halo, no feet to speak of. */
-  private drawLuna(ctx: CanvasRenderingContext2D, l: Twin): void {
-    const awake = this.awake;
-    const time = this.anim;
-    const sway = Math.sin(time * 1.9) * 1.6;
+  /** Luna's pose and frame, from what she is doing. */
+  private lunaLook(l: Twin): LunaLook {
     const bow = this.state === 'dormant' ? 1 : this.state === 'intro' ? 1 - this.rise : l.state === 'stagger' ? 0.6 : 0;
-    const head = bow * 4;
+    return {
+      frame: Math.floor(this.anim * 5) & 3,
+      bow: bow > 0.75 ? 2 : bow > 0.3 ? 1 : 0,
+      heat: l.glow > 0.6 ? 2 : l.glow > 0.05 ? 1 : 0,
+      lit: this.awake > 0.65,
+    };
+  }
 
-    // Mist where her feet would be.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 0, -2, 16, `rgba(170,200,255,${(0.35 * awake).toFixed(3)})`);
-    ctx.restore();
-
-    // Her hair, long down her back.
-    ctx.fillStyle = '#25305e';
-    ctx.beginPath();
-    ctx.moveTo(-2, -45 + head);
-    ctx.quadraticCurveTo(-12, -30, -9 + sway * 0.6, -13);
-    ctx.lineTo(-3, -18);
-    ctx.closePath();
-    ctx.fill();
-
-    // The halo, behind the head: a crescent, lit.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, -2, -43 + head, 14 + l.glow * 6, `rgba(190,215,255,${((0.3 + l.glow * 0.3) * awake).toFixed(3)})`);
-    ctx.fillStyle = `rgba(226,236,255,${(0.55 + 0.4 * awake).toFixed(3)})`;
-    crescentPath(ctx, -2, -43 + head, 9.5, -0.6 + Math.sin(time * 0.7) * 0.08);
-    ctx.fill();
-    ctx.restore();
-
-    // The robe: a bell of moonlight with a hem that never settles.
-    ctx.fillStyle = '#7d8dcc';
-    ctx.beginPath();
-    ctx.moveTo(-6, -37 + head * 0.3);
-    ctx.quadraticCurveTo(-11, -22, -13 + sway, -2);
-    for (let i = 1; i <= 4; i++) {
-      ctx.lineTo(-13 + sway + (i / 4) * 26, -1 + Math.sin(time * 5 + i * 1.6) * 1.5);
-    }
-    ctx.quadraticCurveTo(11, -22, 6, -37 + head * 0.3);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#c9d5f7';
-    ctx.beginPath();
-    ctx.moveTo(-2, -34 + head * 0.3);
-    ctx.lineTo(3, -34 + head * 0.3);
-    ctx.lineTo(5 + sway * 0.6, -2);
-    ctx.lineTo(-3 + sway * 0.6, -2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#e8eeff';
-    ctx.fillRect(-7, -26, 14, 1.6);
-
-    // The face, pale, eyes shut in her sleep and lit when she casts.
-    ctx.fillStyle = '#ebe7f7';
-    ctx.beginPath();
-    ctx.arc(1, -41 + head, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2b3770';
-    ctx.beginPath();
-    ctx.arc(0, -42 + head, 5.4, Math.PI * 0.95, Math.PI * 1.95);
-    ctx.fill();
-    if (awake > 0.5) {
-      ctx.fillStyle = `rgba(150,190,255,${(0.6 + l.glow * 0.4).toFixed(3)})`;
-      ctx.fillRect(2, -41 + head, 3, 1.4);
-    } else {
-      ctx.fillStyle = 'rgba(60,70,120,0.8)';
-      ctx.fillRect(2, -40 + head, 3, 0.8);
-    }
-
+  /** The moon priestess: a bell of slate and blue, a crescent and a ring behind her head, floating. */
+  private drawLuna(ctx: CanvasRenderingContext2D, l: Twin): void {
+    const look = this.lunaLook(l);
+    const f = l.facing;
+    const bx = Math.floor(l.x / ART) * ART + ART / 2;
+    const by = Math.floor((l.y - 1) / ART) * ART + ART / 2;
+    const [ox, oy] = lunaHead(look);
+    const cx = bx + f * ox;
+    const cy = by + oy;
+    // Her halo ring: slate at rest, pale as she winds up, frost-bright and
+    // doubled in weight just before the move.
+    if (!look.lit) ring(ctx, cx, cy, 16, MOONLIGHT[0], 1);
+    else ring(ctx, cx, cy, 16, look.heat === 2 ? FROST[2] : MOONLIGHT[1 + look.heat * 2], look.heat === 2 ? 2 : 1);
+    blit(ctx, lunaPart(look), bx, by, f < 0);
     // Her working arm: the sleeve from the shoulder to the hand.
-    const hx = l.hx;
-    const hy = l.hy;
-    ctx.strokeStyle = '#a9b8e8';
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 4.5;
-    ctx.beginPath();
-    ctx.moveTo(4, -33);
-    ctx.quadraticCurveTo((4 + hx) / 2 + 3, (-33 + hy) / 2 + 2, hx, hy);
-    ctx.stroke();
-    ctx.fillStyle = '#ebe7f7';
-    ctx.beginPath();
-    ctx.arc(hx, hy, 2, 0, Math.PI * 2);
-    ctx.fill();
+    const [hx, hy] = this.handOf(l);
+    const [sx, sy] = LUNA_SHOULDER;
+    line(ctx, bx + f * sx, by + sy, hx, hy, MOONLIGHT[3], 2);
+    rect(ctx, hx - 1, hy - 1, 4, 4, MOONLIGHT[4]);
     if (l.state === 'iceWind' || l.state === 'eclipse') {
-      // Both hands up: the other one too, and frost between them.
-      ctx.strokeStyle = '#a9b8e8';
-      ctx.beginPath();
-      ctx.moveTo(-4, -33);
-      ctx.lineTo(-6, -53);
-      ctx.stroke();
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 1, -56, 12 + Math.sin(time * 12) * 2, `rgba(200,232,255,${(0.6 * l.glow).toFixed(3)})`);
-      ctx.restore();
+      // Both hands up: the other one too, and frost gathering between them.
+      line(ctx, bx - f * 4, by - 33, bx - f * 6, by - 53, MOONLIGHT[3], 2);
+      rect(ctx, bx - f * 6 - 1, by - 55, 4, 4, MOONLIGHT[4]);
+      const sp = sparkleSprite(Math.floor(this.anim * 8));
+      sp.draw(ctx, bx + f * 1 - (sp.w * ART) / 2, by - 60 - (sp.h * ART) / 2);
     }
     if (l.state === 'throwWind') {
       // A crescent growing over her hand: the tell, and the throw.
       const k = clamp(1 - l.timer / THROW_TELL, 0, 1);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, hx + 2, hy - 8, 10 + k * 12, `rgba(200,222,255,${(0.6 * k).toFixed(3)})`);
-      ctx.fillStyle = `rgba(226,236,255,${(0.4 + 0.6 * k).toFixed(3)})`;
-      crescentPath(ctx, hx + 2, hy - 8, 3 + k * 7, time * 6);
-      ctx.fill();
-      ctx.restore();
+      blit(ctx, crescentPart(k < 0.33 ? 0 : k < 0.66 ? 1 : 2, angleStep(this.anim * 6), 'moon'), hx + f * 2, hy - 8, f < 0);
     }
   }
 
-  /** A twin brought down: a dim star on the floor. */
+  /** A twin brought down: a star on the floor, turning and pulsing; two going out as one at the end. */
   private drawStar(ctx: CanvasRenderingContext2D, t: Twin): void {
     const x = t.x;
     const y = this.floorY - 9;
-    const pulse = 0.55 + Math.sin(this.anim * 4 + (t.who === 'sol' ? 0 : 2)) * 0.15;
+    const bright = Math.sin(this.anim * 4 + (t.who === 'sol' ? 0 : 2)) > 0;
     const dying = this.state === 'dying' ? clamp(1 - this.timer / DYING, 0, 1) : 0;
-    const rgb = t.who === 'sol' ? '255,200,110' : '180,205,255';
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, x, y, 22 + dying * 34, `rgba(${rgb},${(0.35 * pulse + dying * 0.5).toFixed(3)})`);
-    ctx.fillStyle = `rgba(${rgb},${(0.45 + pulse * 0.3 + dying * 0.25).toFixed(3)})`;
-    if (t.who === 'sol') starPath(ctx, x, y, 8 + dying * 4, 3, 8, this.anim * 0.4);
-    else starPath(ctx, x, y, 8 + dying * 4, 2.2, 4, Math.PI / 4 + this.anim * 0.3);
-    ctx.fill();
-    ctx.restore();
+    const sp = starSprite(t.who, Math.floor(this.anim * (t.who === 'sol' ? 0.9 : 0.7)), bright || dying > 0.5);
+    sp.draw(ctx, x - (sp.w * ART) / 2, y - (sp.h * ART) / 2);
+    if (dying > 0.05) ring(ctx, x, y, 12 + dying * 22, t.who === 'sol' ? SUN[3] : MOONLIGHT[3], dying > 0.6 ? 2 : 1);
   }
 
   /**
@@ -2311,39 +2087,22 @@ export class Twins extends Enemy {
 
   /** What flies: crescents, icicles on their way down, splinters of ice. */
   private drawAir(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
     for (const c of this.crescents) {
       if (c.dead || c.delay > 0) continue;
-      const a = c.fade > 0 ? clamp(c.fade / 0.3, 0, 1) : 1;
-      const rgb = c.batted ? '255,236,180' : '205,224,255';
-      glow(ctx, c.x, c.y, 20, `rgba(${rgb},${(0.35 * a).toFixed(3)})`);
-      ctx.fillStyle = `rgba(${rgb},${(0.95 * a).toFixed(3)})`;
-      crescentPath(ctx, c.x, c.y, 10, c.spin);
-      ctx.fill();
+      blit(ctx, crescentPart(2, angleStep(c.spin), c.batted ? 'sun' : c.fade > 0 ? 'dim' : 'moon'), c.x, c.y);
     }
     for (const ic of this.icicles) {
       const top = this.icicleTop(ic);
-      if (top === null) continue;
-      const k = ic.t / ICE_TELL;
-      const a = ic.cancelled ? clamp(ic.fade / 0.3, 0, 1) : clamp((k - 0.35) / 0.15, 0, 1);
-      ctx.fillStyle = `rgba(200,232,255,${(0.85 * a).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(ic.x - 5, top);
-      ctx.lineTo(ic.x + 5, top);
-      ctx.lineTo(ic.x, top + 34);
-      ctx.closePath();
-      ctx.fill();
+      if (top === null || (ic.cancelled && ic.fade <= 0.05)) continue;
+      const forming = ic.cancelled ? ic.fade < 0.15 : ic.t / ICE_TELL < 0.42;
+      const sp = icicleSprite(forming);
+      sp.draw(ctx, ic.x - (sp.w * ART) / 2, top);
     }
     for (const s of this.shards) {
-      ctx.fillStyle = `rgba(210,236,255,${clamp(s.life / 0.3, 0, 1).toFixed(3)})`;
-      ctx.save();
-      ctx.translate(s.x, s.y);
-      ctx.rotate(s.rot);
-      ctx.fillRect(-2.5, -1, 5, 2);
-      ctx.restore();
+      const o = ((Math.round(s.rot / (Math.PI / 4)) % 4) + 4) % 4;
+      const [w, h] = o === 0 ? [4, 2] : o === 2 ? [2, 4] : [4, 4];
+      rect(ctx, s.x - w / 2, s.y - h / 2, w, h, s.life > 0.3 ? MOONLIGHT[4] : MOONLIGHT[3]);
     }
-    ctx.restore();
   }
 
   /** Each twin's own health, on the floor under it - and the call, over the one who calls. */
@@ -2352,12 +2111,11 @@ export class Twins extends Enemy {
     const F = this.floorY;
     for (const t of this.twins) {
       if (t.state === 'fallen') continue;
-      const w = 32;
-      const x = t.x - w / 2;
-      ctx.fillStyle = 'rgba(8,6,14,0.75)';
-      ctx.fillRect(x - 1, F + 4, w + 2, 5);
-      ctx.fillStyle = t.who === 'sol' ? '#ffc24a' : '#a9c6ff';
-      ctx.fillRect(x, F + 5, w * clamp(t.hp / t.maxHp, 0, 1), 3);
+      // On whole art pixels, in the twin's own colour.
+      const x = Math.floor(t.x / ART) * ART - 16;
+      rect(ctx, x - 2, F + 4, 36, 6, '#0e071b');
+      const fill = Math.round(16 * clamp(t.hp / t.maxHp, 0, 1)) * ART;
+      if (fill > 0) rect(ctx, x, F + 6, fill, 2, t.who === 'sol' ? SUN[3] : MOONLIGHT[3]);
     }
     const r = this.revive;
     if (r) {
