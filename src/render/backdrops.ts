@@ -1726,10 +1726,22 @@ function* lair(look: Look, ink: Ink): Painting {
   const boneLit = ink('#657392');
   const wallArt = caveWall(look, ink, rng, { seed: 0x1a13 });
   const w = wallArt.pix;
+  // Moss glowing in pockets: a clump of small blobs a step down the green
+  // ramp, a few smaller ones of the moss's own green inside it - solid, so
+  // no pocket is a sprinkle of lone bright dots on the wall.
+  const mossDim = ink(beside(look.accent, -1, look.far));
   for (let i = 0; i < 10; i++) {
     const x = rng.int(0, w.w);
     const y = rng.int(90, 220);
-    for (let r = 16; r > 0; r -= 4) w.ditherDisc(x, y, r, moss, Math.round(9 - r / 2));
+    const blobs = rng.int(4, 6);
+    const spots: [number, number][] = [];
+    for (let b = 0; b < blobs; b++) {
+      const bx = x + rng.int(-8, 8);
+      const by = y + rng.int(-4, 4);
+      w.disc(bx, by, rng.int(3, 5), mossDim);
+      spots.push([bx, by]);
+    }
+    for (const [bx, by] of spots.slice(0, rng.int(2, 3))) w.disc(bx + rng.int(-1, 1), by, rng.int(1, 2), moss);
   }
   const strips: Strip[] = [wallArt];
 

@@ -1489,18 +1489,19 @@ export class TerrainArt {
 
   /**
    * A pixel down a pit: the far wall of the hole, the same stone as the
-   * ground there a ramp step darker, its rim catching the light, fading in
-   * three dithered bands into the dark below - where the pit used to be one
-   * flat rectangle of black.
+   * ground there a ramp step darker, its rim catching the light, sinking
+   * down its own ramp into the dark below - where the pit used to be one
+   * flat rectangle of black. It sinks a step at a time, with an ordered seam
+   * of two neighbours on the ramp between steps: a wall that faded out as a
+   * pattern of itself and the void behind it was a band of salt.
    */
   private pitPixel(x: number, y: number, wx: number, wy: number, bayer: number): number {
     const depth = y - this.pitRim[(y >> 4) * RT_W + (x >> 4)];
     if (depth < 0 || depth >= 22) return 0;
-    const fade = depth < 10 ? 16 : depth < 14 ? 12 : depth < 18 ? 8 : 4;
-    if (bayer >= fade) return 0;
     const m = this.colEarth[x];
     if (depth === 0) return m.ramp[Math.min(m.last, 2)];
-    const lv = m.bands[2] - 16 + m.level[(wy % PH) * PW + (wx & PWM)];
+    const sink = depth < 10 ? 0 : (depth - 9) * 4 + bayer - 8;
+    const lv = m.bands[2] - 16 + m.level[(wy % PH) * PW + (wx & PWM)] - sink;
     const ri = lv >> 4;
     return m.ramp[ri < 0 ? 0 : ri > m.last ? m.last : ri];
   }
