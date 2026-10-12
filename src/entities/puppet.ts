@@ -106,8 +106,17 @@ function scale2x(c: Cells): Cells {
  * at (px + ox, py + oy).
  */
 export function rotSprite(g: Grid, deg: number, px: number, py: number, outW: number, outH: number, ox = 0, oy = 0): string[] {
+  return rotSprites(g, [deg], px, py, outW, outH, ox, oy)[0];
+}
+
+/** rotSprite at several angles, the eightfold blow-up done once for all of them. */
+export function rotSprites(g: Grid, degs: readonly number[], px: number, py: number, outW: number, outH: number, ox = 0, oy = 0): string[][] {
   let big = cellsOf(g);
   for (let i = 0; i < 3; i++) big = scale2x(big);
+  return degs.map((deg) => turnBig(big, deg, px, py, outW, outH, ox, oy));
+}
+
+function turnBig(big: Cells, deg: number, px: number, py: number, outW: number, outH: number, ox: number, oy: number): string[] {
   const S = 8;
   const h8 = big.length;
   const w8 = big[0]?.length ?? 0;
@@ -346,6 +355,34 @@ export function fillPoly(c: Cells, pts: readonly (readonly [number, number])[], 
 }
 
 /**
+ * Lone cells cleaned out of a frame: a cell whose four neighbours are all
+ * one other letter takes that letter, and a cell with nothing round it
+ * goes - no stray dot left for the actor pass to ring with outline.
+ */
+export function despeckle(g: Grid): string[] {
+  const c = cellsOf(g);
+  const h = c.length;
+  const w = c[0]?.length ?? 0;
+  const at = (x: number, y: number): string => (y >= 0 && y < h && x >= 0 && x < w ? c[y][x] : '.');
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const l = c[y][x];
+      const n = at(x, y - 1);
+      const s = at(x, y + 1);
+      const wl = at(x - 1, y);
+      const e = at(x + 1, y);
+      if (l === '.') {
+        // A pinhole: filled from its side, or the light would show through as a dot.
+        if (n !== '.' && s !== '.' && wl !== '.' && e !== '.') c[y][x] = wl === e || wl === n ? wl : e;
+        continue;
+      }
+      if (n !== l && n === s && n === wl && n === e) c[y][x] = n;
+    }
+  }
+  return rowsOf(c);
+}
+
+/**
  * A frame breaking up in chunks of 2 × 2 cells: `gone` (0..1) of them
  * cleared, the same ones every time and more of them each step - a figure
  * coming apart in whole blocks, never in a salt of single dots.
@@ -446,11 +483,19 @@ export function floorRing(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   const rxa = Math.max(1, Math.round(rx / ART));
   const rya = Math.max(1, Math.round(ry / ART));
   ctx.fillStyle = color;
-  for (let row = -rya; row <= rya; row++) {
+  const outerOf = (row: number): number => {
     const v = (row + 0.5) / (rya + 0.5);
-    const outer = Math.floor(rxa * Math.sqrt(Math.max(0, 1 - v * v)));
+    return Math.floor(rxa * Math.sqrt(Math.max(0, 1 - v * v)));
+  };
+  for (let row = -rya; row <= rya; row++) {
+    const outer = outerOf(row);
     const iv = (row + 0.5) / Math.max(0.5, rya - thick + 0.5);
-    const inner = Math.abs(iv) >= 1 ? -1 : Math.floor((rxa - thick) * Math.sqrt(Math.max(0, 1 - iv * iv)));
+    let inner = Math.abs(iv) >= 1 ? -1 : Math.floor((rxa - thick) * Math.sqrt(Math.max(0, 1 - iv * iv)));
+    // Reach in as far as the row beyond this one (away from the middle row)
+    // reaches out, so the two runs touch side by side and the ring never
+    // steps diagonally into a string of single dots.
+    const beyond = row < 0 ? row - 1 : row + 1;
+    if (inner >= 0 && beyond >= -rya && beyond <= rya) inner = Math.min(inner, outerOf(beyond) - 1);
     if (outer < 0) continue;
     if (inner < 0) {
       ctx.fillRect((ax - outer) * ART, (ay + row) * ART, (outer * 2 + 1) * ART, ART);

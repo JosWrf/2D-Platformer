@@ -1,9 +1,14 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, damp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { oval } from '../render/pen';
+import { snap } from '../render/pixel';
+import { shadow } from '../render/sprites';
 import type { World } from '../world/context';
 import { Bat, Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
+import { dashLine4, floorRing } from './puppet';
+import { type BodyFrame, MOON, MOON_R, STARS, type VesperLook, type WholeFrame, diveFrame, drawVesper, drawVesperWhole, wingFrame } from './vesper-art';
 
 const VESPER_HP = 56;
 /** Damage taken in the air before he drops out of it. */
@@ -590,8 +595,13 @@ export class Vesper extends Enemy {
   override lights(): GlowLight[] {
     const out: GlowLight[] = [];
     if (this.state === 'dormant') return out;
-    out.push({ x: this.cx, y: this.y + 14, radius: 110 * this.eyes, rgb: '255,50,80', strength: 0.7, tint: 0.35 });
+    const hot = this.state === 'diveWind';
+    out.push({ x: this.cx, y: this.y + 14, radius: 110 * this.eyes * (hot ? 1.3 : 1), rgb: '255,50,80', strength: hot ? 0.9 : 0.7, tint: 0.35 });
     out.push({ x: this.cx, y: this.cy, radius: 150, rgb: '200,160,190', strength: 0.45, tint: 0.12 });
+    if (this.state === 'slashWind') {
+      // The sickle of blood in his raised claw.
+      out.push({ x: this.cx + 24 * this.facing, y: this.cy - 58, radius: 60, rgb: '255,30,60', strength: 0.7, tint: 0.4 });
+    }
     if (this.moonGlow > 0.05) {
       out.push({ x: (this.arenaLeft + this.arenaRight) / 2, y: this.floorY - 380, radius: 320 * this.moonGlow, rgb: '255,60,70', strength: 0.6, tint: 0.4 });
     }
@@ -609,302 +619,105 @@ export class Vesper extends Enemy {
     // His shadow, on the roof, however high he is.
     const height = this.floorY - this.bottom;
     shadow(ctx, this.cx, this.floorY, 60 * clamp(1 - height / 420, 0.3, 1), 0.3 * clamp(1 - height / 500, 0.2, 1));
-    ctx.save();
-    ctx.globalAlpha = this.fade;
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.cy);
-      if (this.state === 'dive') {
-        ctx.rotate(Math.atan2(this.vy, Math.abs(this.vx)) * this.facing * 0.6);
-      }
-      // Drawn a third larger than he was sketched: a lord, not a bat.
-      ctx.scale(this.facing * 1.35, 1.35);
-      this.drawWings(ctx);
-      this.drawFigure(ctx);
-      ctx.restore();
-    });
-    ctx.restore();
-  }
-
-  /** A blood-red moon behind him while he calls the rain. */
-  private drawMoon(ctx: CanvasRenderingContext2D): void {
-    if (this.moonGlow < 0.02) return;
-    const x = (this.arenaLeft + this.arenaRight) / 2;
-    const y = this.floorY - 430;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, x, y, 200, `rgba(255,40,60,${(0.35 * this.moonGlow).toFixed(3)})`);
-    ctx.fillStyle = `rgba(255,90,90,${(0.55 * this.moonGlow).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(x, y, 62, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawMarks(ctx: CanvasRenderingContext2D): void {
-    if (this.marks.length === 0) return;
-    ctx.save();
-    for (const m of this.marks) {
-      if (m.t < 0) continue;
-      const p = clamp(m.t / 0.85, 0, 1);
-      ctx.strokeStyle = `rgba(255,60,90,${(0.25 + p * 0.5).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(m.x, this.floorY - 2, 26 - p * 8, 6 - p * 2, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = `rgba(160,10,40,${(0.1 + p * 0.25).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(m.x, this.floorY - 2, 18, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
+    const facing: 1 | -1 = this.facing > 0 ? 1 : -1;
+    // A whole frame (his end, the dive) or body and wings for the moment.
+    const whole: WholeFrame | null =
+      this.state === 'dying'
+        ? DIE[Math.min(3, Math.floor((1 - this.fade) * 4))]
+        : this.state === 'dive'
+          ? diveFrame(Math.atan2(this.vy, Math.abs(this.vx)) * 0.6)
+          : null;
+    // A blow shows as his silhouette in white for two frames: frames of their
+    // own, built once, rather than a flash composited over him every time.
+    const white = this.flash >= HIT_WHITE && this.state !== 'dying';
+    if (whole) {
+      drawVesperWhole(ctx, whole, this.cx, this.cy, facing, white ? 'white' : this.state === 'dive' ? 'hot' : '');
+    } else {
+      const look = this.look();
+      drawVesper(ctx, this.cx, this.cy, facing, white ? { ...look, palette: 'white' } : look);
     }
-    ctx.restore();
+    if (this.state === 'stunned') this.drawStars(ctx);
   }
 
-  /** Where the dive will go: a line that sharpens as it locks. */
-  private drawDiveLine(ctx: CanvasRenderingContext2D): void {
-    const locked = this.timer <= 0.22;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = locked ? 'rgba(255,90,110,0.75)' : 'rgba(255,60,90,0.3)';
-    ctx.lineWidth = locked ? 3 : 1.5;
-    ctx.setLineDash(locked ? [] : [8, 8]);
-    ctx.beginPath();
-    ctx.moveTo(this.cx, this.cy);
-    ctx.lineTo(this.target.x, this.floorY - 4);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.ellipse(this.target.x, this.floorY - 2, 24, 5, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+  /** Body, wings and eyes for this moment. */
+  private look(): VesperLook {
+    const flying = this.state !== 'grounded' && this.state !== 'stunned' && this.state !== 'dormant';
+    const palette: VesperLook['palette'] = this.state === 'diveWind' ? 'hot' : this.eyes < 0.6 ? 'dim' : '';
+    const hem = Math.floor(this.anim * 5) % 4;
+    const look: VesperLook = { body: FLY[hem], wing: wingFrame(this.spread, this.wing, flying), palette, sickle: 0 };
+    switch (this.state) {
+      case 'dormant':
+        // Asleep at the top of his tower, wrapped in his wings.
+        return { body: 'wrap', wing: null, palette: 'dim', sickle: 0 };
+      case 'grounded':
+        look.body = Math.sin(this.anim * 5) > 0 ? 'kneel0' : 'kneel1';
+        break;
+      case 'stunned':
+        // Down on the roof, his wings spread on it round him.
+        look.body = 'stun';
+        look.wing = 'rest';
+        break;
+      case 'fall': {
+        // Dropping out of the air, flailing.
+        const flail = Math.floor(this.anim * 8) % 2;
+        look.body = flail ? 'fall1' : 'fall0';
+        look.wing = flail ? 'half3' : 'half1';
+        break;
+      }
+      case 'slashWind':
+        // The sickle grows in his claw until he throws it.
+        look.body = 'cast';
+        look.sickle = this.timer < 0.32 ? 2 : 1;
+        break;
+      case 'swarmWind':
+        look.body = 'call';
+        break;
+      case 'moonWind':
+      case 'moon':
+        look.body = 'raise';
+        break;
+    }
+    return look;
   }
 
   /**
-   * Bat wings: an arm bone and four long fingers from the shoulder, and the
-   * membrane between them cut into scallops on the trailing edge. `spread`
-   * opens them from furled to wide; the beat rides on top of that.
+   * A blood moon behind him while he calls the rain: black in a ring of
+   * red as it comes, a crescent, then full - and the same way out.
    */
-  private drawWings(ctx: CanvasRenderingContext2D): void {
-    const flying = this.state !== 'grounded' && this.state !== 'stunned' && this.state !== 'dormant';
-    const beat = flying && this.state !== 'dive' ? Math.sin(this.wing) : 0;
-    for (const side of [-1, 1]) {
-      ctx.save();
-      ctx.translate(side * 8, -18);
-      ctx.scale(side, 1);
-      const open = clamp(this.spread, 0, 1.25);
-      const lift = -0.35 - beat * 0.45 + (1 - open) * 1.25;
-      ctx.rotate(lift);
-      const reach = 36 + open * 74;
-      // Four finger tips fanned out below the arm.
-      const tips: [number, number][] = [];
-      for (let i = 0; i < 4; i++) {
-        const a = -0.25 + i * (0.42 + open * 0.12);
-        const len = reach * (1.05 - i * 0.13);
-        tips.push([reach * 0.55 + Math.cos(a) * len, Math.sin(a) * len * 0.9]);
-      }
-      // Membrane: shoulder, wrist, then each finger tip in turn, with the
-      // trailing edge cut into a scallop between every pair of fingers.
-      const wrist = { x: reach * 0.55, y: -8 };
-      const scallop = (ax: number, ay: number, bx: number, by: number): void => {
-        const mx = (ax + bx) / 2;
-        const my = (ay + by) / 2;
-        ctx.quadraticCurveTo(mx + (wrist.x - mx) * 0.34, my + (wrist.y - my) * 0.34, bx, by);
-      };
-      const edge = (): void => {
-        ctx.moveTo(tips[0][0], tips[0][1]);
-        for (let i = 1; i < 4; i++) scallop(tips[i - 1][0], tips[i - 1][1], tips[i][0], tips[i][1]);
-        scallop(tips[3][0], tips[3][1], 6, 44);
-      };
-      const mem = ctx.createRadialGradient(wrist.x, wrist.y, 4, wrist.x, wrist.y, reach * 1.1);
-      mem.addColorStop(0, '#83183a');
-      mem.addColorStop(0.55, '#480a1e');
-      mem.addColorStop(1, '#22040e');
-      ctx.fillStyle = mem;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(wrist.x, wrist.y);
-      ctx.lineTo(tips[0][0], tips[0][1]);
-      for (let i = 1; i < 4; i++) scallop(tips[i - 1][0], tips[i - 1][1], tips[i][0], tips[i][1]);
-      scallop(tips[3][0], tips[3][1], 6, 44);
-      ctx.lineTo(0, 22);
-      ctx.closePath();
-      ctx.fill();
-      // The red moon catching the trailing edge.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,70,100,0.32)';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      edge();
-      ctx.stroke();
-      ctx.restore();
-      // Bones.
-      ctx.strokeStyle = '#1a0610';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(reach * 0.55, -8);
-      ctx.stroke();
-      ctx.lineWidth = 1.8;
-      for (const [tx, ty] of tips) {
-        ctx.beginPath();
-        ctx.moveTo(wrist.x, wrist.y);
-        ctx.quadraticCurveTo((wrist.x + tx) / 2 + 3, (wrist.y + ty) / 2 - 3, tx, ty);
-        ctx.stroke();
-      }
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,70,100,0.35)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(0, -1);
-      ctx.lineTo(reach * 0.55, -9);
-      ctx.lineTo(tips[0][0], tips[0][1] - 1);
-      ctx.stroke();
-      ctx.restore();
-      ctx.fillStyle = '#d8c8cc';
-      ctx.beginPath();
-      ctx.moveTo(reach * 0.55, -10);
-      ctx.lineTo(reach * 0.55 + 6, -16);
-      ctx.lineTo(reach * 0.55 + 3, -7);
-      ctx.fill();
-      ctx.restore();
+  private drawMoon(ctx: CanvasRenderingContext2D): void {
+    if (this.moonGlow < 0.02) return;
+    const stage = this.moonGlow < 0.35 ? 'm0' : this.moonGlow < 0.7 ? 'm1' : 'm2';
+    MOON.draw(ctx, stage, (this.arenaLeft + this.arenaRight) / 2, this.floorY - 430, MOON_R, MOON_R);
+  }
+
+  /** Where the red rain will fall: a ring closing in and warming on the roof, its middle dark. */
+  private drawMarks(ctx: CanvasRenderingContext2D): void {
+    for (const m of this.marks) {
+      if (m.t < 0) continue;
+      const p = clamp(m.t / 0.85, 0, 1);
+      if (p > 0.3) oval(ctx, snap(m.x), snap(this.floorY - 2), 18, 4, RAMP.rose[0]);
+      floorRing(ctx, m.x, this.floorY - 2, 26 - p * 8, 6 - p * 2, 1, p < 0.5 ? RAMP.rose[1] : p < 1 ? RAMP.rose[3] : RAMP.rose[4]);
     }
   }
 
-  /** The lord himself: collar, cape, a pale face, and the eyes. */
-  private drawFigure(ctx: CanvasRenderingContext2D): void {
-    const down = this.state === 'grounded' || this.state === 'stunned';
-    const kneel = down ? 8 : 0;
-    // Cape, falling to a point below him in the air, pooled on the floor.
-    const cape = ctx.createLinearGradient(0, -30, 0, 36);
-    cape.addColorStop(0, '#2a0812');
-    cape.addColorStop(1, '#0e0206');
-    ctx.fillStyle = cape;
-    ctx.beginPath();
-    ctx.moveTo(-14, -22);
-    ctx.lineTo(14, -22);
-    if (down) {
-      ctx.quadraticCurveTo(26, 10, 30, 35);
-      ctx.lineTo(-30, 35);
-      ctx.quadraticCurveTo(-26, 10, -14, -22);
-    } else {
-      const sway = Math.sin(this.anim * 3) * 3;
-      ctx.quadraticCurveTo(22, 8, 12 + sway, 38);
-      ctx.lineTo(0, 30);
-      ctx.lineTo(-12 + sway, 40);
-      ctx.quadraticCurveTo(-22, 8, -14, -22);
-    }
-    ctx.closePath();
-    ctx.fill();
-    // Crimson lining showing at the edge.
-    ctx.strokeStyle = '#8a1030';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  /** Where the dive will go: a broken line that turns solid and bright as it locks. */
+  private drawDiveLine(ctx: CanvasRenderingContext2D): void {
+    const locked = this.timer <= 0.22;
+    const color = locked ? RAMP.rose[4] : RAMP.rose[2];
+    dashLine4(ctx, this.cx, this.cy, this.target.x, this.floorY - 4, color, locked ? 1 : 4, locked ? 0 : 4, locked ? 2 : 1);
+    floorRing(ctx, this.target.x, this.floorY - 2, 24, 5, 1, color);
+  }
 
-    // Doublet and the medallion.
-    ctx.fillStyle = '#1c1420';
-    ctx.fillRect(-9, -22 + kneel, 18, 30);
-    ctx.fillStyle = '#c9a14a';
-    ctx.beginPath();
-    ctx.arc(0, -8 + kneel, 4.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, 0, -8 + kneel, 12, 'rgba(255,40,70,0.6)');
-    ctx.fillStyle = '#ff3a5a';
-    ctx.beginPath();
-    ctx.arc(0, -8 + kneel, 2.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // The high collar, flared behind the head.
-    ctx.fillStyle = '#3a0a18';
-    ctx.beginPath();
-    ctx.moveTo(-12, -22 + kneel);
-    ctx.lineTo(-20, -46 + kneel);
-    ctx.lineTo(-8, -32 + kneel);
-    ctx.closePath();
-    ctx.moveTo(12, -22 + kneel);
-    ctx.lineTo(20, -46 + kneel);
-    ctx.lineTo(8, -32 + kneel);
-    ctx.closePath();
-    ctx.fill();
-
-    // Face: pale, long, with a widow's peak and pointed ears.
-    const hy = -32 + kneel;
-    ctx.fillStyle = '#e6dbe0';
-    ctx.beginPath();
-    ctx.moveTo(-7, hy - 8);
-    ctx.quadraticCurveTo(0, hy - 12, 7, hy - 8);
-    ctx.quadraticCurveTo(8, hy + 4, 0, hy + 10);
-    ctx.quadraticCurveTo(-8, hy + 4, -7, hy - 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#cdbfc6';
-    ctx.beginPath();
-    ctx.moveTo(-7, hy - 3);
-    ctx.lineTo(-13, hy - 10);
-    ctx.lineTo(-6, hy + 1);
-    ctx.closePath();
-    ctx.moveTo(7, hy - 3);
-    ctx.lineTo(13, hy - 10);
-    ctx.lineTo(6, hy + 1);
-    ctx.closePath();
-    ctx.fill();
-    // Hair, swept back to a peak.
-    ctx.fillStyle = '#16101a';
-    ctx.beginPath();
-    ctx.moveTo(-8, hy - 6);
-    ctx.quadraticCurveTo(0, hy - 16, 8, hy - 6);
-    ctx.lineTo(3, hy - 7);
-    ctx.lineTo(0, hy - 3);
-    ctx.lineTo(-3, hy - 7);
-    ctx.closePath();
-    ctx.fill();
-    // Eyes and fangs.
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    const e = this.eyes * (this.state === 'diveWind' ? 1.4 : 1);
-    glow(ctx, 2, hy - 1, 12, `rgba(255,40,70,${(0.6 * e).toFixed(3)})`);
-    ctx.fillStyle = `rgba(255,${this.state === 'diveWind' ? 200 : 90},110,${Math.min(1, 0.9 * e).toFixed(3)})`;
-    ctx.fillRect(-4.5, hy - 2, 3.4, 1.8);
-    ctx.fillRect(1.8, hy - 2, 3.4, 1.8);
-    ctx.restore();
-    ctx.fillStyle = '#7a2030';
-    ctx.fillRect(-2.5, hy + 4, 5, 1.2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-2.2, hy + 5, 1.2, 2.2);
-    ctx.fillRect(1.1, hy + 5, 1.2, 2.2);
-
-    // Hands: clawed, out from the cape, raised to throw.
-    const raise = this.state === 'slashWind' ? -14 : this.state === 'swarmWind' ? -18 : 0;
-    ctx.fillStyle = '#d8ccd2';
-    ctx.beginPath();
-    ctx.ellipse(12, -4 + raise + kneel, 3.4, 4.5, 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#d8ccd2';
-    ctx.lineWidth = 1;
+  /** Three stars turning over his head while he is down. */
+  private drawStars(ctx: CanvasRenderingContext2D): void {
     for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(13 + i, -7 + raise + kneel);
-      ctx.lineTo(17 + i * 1.5, -12 + raise + kneel - i);
-      ctx.stroke();
-    }
-    if (this.state === 'slashWind') {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 16, -14 + kneel, 22, 'rgba(255,30,60,0.7)');
-      ctx.restore();
-    }
-    // Stunned: little dizzy sparks over him.
-    if (this.state === 'stunned') {
-      ctx.fillStyle = '#ffd0dc';
-      for (let i = 0; i < 3; i++) {
-        const a = this.anim * 4 + i * 2.1;
-        ctx.fillRect(Math.cos(a) * 14 - 1.5, hy - 20 + Math.sin(a) * 4, 3, 3);
-      }
+      const a = this.anim * 4 + i * 2.1;
+      STARS.draw(ctx, 's', this.cx + Math.cos(a) * 19, this.cy - 54 + Math.sin(a) * 5, 1, 1);
     }
   }
 }
+
+/** Above this his flash is a white silhouette (two frames of a blow); below it, nothing. */
+const HIT_WHITE = 0.8;
+const FLY: readonly BodyFrame[] = ['fly0', 'fly1', 'fly2', 'fly3'];
+const DIE: readonly WholeFrame[] = ['die0', 'die1', 'die2', 'die3'];
