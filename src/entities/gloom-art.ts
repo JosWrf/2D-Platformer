@@ -216,13 +216,8 @@ function buildBody(s: BodySpec): Part {
         const nx = (x + 0.5 - cx) / r;
         const ny = (y + 0.5 - cy) / r;
         // Where its edge lies over a lump behind it, a crease: each lump reads as its own.
-        const edge = [
-          [x + 1, y],
-          [x - 1, y],
-          [x, y + 1],
-          [x, y - 1],
-        ].some(([ax, ay]) => !inside(ax, ay) && under(ax, ay));
-        lump.push([x, y, edge && ny > 0.25 ? 'S' : lumpTone(nx, ny)]);
+        const edge = ny > 0.25 && ((!inside(x + 1, y) && under(x + 1, y)) || (!inside(x - 1, y) && under(x - 1, y)) || (!inside(x, y + 1) && under(x, y + 1)));
+        lump.push([x, y, edge ? 'S' : lumpTone(nx, ny)]);
       }
     }
     for (const [x, y, c] of lump) set(x, y, c);
@@ -713,6 +708,46 @@ export function headSprite(step: number, len: number, mouth: number, flesh: bool
     heads.set(k, sprite);
   }
   return { sprite, part };
+}
+
+/* ------------------------------------------------------------- ahead */
+
+/**
+ * What he is mostly seen as, made ahead of need a little at a time while he
+ * sleeps and wakes, so that no frame of the fight stops to lay out a body:
+ * the churn of his drifting, seeking, eating, swiping, lying blinded, rising
+ * and slamming, and his head at the angles those hold it at.
+ */
+const ahead: (() => void)[] = [];
+let planned = false;
+
+function plan(): void {
+  const poses: [number, number, number, Veil, boolean, PaintName[]][] = [
+    [1, 1, 0, 'hang', false, ['smoke']],
+    [1, 1, 0, 'floor', false, ['smoke']],
+    [1, 1, 3.5, 'hang', false, ['smoke']],
+    [1, 1, 7, 'floor', true, ['fleshEat', 'flesh']],
+    [1, 1, 3.5, 'floor', true, ['flesh']],
+    [1.25, 0.625, 0, 'floor', true, ['flesh']],
+    [0.875, 1.125, 0, 'pulled', false, ['smoke']],
+    [1.25, 0.75, 0, 'floor', false, ['smoke']],
+  ];
+  for (const [sx, sy, lean, veil, flesh, paints] of poses) {
+    for (let k = 0; k < CHURN; k++) for (const paint of paints) ahead.push(() => void bodySprite({ sx, sy, lean, k, veil, flesh, gone: 0 }, paint));
+  }
+  for (const step of [1, 0, 2, 15, 3]) for (const mouth of [5, 9, 13]) ahead.push(() => void headSprite(step, HEAD_LENS[1], mouth, false, 'smoke'));
+  for (const step of [5, 4, 3]) for (const mouth of [13, 17]) ahead.push(() => void headSprite(step, HEAD_LENS[0], mouth, true, 'fleshEat'));
+  for (const step of [2, 3]) for (const mouth of [9, 13]) ahead.push(() => void headSprite(step, HEAD_LENS[1], mouth, true, 'flesh'));
+}
+
+/** Makes what is still to be made ahead, for up to `ms` milliseconds: called once a tick. */
+export function prepare(ms: number): void {
+  if (!planned) {
+    planned = true;
+    plan();
+  }
+  const t0 = performance.now();
+  while (ahead.length > 0 && performance.now() - t0 < ms) ahead.shift()?.();
 }
 
 /** For previews. */

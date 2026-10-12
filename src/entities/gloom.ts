@@ -28,6 +28,7 @@ import {
   headSprite,
   lightRing,
   orbSprite,
+  prepare,
   ringPeriod,
   swipeSprite,
   tone,
@@ -569,6 +570,8 @@ export class Gloom extends Enemy {
 
   override update(dt: number, world: World): void {
     this.updateCommon(dt);
+    // His frames, made ahead of need a little at a time - see prepare.
+    prepare(2);
     const p = world.player;
     if (this.arenaRight === 0) this.setUp(world);
     this.hintTimer = Math.max(0, this.hintTimer - dt);

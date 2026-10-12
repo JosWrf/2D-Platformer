@@ -909,6 +909,39 @@ export function forget(prefix: string): void {
   for (const k of [...sprites.keys()]) if (k.startsWith(prefix)) sprites.delete(k);
 }
 
+/* ------------------------------------------------------------- ahead */
+
+/**
+ * His frames made ahead of need, a little at a time while he sleeps on the
+ * wall and wakes, so that no frame of the fight stops to lay one out: every
+ * pose upright in stone and in flesh, his second half's too, and the poses he
+ * can be frozen in mid-air at the tilts of his fall.
+ */
+const ahead: (() => void)[] = [];
+let planned = false;
+
+function plan(): void {
+  const make = (name: FrameName, tilt: number, broken: boolean, paints: PaintName[]): void => {
+    ahead.push(() => void frameOf(name, tilt, broken));
+    for (const paint of paints) ahead.push(() => void spriteOf(`${name}|${tilt}|${broken ? 1 : 0}`, frameOf(name, tilt, broken).grid, paint));
+  };
+  const names = Object.keys(SPECS) as FrameName[];
+  for (const name of names) make(name, 0, false, ['stone', 'flesh']);
+  for (const name of names) make(name, 0, true, ['stone', 'flesh2']);
+  const air: FrameName[] = ['fly0', 'fly1', 'fly2', 'fly3', 'dive0', 'dive1', 'dive2', 'glide0', 'glide1'];
+  for (const tilt of [1, 2, 3]) for (const name of air) make(name, tilt, false, ['stone']);
+}
+
+/** Makes what is still to be made ahead, for up to `ms` milliseconds: called once a tick. */
+export function prepare(ms: number): void {
+  if (!planned) {
+    planned = true;
+    plan();
+  }
+  const t0 = performance.now();
+  while (ahead.length > 0 && performance.now() - t0 < ms) ahead.shift()?.();
+}
+
 /** For previews: a paint's key, and the names of the poses. */
 export function previewKey(paint: PaintName = 'stone'): Record<string, string> {
   return { ...keyOf(paint) };

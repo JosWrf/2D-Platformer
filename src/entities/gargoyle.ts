@@ -17,6 +17,7 @@ import {
   frameOf,
   keyOf,
   overlay,
+  prepare,
   shoulderOf,
   spriteOf,
   type CrackLevel,
@@ -529,6 +530,8 @@ export class Gargoyle extends Enemy {
 
   override update(dt: number, world: World): void {
     this.updateCommon(dt);
+    // His frames, made ahead of need a little at a time - see prepare.
+    prepare(2);
     const p = world.player;
     if (this.arenaRight === 0) {
       const arena = world.level.arenaAt(this.cx);
