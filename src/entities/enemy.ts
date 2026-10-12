@@ -374,17 +374,6 @@ export abstract class Enemy extends Body {
     if (!rectsOverlap(this.rect, p.rect)) return;
     p.hurt(this.contactDamage, sign(p.cx - this.cx) || 1, world);
   }
-
-  protected drawHpPips(ctx: CanvasRenderingContext2D): void {
-    if (this.hp >= this.maxHp || this.maxHp <= 1) return;
-    const w = this.w;
-    const x = this.x;
-    const y = this.y - 8;
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(x - 1, y - 1, w + 2, 4);
-    ctx.fillStyle = '#ff5773';
-    ctx.fillRect(x, y, (w * this.hp) / this.maxHp, 2);
-  }
 }
 
 /* ------------------------------------------------------------- the roster */
