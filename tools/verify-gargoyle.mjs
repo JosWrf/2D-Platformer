@@ -169,7 +169,7 @@ results.main = await page.evaluate(() => {
     const a = act(b) ?? {};
     const t0 = performance.now();
     h.frameFull(a);
-    times.push(performance.now() - t0);
+    if (f >= 10) times.push(performance.now() - t0); // not the first ten: right after the wake they build the renderer's caches, once
     h.lost();
   }
   times.sort((x, y) => x - y);

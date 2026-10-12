@@ -126,7 +126,9 @@ results.main = await page.evaluate(() => {
   for (let f = 0; f < 60 * 15; f++) {
     boss.hp = boss.maxHp;
     const dx = boss.me.x - p.cx;
-    times.push(h.full({ attack: f % 20 < 3, right: dx > 90, left: dx < -90 }));
+    const ms = h.full({ attack: f % 20 < 3, right: dx > 90, left: dx < -90 });
+    // Not the first ten: right after the wake they build what the renderer keeps, once.
+    if (f >= 10) times.push(ms);
     h.keep();
     trickWatch();
   }

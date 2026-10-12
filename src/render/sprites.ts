@@ -135,6 +135,9 @@ export function shadow(
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
+  // Under whatever is already on the layer, never over it: laid over another
+  // actor's feet it made a colour between two of the palette's.
+  ctx.globalCompositeOperation = 'destination-over';
   ctx.fillStyle = `rgba(${SHADOW_RGB},${core.toFixed(3)})`;
   ctx.fillRect((col - inner) * unit, row * unit, (inner * 2 + 1) * unit, unit);
   if (half > inner) {

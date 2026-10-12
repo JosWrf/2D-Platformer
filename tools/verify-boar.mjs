@@ -149,7 +149,7 @@ async function stage() {
         const dx = boss ? boss.cx - g.player.cx : 0;
         const t0 = performance.now();
         h.tick({ attack: f % 20 < 3, right: dx > 90, left: dx < -90 });
-        times.push(performance.now() - t0);
+        if (f >= 10) times.push(performance.now() - t0); // not the first ten: right after the wake they build the renderer's caches, once
         h.watchHp();
       }
       times.sort((a, b) => a - b);

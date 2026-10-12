@@ -154,7 +154,7 @@ results.main = await page.evaluate(() => {
     const dx = b.cx - p.cx;
     const t0 = performance.now();
     G.step({ attack: f % 20 < 3, right: dx > 90, left: dx < -90 });
-    times.push(performance.now() - t0);
+    if (f >= 10) times.push(performance.now() - t0); // not the first ten: right after the wake they build the renderer's caches, once
     h.watchHp(b);
   }
   times.sort((x, y) => x - y);

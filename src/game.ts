@@ -65,8 +65,13 @@ const NO_INPUT = new Input();
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
-/** The outline round everything the hero reads: a deep violet-black, not black. */
-const OUTLINE_ABGR = abgrOf('#120c24');
+/**
+ * The outline round everything the hero reads: a deep violet-black, not
+ * black - the palette's own darkest colour, exactly. One between two of the
+ * palette's came out of the palette pass as a checker of both along every
+ * outline.
+ */
+const OUTLINE_ABGR = abgrOf('#0e071b');
 /**
  * Where the title's camera stands, from where Burg Nachtfall begins, in
  * logical pixels: far enough in that its backdrop is the castle's alone, not
