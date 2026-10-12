@@ -1,6 +1,8 @@
 import { Camera } from '../core/camera';
+import type { Level } from '../world/level';
+import { TILE, Tile } from '../world/tiles';
 import { type LightField, PaletteMap } from './palettemap';
-import { ART } from './pixel';
+import { ART, ART_H, ART_W } from './pixel';
 
 /** A single glowing thing in the world. */
 export interface Light {
@@ -47,6 +49,15 @@ const HOLE_BANDS: readonly (readonly [number, number])[] = [
 ];
 
 /**
+ * How far a light reaches into solid ground, in art pixels: under an open
+ * top, and in from an open side or underside. A light lights the faces the
+ * ground turns to it - not a dome of earth round itself, as if the ground
+ * were glass.
+ */
+const TOP_FACE = 6;
+const SIDE_FACE = 3;
+
+/**
  * Two-part lighting. The world is drawn as usual, then a sheet of darkness is
  * laid over it with holes burned where the lights are; and where the lights
  * fall, the palette pass (render/palettemap.ts) lifts what they light one or
@@ -67,6 +78,8 @@ export class LightPass {
   private readonly dark: Uint8Array;
   /** Where the lights fall this frame, for the palette pass. */
   private readonly lit: LightField;
+  /** Which art pixels of the frame lie deep inside the ground, out of every light's reach (see markDeep). */
+  private readonly deep = new Uint8Array(ART_W * ART_H);
 
   constructor(viewW: number, viewH: number) {
     this.w = Math.ceil(viewW / MASK);
@@ -96,6 +109,7 @@ export class LightPass {
     ambientTint: string,
     palette: PaletteMap,
     ground: Uint8Array,
+    level: Level,
   ): void {
     const { w, h, dark } = this;
     const camX = camera.renderX;
@@ -125,7 +139,44 @@ export class LightPass {
       }
     }
     const strength = Math.min(MAX_DARK, ambient * DARK_PER_ZONE);
-    palette.shade(image, Math.round(camX / ART), Math.round(camY / ART), dark, w, h, palette.darkness(shadeOf(ambientTint), strength), ground);
+    const ox = Math.round(camX / ART);
+    const oy = Math.round(camY / ART);
+    this.markDeep(level, ox, oy);
+    palette.shade(image, ox, oy, dark, w, h, palette.darkness(shadeOf(ambientTint), strength), ground, this.deep);
+  }
+
+  /**
+   * Marks the art pixels of the frame that lie deep inside the ground: in a
+   * tile of solid ground, more than TOP_FACE pixels under an open top and
+   * more than SIDE_FACE in from an open side or underside. Worked out a tile
+   * at a time from the level, with the view at (ox, oy) in art pixels.
+   */
+  private markDeep(level: Level, ox: number, oy: number): void {
+    const deep = this.deep;
+    deep.fill(0);
+    const T = TILE / ART;
+    const ground = (tx: number, ty: number): boolean => {
+      const t = level.tileAt(tx, ty);
+      return t === Tile.Solid || t === Tile.Earth;
+    };
+    const tx0 = Math.floor(ox / T);
+    const tx1 = Math.floor((ox + ART_W - 1) / T);
+    const ty0 = Math.floor(oy / T);
+    const ty1 = Math.floor((oy + ART_H - 1) / T);
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!ground(tx, ty)) continue;
+        const top = ground(tx, ty - 1) ? 0 : TOP_FACE + 1;
+        const bottom = ground(tx, ty + 1) ? T : T - SIDE_FACE;
+        const left = ground(tx - 1, ty) ? 0 : SIDE_FACE;
+        const right = ground(tx + 1, ty) ? T : T - SIDE_FACE;
+        const x0 = Math.max(0, tx * T - ox + left);
+        const x1 = Math.min(ART_W, tx * T - ox + right);
+        const y0 = Math.max(0, ty * T - oy + top);
+        const y1 = Math.min(ART_H, ty * T - oy + bottom);
+        for (let y = y0; y < y1; y++) if (x1 > x0) deep.fill(1, y * ART_W + x0, y * ART_W + x1);
+      }
+    }
   }
 
   /**

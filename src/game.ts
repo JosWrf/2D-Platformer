@@ -1688,7 +1688,7 @@ export class Game implements World {
     this.paletteMap ??= new PaletteMap();
     g.setTransform(1, 0, 0, 1, 0, 0);
     const groundImage = g.getImageData(0, 0, ART_W, ART_H);
-    this.lightPass.shade(groundImage, this.camera, lights, darkness, tint, this.paletteMap, this.groundCover);
+    this.lightPass.shade(groundImage, this.camera, lights, darkness, tint, this.paletteMap, this.groundCover, this.level);
     g.putImageData(groundImage, 0, 0);
     a.save();
     a.setTransform(1, 0, 0, 1, 0, 0);

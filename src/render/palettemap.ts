@@ -276,6 +276,7 @@ export class PaletteMap {
   private buildSteps(candidates: readonly number[]): Uint8Array {
     const n = this.n;
     const out = new Uint8Array(FAMILIES * 3 * n);
+    const earth = RAMP.earth.map((hex) => HEX.indexOf(hex)).filter((k) => k >= 0);
     for (let f = 0; f < FAMILIES; f++) {
       for (let band = 0; band < 3; band++) {
         for (let i = 0; i < n; i++) {
@@ -285,10 +286,24 @@ export class PaletteMap {
             else {
               // Mostly the colour's own hue, a little of the light's: a torch
               // warms a blue wall, it does not turn it grey. And it keeps its
-              // colour: a step up may not land on a much greyer one.
-              const pull = band === 1 ? 0.12 : 0.2;
+              // colour: a step up may not land on a much greyer one. A colour
+              // with next to none of its own - grey stone - takes the light's:
+              // a torch on grey stone warms it to rust, not to a paler grey.
               const chroma = Math.hypot(this.A[i], this.B[i]);
-              const reach = Math.max(chroma, 22);
+              const neutral = chroma < 12;
+              if (neutral && f === Family.Warm) {
+                // The palette has no warm colour as grey as stone, and a
+                // nearest colour stays grey: warm light puts grey on the earth
+                // ramp at its own lightness instead, and a step up it in the
+                // middle of the light - stone by a torch is rust, not paler.
+                const w = this.warmGrey(i, earth, band);
+                if (w >= 0) {
+                  out[(f * 3 + band) * n + i] = w;
+                  continue;
+                }
+              }
+              const pull = neutral ? (band === 1 ? 0.45 : 0.6) : band === 1 ? 0.12 : 0.2;
+              const reach = Math.max(chroma, neutral ? 26 : 22);
               const h = (FAMILY_HUE[f] * Math.PI) / 180;
               const ta = this.A[i] * (1 - pull) + Math.cos(h) * reach * pull;
               const tb = this.B[i] * (1 - pull) + Math.sin(h) * reach * pull;
@@ -312,6 +327,26 @@ export class PaletteMap {
       }
     }
     return out;
+  }
+
+  /**
+   * A grey in a warm light: the colour of the earth ramp nearest its own
+   * lightness (a little over it, never darker), and the band-th step from
+   * there. -1 if the grey is lighter than the whole ramp.
+   */
+  private warmGrey(i: number, earth: readonly number[], band: number): number {
+    let at = -1;
+    let bestD = Infinity;
+    for (let q = 0; q < earth.length; q++) {
+      const l = this.L[earth[q]];
+      if (l < this.L[i] - 2) continue;
+      const d = Math.abs(l - (this.L[i] + 4));
+      if (d < bestD) {
+        bestD = d;
+        at = q;
+      }
+    }
+    return at < 0 ? -1 : earth[Math.min(earth.length - 1, at + band - 1)];
   }
 
   /**
@@ -367,6 +402,7 @@ export class PaletteMap {
     fh: number,
     table: Uint8Array,
     ground: Uint8Array,
+    deep: Uint8Array | null = null,
   ): void {
     const w = image.width;
     const h = image.height;
@@ -391,6 +427,13 @@ export class PaletteMap {
           idx = exactAt[box];
           if (idx >= 254) idx = this.exactSlow.get(c & 0xffffff) ?? near[box];
         } else idx = near[box];
+        // Deep inside the ground no light reaches: the zone's full dark, and
+        // marked so that the palette pass does not light it either.
+        if (deep !== null && deep[i] !== 0) {
+          px[i] = abgr[table[3 * n + idx]];
+          ground[i] = 2;
+          continue;
+        }
         const level = (field[fy + (x >> 1)] * 3 + 128 + DARK_SEAM[row + ((x + ox) & 3)]) >> 8;
         px[i] = abgr[table[(level > 3 ? 3 : level < 0 ? 0 : level) * n + idx]];
         ground[i] = 1;
@@ -520,7 +563,7 @@ export class PaletteMap {
           const lvl = level[box];
           idx = lvl !== 0 && RANK[row + ((x + ox) & 3)] < lvl * 4 ? mix[box] : near[box];
         }
-        if (lv !== null && lit !== null && lit[i] !== 0 && (actors === null || actors[i] === 0)) {
+        if (lv !== null && lit !== null && lit[i] === 1 && (actors === null || actors[i] === 0)) {
           const m = ly + (x >> 1);
           const s = lv[m];
           if (s !== 0) {
