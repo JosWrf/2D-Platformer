@@ -1,8 +1,29 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { ART, PixelSprite, snap } from '../render/pixel';
+import type { Grid } from '../render/sheet';
+import { shadow } from '../render/sprites';
 import type { World } from '../world/context';
+import { runLine } from './boss-pixels';
 import { Enemy, type GlowLight } from './enemy';
+import {
+  CHIPS,
+  SWIPE_TRAIL,
+  TRAIL_KEY,
+  crackGrid,
+  crumbleOf,
+  forget,
+  frameOf,
+  keyOf,
+  overlay,
+  shoulderOf,
+  spriteOf,
+  type CrackLevel,
+  type Frame,
+  type FrameName,
+  type PaintName,
+} from './gargoyle-art';
 import type { Player } from './player';
 import { Projectile } from './projectile';
 
@@ -102,15 +123,13 @@ const TITLE_TIME = 3.2;
 /** Where his upper body pivots when he rears, in his own space (feet at 0, 0). */
 const HIP = { x: -9, y: -18 };
 const REAR_TILT = 0.62;
-const SHOULDER = { x: 10, y: -36 };
-const WING_ROOT = { x: -1, y: -40 };
 const HEAD = { x: 20, y: -47 };
-/** A waterspout is mostly face: the head is drawn a size up from the body. */
+/** A waterspout is mostly face: the head is a size up from the body. */
 const HEAD_SCALE = 1.15;
-/** The spout's lip, in the head's own space. */
+/** The spout's lip, in the head's own space: where the water leaves him. */
 const MOUTH = { x: 14 * HEAD_SCALE, y: 3 * HEAD_SCALE };
-/** The eye, under the brow, in the head's own space. */
-const EYE = { x: 6 * HEAD_SCALE, y: -2.6 * HEAD_SCALE };
+/** The eye, in the head's own space, as his frames draw it (gargoyle-art.ts): where its light sits. */
+const EYE = { x: 9.8, y: -4.6 };
 
 type GargoyleState =
   | 'dormant'
@@ -180,47 +199,6 @@ interface Chip {
   a: number;
   shade: number;
 }
-
-type RGB = [number, number, number];
-const hex = (h: string): RGB => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-
-/**
- * His two bodies. Stone is the grey of the battlements under the moon - pale,
- * cold and dull; flesh is the same shape gone dark slate, so the lit amber
- * eyes are the brightest thing on him. The difference has to read from across
- * the arena in a single frame, because the whole fight is a question of which
- * of the two he is.
- */
-const STONE = {
-  hi: hex('#b6bfcb'),
-  base: hex('#8e98a6'),
-  mid: hex('#77818f'),
-  shade: hex('#5b6471'),
-  deep: hex('#3e4550'),
-  membrane: hex('#808a97'),
-  membraneDeep: hex('#5d6673'),
-  claw: hex('#d6dae0'),
-  mouth: hex('#2c3139'),
-};
-/*
- * Darker than it looks it should be: the game lays a cool light over every
- * monster's middle, and his own eyes add amber on top. Drawn at the slate it
- * is meant to be, flesh came out of the light pass mid-grey on the
- * screenshots - most of the way to the stone it has to be told apart from.
- */
-const FLESH = {
-  hi: hex('#3e4757'),
-  base: hex('#252b37'),
-  mid: hex('#1e232d'),
-  shade: hex('#14181f'),
-  deep: hex('#08090d'),
-  membrane: hex('#2a2433'),
-  membraneDeep: hex('#130f18'),
-  claw: hex('#e6dac2'),
-  mouth: hex('#0a0507'),
-};
-const WASH = hex('#e4e8ee');
-type Tone = keyof typeof STONE;
 
 /**
  * Grauwacht, der Wasserspeier - the gargoyle of the castle battlements, a
@@ -325,10 +303,11 @@ export class Gargoyle extends Enemy {
   private crumble = 0;
   /** A puff of breath on the cold air, fading. */
   private breath = 0;
-  /** The colours of the moment and the gradients made of them - see tone. */
-  private readonly palette = {} as Record<Tone, string>;
-  private paletteKey = -1;
-  private readonly gradients = new Map<string, CanvasGradient>();
+  /** Which set of cracks he wears, and their cells on each frame they have been drawn on - see draw. */
+  private crackSerial = 0;
+  private readonly crackGrids = new Map<string, Grid>();
+  /** The heaps a dying statue comes apart into, step by step. */
+  private readonly crumbled = new Map<string, Frame>();
   /** Asleep on the wall as every other gargoyle is: wings folded, head bowed. */
   private readonly pose: Pose = {
     clock: 0,
@@ -1385,6 +1364,11 @@ export class Gargoyle extends Enemy {
 
   /** Cracks across the statue, from the head and the shoulders down. */
   private makeCracks(n: number): void {
+    // The last set's sprites are done with.
+    forget(`${this.crackId()}|`);
+    this.crackSerial++;
+    this.crackGrids.clear();
+    this.crumbled.clear();
     this.cracks = [];
     const starts: [number, number][] = [
       [20, -54],
@@ -1462,9 +1446,11 @@ export class Gargoyle extends Enemy {
     return this.toWorld(mx, my, true);
   }
 
+  /** His eye in the world, where it is drawn. */
   private headWorld(): { x: number; y: number } {
     const h = this.headLocal();
-    return this.toWorld(h.x + 4, h.y - 2, true);
+    const a = this.pose.head;
+    return this.toWorld(h.x + EYE.x * Math.cos(a) - EYE.y * Math.sin(a), h.y + EYE.x * Math.sin(a) + EYE.y * Math.cos(a), true);
   }
 
   override lights(): GlowLight[] {
@@ -1477,8 +1463,10 @@ export class Gargoyle extends Enemy {
     out.push({ x: this.cx, y: this.bottom - 32, radius: 150, rgb: '190,202,226', strength: 0.55 - 0.1 * k, tint: 0.12 - 0.09 * k });
     const head = this.headWorld();
     if (k > 0.05 && this.state !== 'dying') {
-      const hot = this.phaseTwo ? '255,130,60' : '255,176,72';
-      out.push({ x: head.x, y: head.y, radius: 30 + 34 * k, rgb: hot, strength: 0.3 + 0.4 * k, tint: 0.3 });
+      // Red eyes, hotter in his second half - and flaring in every wind-up.
+      const hot = this.phaseTwo ? '255,130,60' : '255,84,76';
+      const tell = this.state === 'diveWind' || this.state === 'clawWind' || this.state === 'glideWind' ? 1 : 0;
+      out.push({ x: head.x, y: head.y, radius: 30 + 34 * k + 18 * tell, rgb: hot, strength: 0.3 + 0.4 * k + 0.2 * tell, tint: 0.3 });
     }
     if (this.crackGlow > 0.02) {
       out.push({ x: this.cx, y: this.bottom - 28, radius: 130, rgb: '255,156,76', strength: 0.85 * this.crackGlow, tint: 0.4 });
@@ -1492,47 +1480,42 @@ export class Gargoyle extends Enemy {
 
   /* -------------------------------------------------------------- drawing */
 
-  /**
-   * His colours for this frame: stone to flesh, washed pale as he turns.
-   * Built once per step of the blend, not once per call - forty colour
-   * strings a frame for a statue that is not changing is waste, and so are
-   * the gradients made from them.
+  /*
+   * He is drawn from frames (gargoyle-art.ts): each a pose of his rig laid
+   * onto the art grid once, in a paint for each of his bodies. A frame is
+   * picked by which pose he is nearest to, so a statue keeps the frame he
+   * froze in - mid-step, mid-claw, mid-screech.
    */
-  private tone(name: Tone): string {
-    const kq = Math.round(this.warmth * 24);
-    // The hit flash is the same paling: folded in here instead of a canvas
-    // filter, which costs a layer the size of the view for every frame of it -
-    // measured, the slowest hundredth of the frames of a reader's fight were
-    // the flashed ones, at 17 ms where the others ran at 6 to 10.
-    const wq = Math.round(Math.max(this.wash, this.flash * 0.85) * 24);
-    const key = kq * 32 + wq;
-    if (key !== this.paletteKey) {
-      this.paletteKey = key;
-      this.gradients.clear();
-      const k = kq / 24;
-      const w = (wq / 24) * 0.65;
-      for (const n of Object.keys(STONE) as Tone[]) {
-        const s = STONE[n];
-        const f = FLESH[n];
-        const ch = (i: number): number => {
-          const v = s[i] + (f[i] - s[i]) * k;
-          return Math.round(v + (WASH[i] - v) * w);
-        };
-        this.palette[n] = `rgb(${ch(0)},${ch(1)},${ch(2)})`;
-      }
+
+  /** The frame of him his pose is nearest to. */
+  private frameName(): FrameName {
+    const P = this.pose;
+    if (P.fly > 0.5) {
+      if (P.glide > 0.5) return Math.sin(P.wing) >= 0 ? 'glide0' : 'glide1';
+      // The beat in four frames: level, up, level, down.
+      if (P.beat > 0.3) return FLAP[quarter(P.wing)];
+      return P.roll < 0.35 ? 'dive0' : P.roll < 0.65 ? 'dive1' : 'dive2';
     }
-    return this.palette[name];
+    if (P.glide > 0.4) return 'glideWind';
+    if (P.swipe > 0.6) return 'swipe';
+    if (P.swipe > 0.3 && P.rear < 0.3) return 'recover';
+    if (P.rear > 0.75) return 'rear';
+    if (P.rear > 0.3) return 'rearHalf';
+    if (P.spread > 0.9) return P.crouch > 0.45 ? 'screech' : 'roar';
+    if (P.crouch > 0.45) return 'land';
+    if (P.crouch > 0.18) return WALK[quarter(P.gait)];
+    return P.spread < 0.12 ? 'sleep' : 'perch';
   }
 
-  /** A gradient in his own space, made once for the colours he has now. */
-  private gradient(key: string, make: () => CanvasGradient): CanvasGradient {
-    this.tone('base');
-    let g = this.gradients.get(key);
-    if (!g) {
-      g = make();
-      this.gradients.set(key, g);
-    }
-    return g;
+  /** His paint: stone, warming, flesh - his eyes lit white in a wind-up - or the flash of a blow or of turning to stone. */
+  private paintName(): PaintName {
+    if (this.flash > 0.78) return 'flash';
+    if (this.wash > 0.45 || this.flash > 0.4) return 'wash';
+    if (this.warmth < 0.3) return this.state === 'gurgle' || this.state === 'spit' ? 'stoneWet' : 'stone';
+    if (this.warmth < 0.75) return 'warm';
+    const tell = this.state === 'diveWind' || this.state === 'clawWind' || this.state === 'glideWind';
+    if (this.phaseTwo) return tell ? 'flesh2Tell' : 'flesh2';
+    return tell ? 'fleshTell' : 'flesh';
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -1540,685 +1523,77 @@ export class Gargoyle extends Enemy {
     const air = Math.max(0, F - this.bottom);
     shadow(ctx, this.cx, F, 64 * clamp(1 - air / 380, 0.3, 1), 0.4 * clamp(1 - air / 420, 0.2, 1));
     this.drawChips(ctx, F);
-    if (this.state === 'gurgle' || this.state === 'spit') this.drawWater(ctx);
-    // No withHitFlash: the flash is in his colours - see tone.
-    ctx.save();
-    ctx.translate(this.cx, this.bottom);
-    ctx.rotate((this.pose.roll + this.tumble + this.slump * 0.12) * this.facing);
-    ctx.scale(this.facing, 1);
-    if (this.state === 'dying') {
-      // Settling into a heap as he goes.
-      ctx.globalAlpha = clamp(1.6 - this.crumble * 1.4, 0, 1);
-      ctx.scale(1 + this.crumble * 0.18, 1 - this.crumble * 0.45);
-    }
-    this.drawFigure(ctx);
-    ctx.restore();
-    if (this.warmth > 0.05 && this.state !== 'dying') this.drawEyes(ctx);
-  }
-
-  private drawFigure(ctx: CanvasRenderingContext2D): void {
-    const P = this.pose;
-    ctx.save();
-    ctx.scale(1 + P.crouch * 0.06, 1 - P.crouch * 0.16 - this.slump * 0.08);
-    this.upper(ctx, () => this.drawWing(ctx, true));
-    this.drawTail(ctx);
-    this.drawHindLeg(ctx, true);
-    this.upper(ctx, () => this.drawArm(ctx, true));
-    this.upper(ctx, () => this.drawTorso(ctx));
-    this.drawHindLeg(ctx, false);
-    this.upper(ctx, () => {
-      this.drawWing(ctx, false);
-      this.drawHead(ctx);
-      this.drawArm(ctx, false);
-      this.drawCracks(ctx);
-    });
-    ctx.restore();
-  }
-
-  /** What rears with his shoulders, rearing. */
-  private upper(ctx: CanvasRenderingContext2D, fn: () => void): void {
-    const rear = this.pose.rear;
-    if (rear <= 0) {
-      fn();
+    const name = this.frameName();
+    // Tipping as he falls, and settling as he lies broken.
+    const tilt = clamp(Math.round((this.tumble + this.slump * 0.12) / 0.12), 0, 3);
+    const id = `${name}|${tilt}|${this.phaseTwo ? 1 : 0}`;
+    const paint = this.paintName();
+    const level = crackLevel(this.crackGlow);
+    const facing: 1 | -1 = this.facing < 0 ? -1 : 1;
+    const frame = frameOf(name, tilt, this.phaseTwo);
+    const cracked = this.crackGlow > 0.02 && this.cracks.length > 0;
+    if (this.state === 'dying' && this.crumble > 0.2) {
+      // The statue comes apart in blocks, its cracks still glowing in them.
+      const step = this.crumble < 0.45 ? 1 : this.crumble < 0.7 ? 2 : 3;
+      const cid = `${this.crackId()}|${id}|${step}`;
+      let heap = this.crumbled.get(cid);
+      if (!heap) {
+        heap = crumbleOf(cracked ? overlay(frame, this.crackCells(id, frame)) : frame, step);
+        this.crumbled.set(cid, heap);
+      }
+      this.blit(ctx, spriteOf(cid, heap.grid, paint, level), heap, facing);
       return;
     }
-    ctx.save();
-    ctx.translate(HIP.x, HIP.y);
-    ctx.rotate(-rear * REAR_TILT);
-    ctx.translate(-HIP.x, -HIP.y);
-    fn();
-    ctx.restore();
-  }
-
-  /**
-   * A bat's wing on a gargoyle's back: folded, a tall stone hood over his
-   * shoulders; open, an arm bone and four fingers with the skin cut into
-   * scallops between them. The far one is drawn first and darker.
-   */
-  private drawWing(ctx: CanvasRenderingContext2D, far: boolean): void {
-    const P = this.pose;
-    const s = clamp(P.spread, 0, 1.25);
-    const o = Math.min(1, s);
-    const beat = P.beat * Math.sin(P.wing + (far ? 0.5 : 0));
-    ctx.save();
-    ctx.translate(WING_ROOT.x + (far ? 5 : 0), WING_ROOT.y - (far ? 2 : 0));
-    // Swung by the beat, and swept back flat for the glide.
-    ctx.rotate(beat * 0.55 - P.glide * 0.72 * (far ? 0.85 : 1));
-    // Folded, the wrist stands over his shoulders and the fingers hang down
-    // his back to the hip: a hood of stone. Open, they fan out behind him.
-    const reach = 28 + o * 8 + (s - o) * 14;
-    const armA = lerp(-1.68, -2.42, o) - (s - o) * 0.4;
-    const wrist = { x: Math.cos(armA) * reach, y: Math.sin(armA) * reach };
-    const folded = [-4.2, -4.25, -4.31, -4.41];
-    const open = [-1.95, -2.5, -2.98, -3.5];
-    const lenF = [21, 31, 41, 48];
-    const lenO = [40, 47, 43, 33];
-    const tips: [number, number][] = [];
-    for (let i = 0; i < 4; i++) {
-      const a = lerp(folded[i], open[i], o) - (s - o) * 0.25;
-      const len = lerp(lenF[i], lenO[i], o) * (1 + (s - o) * 0.4);
-      tips.push([wrist.x + Math.cos(a) * len, wrist.y + Math.sin(a) * len]);
+    const at = this.blit(ctx, spriteOf(id, frame.grid, paint), frame, facing);
+    if (cracked) this.blit(ctx, spriteOf(`${this.crackId()}|${id}`, this.crackCells(id, frame), paint, level), frame, facing);
+    const w = frame.grid[0].length;
+    const mx = Math.floor(frame.mouth[0]);
+    const my = Math.floor(frame.mouth[1]);
+    if (this.state === 'gurgle' || this.state === 'spit') this.drawWater(ctx, at, w, mx, my, facing, F);
+    if (this.state === 'claw') {
+      // The swipe's trail, round his shoulder.
+      const [sx, sy] = shoulderOf(frame);
+      const s = trailSprite();
+      const x = at.x + (facing > 0 ? sx : w - sx) * ART;
+      s.draw(ctx, x - (s.w / 2) * ART, at.y + sy * ART - (s.h / 2) * ART, facing);
     }
-    const back = { x: -14 + o * 2, y: 20 - o * 4 };
-    const scallop = (ax: number, ay: number, bx: number, by: number): void => {
-      const mx = (ax + bx) / 2;
-      const my = (ay + by) / 2;
-      ctx.quadraticCurveTo(mx + (wrist.x - mx) * 0.3, my + (wrist.y - my) * 0.3, bx, by);
-    };
-    ctx.fillStyle = this.tone(far ? 'membraneDeep' : 'membrane');
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(wrist.x, wrist.y);
-    ctx.lineTo(tips[0][0], tips[0][1]);
-    for (let i = 1; i < 4; i++) scallop(tips[i - 1][0], tips[i - 1][1], tips[i][0], tips[i][1]);
-    scallop(tips[3][0], tips[3][1], back.x, back.y);
-    ctx.closePath();
-    ctx.fill();
-    if (far) ctx.globalAlpha = 0.75;
-    // The moon along the leading edge and the scallops.
-    ctx.strokeStyle = this.warmth > 0.5 ? 'rgba(160,178,214,0.35)' : 'rgba(226,232,242,0.42)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(1, -1);
-    ctx.lineTo(wrist.x, wrist.y - 1);
-    ctx.lineTo(tips[0][0], tips[0][1]);
-    ctx.stroke();
-    // Bones: the arm thick, the fingers fine - ridges in the skin, not sticks.
-    ctx.strokeStyle = this.tone(far ? 'deep' : 'mid');
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 3.6;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(wrist.x, wrist.y);
-    ctx.stroke();
-    ctx.strokeStyle = this.tone(far ? 'deep' : 'shade');
-    ctx.globalAlpha = far ? 0.6 : 0.75;
-    ctx.lineWidth = 1.5;
-    for (const [tx, ty] of tips) {
-      ctx.beginPath();
-      ctx.moveTo(wrist.x, wrist.y);
-      ctx.quadraticCurveTo((wrist.x + tx) / 2 + 2, (wrist.y + ty) / 2 - 2, tx, ty);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    // The thumb claw at the wrist.
-    ctx.fillStyle = this.tone('claw');
-    ctx.beginPath();
-    ctx.moveTo(wrist.x - 1, wrist.y - 1);
-    ctx.lineTo(wrist.x + 5, wrist.y - 6);
-    ctx.lineTo(wrist.x + 2, wrist.y + 1);
-    ctx.closePath();
-    ctx.fill();
-    if (!far) {
-      // Moss where the rain sits, on the top of the folded wing.
-      ctx.fillStyle = this.warmth > 0.5 ? 'rgba(64,86,58,0.6)' : 'rgba(104,128,88,0.62)';
-      ctx.beginPath();
-      ctx.ellipse(wrist.x * 0.7, wrist.y * 0.7 + 1, 4.5, 2, armA, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /** The tail, curled on the stone behind him, and a spade at the end of it. */
-  private drawTail(ctx: CanvasRenderingContext2D): void {
-    const P = this.pose;
-    const sway = this.warmth > 0.5 ? Math.sin(P.clock * 2.4) * 3 : 0;
-    const lift = P.fly * 12;
-    ctx.strokeStyle = this.tone('shade');
-    ctx.lineCap = 'round';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-18, -12);
-    ctx.bezierCurveTo(-28, -8 - lift * 0.4, -34, -2 + sway - lift, -42, -4 + sway * 0.5 - lift);
-    ctx.stroke();
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(-41, -4 + sway * 0.5 - lift);
-    ctx.quadraticCurveTo(-44, -6 - lift, -45, -9 - lift);
-    ctx.stroke();
-    ctx.fillStyle = this.tone('mid');
-    ctx.beginPath();
-    const tx = -46;
-    const ty = -11 - lift;
-    ctx.moveTo(tx - 4, ty + 2);
-    ctx.lineTo(tx, ty - 5);
-    ctx.lineTo(tx + 4, ty + 2);
-    ctx.lineTo(tx, ty + 1);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  /** A haunch, a shin folded under it, and a clawed foot on the stone. */
-  private drawHindLeg(ctx: CanvasRenderingContext2D, far: boolean): void {
-    const P = this.pose;
-    const swing = this.state === 'stalk' || P.gait > 0 ? Math.sin(P.gait + (far ? Math.PI : 0)) * 0.22 * (1 - P.fly) : 0;
-    ctx.save();
-    ctx.translate(far ? 4 : 0, far ? -1 : 0);
-    ctx.translate(HIP.x, HIP.y);
-    // In flight the legs trail back under the tail.
-    ctx.rotate(P.fly * 0.95 + swing - P.rear * 0.12);
-    ctx.translate(-HIP.x, -HIP.y);
-    ctx.fillStyle = this.gradient(far ? 'thighFar' : 'thigh', () => {
-      const g = ctx.createLinearGradient(0, -28, 0, -4);
-      g.addColorStop(0, this.tone(far ? 'mid' : 'hi'));
-      g.addColorStop(1, this.tone(far ? 'deep' : 'shade'));
-      return g;
-    });
-    ctx.beginPath();
-    // The haunch: heavy over the hip, coming to a knee in front.
-    ctx.moveTo(-21, -11);
-    ctx.bezierCurveTo(-24, -24, -11, -30, -2, -23);
-    ctx.quadraticCurveTo(4, -16, 0, -9);
-    ctx.quadraticCurveTo(-9, -4, -21, -11);
-    ctx.closePath();
-    ctx.fill();
-    // The moon along the top of it.
-    ctx.strokeStyle = this.warmth > 0.5 ? 'rgba(150,170,212,0.3)' : 'rgba(232,238,246,0.38)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-21, -15);
-    ctx.bezierCurveTo(-21, -25, -11, -29, -3, -23);
-    ctx.stroke();
-    // Shin and foot.
-    ctx.fillStyle = this.tone(far ? 'deep' : 'shade');
-    ctx.beginPath();
-    ctx.moveTo(-3, -12);
-    ctx.quadraticCurveTo(2, -6, -2, -2);
-    ctx.lineTo(-16, -1.5);
-    ctx.quadraticCurveTo(-19, -4, -15, -7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = this.tone(far ? 'mid' : 'base');
-    ctx.beginPath();
-    ctx.ellipse(-8, -2.2, 8.5, 2.6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Three talons over the edge of the stone.
-    ctx.fillStyle = this.tone('claw');
-    for (let i = 0; i < 3; i++) {
-      const bx = -2 + i * 1.6;
-      ctx.beginPath();
-      ctx.moveTo(bx - 1.6, -3.4 + i * 0.4);
-      ctx.quadraticCurveTo(bx + 3.5, -3.6 + i, bx + 3.2 + i * 0.4, 0.2);
-      ctx.lineTo(bx + 0.2, -1.2 + i * 0.3);
-      ctx.closePath();
-      ctx.fill();
-    }
-    if (!far) {
-      ctx.fillStyle = this.warmth > 0.5 ? 'rgba(64,86,58,0.55)' : 'rgba(104,128,88,0.6)';
-      ctx.beginPath();
-      ctx.ellipse(-12, -23.5, 5, 1.8, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /** The hunched back, the shoulders, a chest of stone plates. */
-  private drawTorso(ctx: CanvasRenderingContext2D): void {
-    const P = this.pose;
-    const breathe = this.warmth > 0.5 ? 1 + Math.sin(P.clock * 3) * 0.018 : 1;
-    ctx.save();
-    ctx.translate(-2, -28);
-    ctx.scale(breathe, breathe);
-    ctx.translate(2, 28);
-    ctx.fillStyle = this.gradient('torso', () => {
-      const g = ctx.createLinearGradient(0, -48, 0, -8);
-      g.addColorStop(0, this.tone('hi'));
-      g.addColorStop(0.45, this.tone('base'));
-      g.addColorStop(1, this.tone('shade'));
-      return g;
-    });
-    ctx.beginPath();
-    ctx.moveTo(-21, -12);
-    ctx.bezierCurveTo(-26, -25, -18, -38, -6, -44);
-    ctx.quadraticCurveTo(4, -49, 12, -43);
-    ctx.quadraticCurveTo(19, -36, 18, -24);
-    ctx.quadraticCurveTo(15, -12, 4, -9);
-    ctx.quadraticCurveTo(-8, -6, -21, -12);
-    ctx.closePath();
-    ctx.fill();
-    // Plates down the chest and belly, like courses of masonry.
-    ctx.strokeStyle = this.tone('shade');
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 4; i++) {
-      const y = -32 + i * 5.5;
-      ctx.beginPath();
-      ctx.moveTo(15.5 - i * 1.6, y);
-      ctx.quadraticCurveTo(11 - i * 2, y + 2.2, 6 - i * 2.4, y + 1.2);
-      ctx.stroke();
-    }
-    // The spine: a ridge of knuckles along the hunch.
-    ctx.fillStyle = this.tone('mid');
-    for (let i = 0; i < 6; i++) {
-      const t = i / 5;
-      const x = lerp(-20, 6, t);
-      const y = -14 - Math.sin(t * Math.PI * 0.9 + 0.25) * 31 - t * 2;
-      ctx.beginPath();
-      ctx.moveTo(x - 2.2, y + 1.5);
-      ctx.lineTo(x - 0.4, y - 3.4);
-      ctx.lineTo(x + 2.2, y + 1.2);
-      ctx.closePath();
-      ctx.fill();
-    }
-    // Moonlight along the back, so the line reads against the dark.
-    ctx.strokeStyle = this.warmth > 0.5 ? 'rgba(150,170,212,0.4)' : 'rgba(232,238,246,0.5)';
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.moveTo(-23, -20);
-    ctx.bezierCurveTo(-21, -33, -14, -40, -6, -44);
-    ctx.quadraticCurveTo(4, -49, 11, -44);
-    ctx.stroke();
-    // Weathering: pits and the old hairline cracks every statue has.
-    ctx.fillStyle = this.tone('shade');
-    for (const [x, y, r] of [
-      [-12, -30, 1.4],
-      [-4, -22, 1.1],
-      [-16, -20, 1],
-      [2, -36, 1.2],
-    ]) {
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.strokeStyle = this.tone('deep');
-    ctx.globalAlpha = 0.55;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(-14, -36);
-    ctx.lineTo(-11, -31);
-    ctx.lineTo(-12, -27);
-    ctx.moveTo(6, -40);
-    ctx.lineTo(8, -35);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    // Moss on the shoulders, lichen on the flank.
-    ctx.fillStyle = this.warmth > 0.5 ? 'rgba(64,86,58,0.6)' : 'rgba(104,128,88,0.62)';
-    ctx.beginPath();
-    ctx.ellipse(1, -45.5, 7.5, 2.6, -0.15, 0, Math.PI * 2);
-    ctx.ellipse(-13, -37.5, 4.5, 1.8, -0.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = this.warmth > 0.5 ? 'rgba(120,128,90,0.4)' : 'rgba(178,186,130,0.5)';
-    for (const [x, y] of [
-      [-8, -26],
-      [-5, -28],
-      [-9, -23],
-    ]) {
-      ctx.beginPath();
-      ctx.arc(x, y, 0.9, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  /** A foreleg: shoulder to elbow to a paw with three hooked claws. */
-  private drawArm(ctx: CanvasRenderingContext2D, far: boolean): void {
-    const P = this.pose;
-    const walk = Math.sin(P.gait + (far ? Math.PI : 0)) * 0.32 * (1 - P.fly) * (1 - P.rear);
-    let a1 = 1.15 + walk;
-    let a2 = 1.65 + walk * 0.6;
-    a1 = lerp(a1, -0.35, P.rear);
-    a2 = lerp(a2, -0.95, P.rear);
-    a1 = lerp(a1, 0.3, P.swipe);
-    a2 = lerp(a2, 0.85, P.swipe);
-    // In flight the claws reach for the hero: down the line of a dive, level
-    // in a glide.
-    const flyA1 = lerp(0.22, 0, P.glide);
-    const flyA2 = lerp(0.12, -0.15, P.glide);
-    a1 = lerp(a1, flyA1, P.fly);
-    a2 = lerp(a2, flyA2, P.fly);
-    if (far) {
-      a1 += 0.12;
-      a2 += 0.1;
-    }
-    const sx = SHOULDER.x - (far ? 4 : 0);
-    const sy = SHOULDER.y + (far ? 1 : 0);
-    const ex = sx + Math.cos(a1) * 15;
-    const ey = sy + Math.sin(a1) * 15;
-    const wx = ex + Math.cos(a2) * 18;
-    const wy = ey + Math.sin(a2) * 18;
-    // Upper arm heavy with muscle, forearm lean, both tapering to the joint.
-    this.limb(ctx, sx, sy, 5.2, ex, ey, 3.4, this.tone(far ? 'shade' : 'base'));
-    this.limb(ctx, ex, ey, 3.4, wx, wy, 2.4, this.tone(far ? 'deep' : 'mid'));
-    if (!far) {
-      ctx.strokeStyle = this.warmth > 0.5 ? 'rgba(150,170,212,0.28)' : 'rgba(232,238,246,0.34)';
-      ctx.lineWidth = 0.9;
-      ctx.beginPath();
-      ctx.moveTo(sx - Math.sin(a1) * 4.6, sy + Math.cos(a1) * -4.6);
-      ctx.lineTo(ex - Math.sin(a1) * 3, ey + Math.cos(a1) * -3);
-      ctx.stroke();
-    }
-    // The paw, and three claws hooked on in the direction of the forearm.
-    ctx.fillStyle = this.tone(far ? 'shade' : 'mid');
-    ctx.beginPath();
-    ctx.ellipse(wx, wy, 4.4, 3.4, a2, 0, Math.PI * 2);
-    ctx.fill();
-    const ux = Math.cos(a2);
-    const uy = Math.sin(a2);
-    const claw = 6.5 + P.rear * 2.5 + P.swipe * 2;
-    ctx.fillStyle = this.tone('claw');
-    for (let i = -1; i <= 1; i++) {
-      const bx = wx + ux * 2.5 - uy * i * 2.4;
-      const by = wy + uy * 2.5 + ux * i * 2.4;
-      const tx = bx + ux * claw - uy * i * 1.4;
-      const ty = by + uy * claw + ux * i * 1.4;
-      ctx.beginPath();
-      ctx.moveTo(bx - uy * 1.2, by + ux * 1.2);
-      ctx.quadraticCurveTo(bx + ux * claw * 0.7 + uy * 1.6, by + uy * claw * 0.7 - ux * 1.6, tx + ux * 0.6, ty + uy * 0.6);
-      ctx.lineTo(bx + uy * 1.2, by - ux * 1.2);
-      ctx.closePath();
-      ctx.fill();
-    }
-    if (this.state === 'claw' && !far) {
-      // The swipe's trail.
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,214,170,0.55)';
-      ctx.lineWidth = 2;
-      for (let i = -1; i <= 1; i++) {
-        ctx.beginPath();
-        ctx.arc(sx, sy, 30 + i * 4, -0.7, 0.9);
-        ctx.stroke();
-      }
-      ctx.restore();
+    if (this.breath > 0.2 && this.warmth > 0.75) {
+      // A breath on the cold air, out of the spout and rising.
+      const late = this.breath < 0.6;
+      this.cells(ctx, at, w, mx + (late ? 4 : 2), my - (late ? 3 : 1), late ? 3 : 2, late ? 2 : 1, facing, late ? RAMP.slate[5] : RAMP.slate[6]);
     }
   }
 
-  /** A tapered capsule from one joint to the next. */
-  private limb(ctx: CanvasRenderingContext2D, x1: number, y1: number, r1: number, x2: number, y2: number, r2: number, color: string): void {
-    const a = Math.atan2(y2 - y1, x2 - x1);
-    const nx = -Math.sin(a);
-    const ny = Math.cos(a);
+  /** Draws a frame of him with his feet on his feet; gives back where its top-left landed. */
+  private blit(ctx: CanvasRenderingContext2D, s: PixelSprite, f: Frame, facing: 1 | -1): { x: number; y: number } {
+    const x = snap(this.cx - (facing > 0 ? f.px : s.w - f.px) * ART);
+    const y = snap(this.bottom - f.py * ART);
+    s.draw(ctx, x, y, facing);
+    return { x, y };
+  }
+
+  /** A block of cells over a frame drawn at `at`, `w` cells wide: from (fx, fy) on, forwards and down. */
+  private cells(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, w: number, fx: number, fy: number, nw: number, nh: number, facing: 1 | -1, color: string): void {
     ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(x1 + nx * r1, y1 + ny * r1);
-    ctx.lineTo(x2 + nx * r2, y2 + ny * r2);
-    ctx.arc(x2, y2, r2, a + Math.PI / 2, a - Math.PI / 2, true);
-    ctx.lineTo(x1 - nx * r1, y1 - ny * r1);
-    ctx.arc(x1, y1, r1, a - Math.PI / 2, a + Math.PI / 2, true);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(at.x + (facing > 0 ? fx : w - fx - nw) * ART, at.y + fy * ART, nw * ART, nh * ART);
   }
 
-  /**
-   * The face of a waterspout: horns swept back, a heavy brow, and a mouth
-   * held open for the rain - with a channel cut along the lower jaw for the
-   * water to run out of.
-   */
-  private drawHead(ctx: CanvasRenderingContext2D): void {
-    const P = this.pose;
-    const h = this.headLocal();
-    ctx.save();
-    ctx.translate(h.x, h.y);
-    ctx.rotate(P.head);
-    ctx.scale(HEAD_SCALE, HEAD_SCALE);
-    // The neck, into the shoulders.
-    ctx.fillStyle = this.tone('base');
-    ctx.beginPath();
-    ctx.moveTo(-10, 2);
-    ctx.quadraticCurveTo(-9, -6, -3, -7);
-    ctx.lineTo(2, 6);
-    ctx.quadraticCurveTo(-4, 9, -12, 9);
-    ctx.closePath();
-    ctx.fill();
-
-    // The far horn, behind the skull.
-    this.horn(ctx, 3, -1, this.tone('shade'), false);
-    // The ear, swept back like a bat's, with a notch bitten out of it.
-    ctx.fillStyle = this.tone('mid');
-    ctx.beginPath();
-    ctx.moveTo(-5, -3);
-    ctx.lineTo(-19, -11);
-    ctx.lineTo(-15, -6.5);
-    ctx.lineTo(-17, -3.5);
-    ctx.lineTo(-9, -1);
-    ctx.lineTo(-5, 2);
-    ctx.closePath();
-    ctx.fill();
-
-    // The skull.
-    ctx.fillStyle = this.gradient('skull', () => {
-      const g = ctx.createLinearGradient(0, -9, 0, 6);
-      g.addColorStop(0, this.tone('hi'));
-      g.addColorStop(1, this.tone('base'));
-      return g;
-    });
-    ctx.beginPath();
-    ctx.ellipse(0, -1, 9.5, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // The open mouth: dark inside, and the jaw hanging from the hinge.
-    const jawA = 0.14 + P.jaw * 0.5;
-    const jc = Math.cos(jawA);
-    const js = Math.sin(jawA);
-    const jaw = (x: number, y: number): [number, number] => [1 + (x - 1) * jc - (y - 3) * js, 3 + (x - 1) * js + (y - 3) * jc];
-    ctx.fillStyle = this.tone('mouth');
-    ctx.beginPath();
-    ctx.moveTo(3, 2.5);
-    ctx.lineTo(14.5, 1.6);
-    ctx.lineTo(...jaw(13, 3.5));
-    ctx.lineTo(...jaw(2, 4));
-    ctx.closePath();
-    ctx.fill();
-    // Throat glow: flesh has a fire in it the stone does not.
-    if (this.warmth > 0.3) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      glow(ctx, 6, 4, 7, `rgba(255,120,50,${(0.35 * this.warmth).toFixed(3)})`);
-      ctx.restore();
+  /** His cracks laid on a frame: worked out once per frame for each set of cracks. */
+  private crackCells(id: string, f: Frame): Grid {
+    let g = this.crackGrids.get(id);
+    if (!g) {
+      g = crackGrid(
+        f,
+        this.cracks.map((c) => c.pts),
+      );
+      this.crackGrids.set(id, g);
     }
-    // Lower jaw, with the spout's channel along it.
-    ctx.fillStyle = this.tone('base');
-    ctx.beginPath();
-    ctx.moveTo(...jaw(1, 2.5));
-    ctx.lineTo(...jaw(14, 3));
-    ctx.quadraticCurveTo(...jaw(16, 6), ...jaw(12, 7.5));
-    ctx.lineTo(...jaw(1, 7));
-    ctx.closePath();
-    ctx.fill();
-    const wet = this.state === 'gurgle' || this.state === 'spit';
-    ctx.strokeStyle = wet ? 'rgba(170,222,250,0.95)' : this.tone('deep');
-    ctx.lineWidth = wet ? 1.6 : 1.1;
-    ctx.beginPath();
-    ctx.moveTo(...jaw(3, 4));
-    ctx.lineTo(...jaw(14, 4.2));
-    ctx.stroke();
-    // Lower fangs.
-    ctx.fillStyle = this.tone('claw');
-    for (const fx of [5, 11.5]) {
-      ctx.beginPath();
-      ctx.moveTo(...jaw(fx - 1, 3.6));
-      ctx.lineTo(...jaw(fx, 0.6));
-      ctx.lineTo(...jaw(fx + 1, 3.6));
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // Snout and upper jaw: a pug's nose turned up, nostrils flared.
-    ctx.fillStyle = this.tone('base');
-    ctx.beginPath();
-    ctx.moveTo(3, -5);
-    ctx.lineTo(12, -4.5);
-    ctx.quadraticCurveTo(16.5, -4, 16, 0);
-    ctx.lineTo(14.5, 2.2);
-    ctx.lineTo(3, 3);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = this.tone('deep');
-    ctx.beginPath();
-    ctx.ellipse(14.2, -1.6, 1.3, 0.9, 0.4, 0, Math.PI * 2);
-    ctx.fill();
-    // Upper fangs.
-    ctx.fillStyle = this.tone('claw');
-    for (const fx of [6.5, 12.5]) {
-      ctx.beginPath();
-      ctx.moveTo(fx - 1.1, 2.4);
-      ctx.lineTo(fx, 6.2);
-      ctx.lineTo(fx + 1.1, 2.3);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // The brow: a heavy shelf over the eye.
-    ctx.fillStyle = this.tone('mid');
-    ctx.beginPath();
-    ctx.moveTo(-3, -7.5);
-    ctx.quadraticCurveTo(6, -10.5, 11, -5);
-    ctx.lineTo(9.5, -3.4);
-    ctx.quadraticCurveTo(5, -6.2, -2, -5);
-    ctx.closePath();
-    ctx.fill();
-    // The eye socket: hollow in stone; the eye itself is drawn over the
-    // darkness, lit, when he is not.
-    ctx.fillStyle = this.tone('deep');
-    ctx.beginPath();
-    ctx.ellipse(6, -2.6, 2.8, 1.8, 0.15, 0, Math.PI * 2);
-    ctx.fill();
-    // Wrinkles down the cheek.
-    ctx.strokeStyle = this.tone('shade');
-    ctx.lineWidth = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(1, 0);
-    ctx.quadraticCurveTo(0, 3, 2, 5);
-    ctx.stroke();
-
-    // The near horn, over everything.
-    this.horn(ctx, 0, 0, this.tone('mid'), this.phaseTwo);
-    // A little moss on the crown, where the rain sits.
-    ctx.fillStyle = this.warmth > 0.5 ? 'rgba(58,78,54,0.5)' : 'rgba(96,120,84,0.5)';
-    ctx.beginPath();
-    ctx.ellipse(-3.5, -8.3, 3.4, 1.2, -0.1, 0, Math.PI * 2);
-    ctx.fill();
-    // The moon on the brow and the horn.
-    ctx.strokeStyle = this.warmth > 0.5 ? 'rgba(160,180,220,0.4)' : 'rgba(236,240,248,0.55)';
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(-6, -7);
-    ctx.quadraticCurveTo(3, -10.5, 10, -6);
-    ctx.stroke();
-    ctx.restore();
+    return g;
   }
 
-  /** A horn swept up and back off the crown; in his second half the near one is broken off. */
-  private horn(ctx: CanvasRenderingContext2D, ox: number, oy: number, color: string, broken: boolean): void {
-    ctx.save();
-    ctx.translate(ox, oy);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(-6, -4);
-    if (broken) {
-      // Snapped off a third of the way up, the break still sharp.
-      ctx.quadraticCurveTo(-9, -10, -12, -13);
-      ctx.lineTo(-10, -15.5);
-      ctx.lineTo(-8.6, -13);
-      ctx.lineTo(-6.5, -15.2);
-      ctx.lineTo(-5.5, -12.2);
-      ctx.quadraticCurveTo(-2, -10, 3, -7.5);
-    } else {
-      ctx.quadraticCurveTo(-11, -14, -21, -19);
-      ctx.quadraticCurveTo(-27, -22, -25, -29);
-      ctx.quadraticCurveTo(-23, -23, -17, -20.5);
-      ctx.quadraticCurveTo(-8, -15, 3, -7.5);
-    }
-    ctx.closePath();
-    ctx.fill();
-    // Rings round the horn.
-    ctx.strokeStyle = this.tone('deep');
-    ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 0.9;
-    const rings = broken ? 2 : 5;
-    for (let i = 0; i < rings; i++) {
-      const t = 0.16 + i * 0.15;
-      const x = lerp(-2, -21, t);
-      const y = lerp(-6.5, -20, t);
-      ctx.beginPath();
-      ctx.moveTo(x - 1.2, y + 2.6 - t * 1.5);
-      ctx.lineTo(x + 2, y - 1.6 + t);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  /** Lit eyes: amber in his first half, hotter in his second. Drawn in world space, on top. */
-  private drawEyes(ctx: CanvasRenderingContext2D): void {
-    const P = this.pose;
-    const h = this.headLocal();
-    const a = P.head;
-    const ex = h.x + EYE.x * Math.cos(a) - EYE.y * Math.sin(a);
-    const ey = h.y + EYE.x * Math.sin(a) + EYE.y * Math.cos(a);
-    const e = this.toWorld(ex, ey, true);
-    const k = this.warmth;
-    const tell = this.state === 'diveWind' || this.state === 'clawWind' || this.state === 'glideWind' ? 1 : 0;
-    const [r, g, b] = this.phaseTwo ? [255, 120, 50] : [255, 178, 70];
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, e.x, e.y, 9 + tell * 7, `rgba(${r},${g},${b},${(0.5 * k).toFixed(3)})`);
-    ctx.fillStyle = `rgba(${r},${Math.min(255, g + 50)},${Math.min(255, b + 60)},${(0.95 * k).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.ellipse(e.x, e.y, 2.3, 1.4, 0.15 * this.facing, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = `rgba(40,14,0,${k.toFixed(3)})`;
-    ctx.fillRect(e.x - 0.4, e.y - 1.2, 0.9, 2.4);
-    if (this.breath > 0.01) {
-      const m = this.mouthWorld();
-      ctx.fillStyle = `rgba(214,222,236,${(0.22 * this.breath).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.ellipse(m.x + this.facing * (6 + (1 - this.breath) * 10), m.y - (1 - this.breath) * 6, 4 + (1 - this.breath) * 6, 2.5 + (1 - this.breath) * 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /** Glowing cracks: the window, as light coming out of the stone. */
-  private drawCracks(ctx: CanvasRenderingContext2D): void {
-    if (this.crackGlow <= 0.02 || this.cracks.length === 0) return;
-    const g = this.crackGlow;
-    ctx.save();
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = '#2a2420';
-    for (const c of this.cracks) {
-      ctx.lineWidth = c.w + 1.2;
-      this.crackPath(ctx, c);
-      ctx.stroke();
-    }
-    ctx.globalCompositeOperation = 'lighter';
-    for (const c of this.cracks) {
-      ctx.strokeStyle = `rgba(255,140,60,${(0.4 * g).toFixed(3)})`;
-      ctx.lineWidth = c.w + 3.5;
-      this.crackPath(ctx, c);
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(255,228,170,${(0.95 * g).toFixed(3)})`;
-      ctx.lineWidth = c.w;
-      this.crackPath(ctx, c);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  private crackPath(ctx: CanvasRenderingContext2D, c: Crack): void {
-    ctx.beginPath();
-    ctx.moveTo(c.pts[0], c.pts[1]);
-    for (let i = 2; i < c.pts.length; i += 2) ctx.lineTo(c.pts[i], c.pts[i + 1]);
+  /** The name his current cracks' sprites go by, so that the next set does not find them. */
+  private crackId(): string {
+    return `${CRACKS}${this.crackSerial}`;
   }
 
   /** Bits of him on the stone around a broken statue. */
@@ -2226,45 +1601,76 @@ export class Gargoyle extends Enemy {
     if (this.chips.length === 0) return;
     const spread = this.state === 'dying' ? 1 + this.crumble * 0.8 : 1;
     for (const c of this.chips) {
-      ctx.fillStyle = c.shade < 0.5 ? '#7d8693' : '#5d6571';
-      ctx.save();
-      ctx.translate(this.cx + c.x * spread, F - c.r * 0.6 + c.y);
-      ctx.rotate(c.a);
-      ctx.beginPath();
-      ctx.moveTo(-c.r, 0);
-      ctx.lineTo(-c.r * 0.3, -c.r);
-      ctx.lineTo(c.r, -c.r * 0.4);
-      ctx.lineTo(c.r * 0.6, c.r * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
+      const chip = chipSprite(c.r < 3 ? 0 : 1, Math.floor((c.a / Math.PI) * 4) & 3);
+      chip.sprite.draw(ctx, this.cx + c.x * spread - chip.mid * ART, F + c.y - chip.bottom * ART);
     }
   }
 
-  /** The stream's water in the mouth: a sheen while it gurgles, a gush while it pours. */
-  private drawWater(ctx: CanvasRenderingContext2D): void {
-    const m = this.mouthWorld();
+  /**
+   * The spout's water over a frame drawn at `at`: bubbling on the lip while it
+   * gurgles and pours, and a thread of it down to the stone while it gurgles.
+   * The channel along his jaw runs wet in the paint itself.
+   */
+  private drawWater(ctx: CanvasRenderingContext2D, at: { x: number; y: number }, w: number, mx: number, my: number, facing: 1 | -1, F: number): void {
     const t = this.anim;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, m.x, m.y, 14, 'rgba(150,206,240,0.45)');
-    ctx.restore();
-    ctx.fillStyle = 'rgba(190,228,248,0.85)';
-    for (let i = 0; i < 3; i++) {
-      const bx = m.x - this.facing * (2 + i * 2.5) + Math.sin(t * 13 + i * 2) * 1.2;
-      const by = m.y - 1 - Math.abs(Math.sin(t * 9 + i)) * 2.5;
-      ctx.beginPath();
-      ctx.arc(bx, by, 1.2 + (i % 2) * 0.5, 0, Math.PI * 2);
-      ctx.fill();
+    for (let i = 0; i < 2; i++) {
+      if (Math.sin(t * 13 + i * 2.4) < -0.2) continue;
+      const lift = Math.sin(t * 9 + i) > 0.3 ? 2 : 1;
+      this.cells(ctx, at, w, mx - 2 - i * 3, my - lift, 2, 1, facing, i === 0 ? '#ffffff' : RAMP.blue[6]);
     }
     if (this.state === 'gurgle') {
-      // A thin dribble over the lip, to the stone.
-      ctx.strokeStyle = 'rgba(170,218,244,0.55)';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(m.x + this.facing, m.y + 1);
-      ctx.quadraticCurveTo(m.x + this.facing * 4, m.y + 8, m.x + this.facing * 4.5 + Math.sin(t * 20), this.floorY - 1);
-      ctx.stroke();
+      const x0 = at.x + (facing > 0 ? mx + 1 : w - mx - 2) * ART;
+      const y0 = at.y + (my + 1) * ART;
+      const sway = Math.round(Math.sin(t * 20)) * ART;
+      runLine(ctx, x0, y0, x0 + facing * 2 * ART + sway, F - ART, RAMP.blue[4]);
     }
   }
+}
+
+const TAU = Math.PI * 2;
+
+/** The quarter of a turn an angle is nearest: 0 at none, 1 at a quarter, and round. */
+function quarter(a: number): number {
+  return Math.round((((a % TAU) + TAU) % TAU) / (Math.PI / 2)) % 4;
+}
+
+const FLAP: readonly FrameName[] = ['fly0', 'fly1', 'fly2', 'fly3'];
+const WALK: readonly FrameName[] = ['walk0', 'walk1', 'walk2', 'walk3'];
+/** What the sprites of his cracks are called, before the number of the set. */
+const CRACKS = 'gargoyle-cracks';
+
+/** How bright his cracks glow, in four steps. */
+function crackLevel(g: number): CrackLevel {
+  return g > 0.85 ? 3 : g > 0.6 ? 2 : g > 0.35 ? 1 : 0;
+}
+
+let trail: PixelSprite | null = null;
+
+function trailSprite(): PixelSprite {
+  trail ??= new PixelSprite(SWIPE_TRAIL, TRAIL_KEY);
+  return trail;
+}
+
+/** A chip's sprite, its middle column and the row under it. */
+interface ChipArt {
+  sprite: PixelSprite;
+  mid: number;
+  bottom: number;
+}
+
+const chipArt = new Map<number, ChipArt>();
+
+function chipSprite(size: number, turn: number): ChipArt {
+  const k = size * 4 + turn;
+  let c = chipArt.get(k);
+  if (!c) {
+    const grid = CHIPS[size][turn];
+    let bottom = 0;
+    grid.forEach((row, y) => {
+      if (/[^.]/.test(row)) bottom = y + 1;
+    });
+    c = { sprite: new PixelSprite(grid, keyOf('stone')), mid: grid[0].length / 2, bottom };
+    chipArt.set(k, c);
+  }
+  return c;
 }
