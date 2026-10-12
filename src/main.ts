@@ -48,12 +48,14 @@ function resize(): void {
   // Centred by the layout, the picture can start half a device pixel in at a
   // fractional scaling (125%, 150%), and then every other row of art pixels
   // is a device pixel taller than its neighbours. Nudged onto whole device
-  // pixels, every art pixel is the same size again.
-  canvas.style.transform = '';
-  const box = canvas.getBoundingClientRect();
+  // pixels, every art pixel is the same size again. The frame is nudged, with
+  // the picture in it: a picture nudged inside its frame was cut off by up to
+  // a device pixel along one edge, and the frame showed through on the other.
+  frame.style.transform = '';
+  const box = frame.getBoundingClientRect();
   const dx = Math.round(box.left * dpr) / dpr - box.left;
   const dy = Math.round(box.top * dpr) / dpr - box.top;
-  if (dx !== 0 || dy !== 0) canvas.style.transform = `translate(${dx}px, ${dy}px)`;
+  if (dx !== 0 || dy !== 0) frame.style.transform = `translate(${dx}px, ${dy}px)`;
   // The game draws in its 960×540 logical view.
   ctx.setTransform(ART_W / VIEW_W, 0, 0, ART_H / VIEW_H, 0, 0);
   ctx.imageSmoothingEnabled = false;
