@@ -1,14 +1,14 @@
 import { audio } from '../core/audio';
 import { Input, type Action } from '../core/input';
 import { Rect, clamp, rand, rectsOverlap, sign } from '../core/math';
-import { makeCanvas } from '../render/pixel';
-import { glow } from '../render/sprites';
+import { snap } from '../render/pixel';
 import type { Boss } from './boss';
 import type { World } from '../world/context';
 import { Enemy, type EnemyKind, type GlowLight } from './enemy';
 import { Player } from './player';
 import { Projectile } from './projectile';
 import { SILK_REGROW } from './relics';
+import { UmbraPainter, drawChargeRing, drawDrawRing, drawPool } from './shadow-art';
 
 /** Health per heart the hero has: the shadow is as hardy as he is. */
 const HP_PER_HEART = 5;
@@ -139,10 +139,8 @@ export class Shadow extends Enemy {
   private arenaLeft = 0;
   private arenaRight = 0;
   private floorY = 0;
-  private readonly layer: HTMLCanvasElement;
-  private readonly layerCtx: CanvasRenderingContext2D;
-  private readonly rim: HTMLCanvasElement;
-  private readonly rimCtx: CanvasRenderingContext2D;
+  /** The hero's own drawing of its body, dyed into the shadow's paints. */
+  private readonly painter = new UmbraPainter();
   /** How much of it is there: it rises out of a pool and goes back into one. */
   private presence = 0;
   private stepAttack = false;
@@ -163,8 +161,6 @@ export class Shadow extends Enemy {
     this.contactDamage = 0;
     this.body = new Player(x, y);
     this.body.facing = -1;
-    ({ canvas: this.layer, ctx: this.layerCtx } = makeCanvas(220, 170));
-    ({ canvas: this.rim, ctx: this.rimCtx } = makeCanvas(220, 170));
   }
 
   get phase(): 1 | 2 {
@@ -748,6 +744,11 @@ export class Shadow extends Enemy {
     if (this.state === 'dormant') return [{ x: b.cx, y: this.floorY - 4, radius: 70, rgb: '120,70,220', strength: 0.4, tint: 0.3 }];
     const out: GlowLight[] = [{ x: b.cx, y: b.cy, radius: 90 * this.presence + 20, rgb: '140,90,255', strength: 0.45, tint: 0.3 }];
     if (this.state === 'fade') out.push({ x: this.stepX, y: this.floorY - 6, radius: 80, rgb: '160,110,255', strength: 0.6, tint: 0.35 });
+    // The eye's flare lights the dark round its head, in the light pass.
+    if (this.flare > 0.05 && this.presence > 0.5) {
+      const e = this.painter.eyeOf(b);
+      out.push({ x: e.x, y: e.y, radius: 36 + 36 * this.flare, rgb: '255,40,90', strength: 0.75 * this.flare, tint: 0.4 });
+    }
     return out;
   }
 
@@ -760,113 +761,41 @@ export class Shadow extends Enemy {
       const pools = this.state === 'fade' ? [b.cx, this.stepX] : [b.cx];
       for (const [i, px] of pools.entries()) {
         const k = this.state === 'dormant' ? 1 : this.state === 'fade' ? (i === 0 ? this.presence : 1 - this.presence * 0.5) : 1 - this.presence * 0.6;
-        ctx.save();
-        ctx.fillStyle = `rgba(14,6,24,${(0.75 * k).toFixed(2)})`;
-        ctx.beginPath();
-        ctx.ellipse(px, this.floorY - 1, 26 + k * 6, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(150,100,255,${(0.45 * k).toFixed(2)})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
+        drawPool(ctx, px, this.floorY, k);
       }
     }
     if (this.presence <= 0.02) return;
 
-    // The hero's own drawing, into a layer of its own, then dyed: a dark
-    // body with a violet edge and his eyes gone white.
-    // Its own flash is in the dye below; the hero's filter would cost a layer.
+    // The hero's own drawing of its body, dyed: his flash is the shadow's,
+    // and the silk he would draw round himself is the shadow's own.
     b.flash = 0;
-    const L = this.layerCtx;
-    const ox = 110 - b.cx;
-    const oy = 100 - b.cy;
-    L.setTransform(1, 0, 0, 1, 0, 0);
-    L.globalCompositeOperation = 'source-over';
-    L.clearRect(0, 0, 220, 170);
-    L.save();
-    L.translate(ox, oy);
-    b.draw(L, world);
-    L.restore();
-    const R = this.rimCtx;
-    R.setTransform(1, 0, 0, 1, 0, 0);
-    R.globalCompositeOperation = 'source-over';
-    R.clearRect(0, 0, 220, 170);
-    R.drawImage(this.layer, 0, 0);
-    R.globalCompositeOperation = 'source-atop';
-    R.fillStyle = 'rgba(160,110,255,1)';
-    R.fillRect(0, 0, 220, 170);
-    L.globalCompositeOperation = 'source-atop';
-    L.fillStyle = this.flash > 0 ? `rgba(${Math.round(30 + 200 * this.flash)},${Math.round(14 + 180 * this.flash)},${Math.round(50 + 200 * this.flash)},0.94)` : 'rgba(22,10,38,0.94)';
-    L.fillRect(0, 0, 220, 170);
-    L.globalCompositeOperation = 'source-over';
+    const silk = b.shieldUp;
+    b.shieldUp = this.shieldUp;
+    const dying = this.state === 'dying';
+    this.painter.draw(ctx, b, world, {
+      white: this.flash >= HIT_WHITE && !dying,
+      // Rising out of the floor or going back into it, a pixel at a time.
+      sink: (1 - this.presence) * SINK_DEPTH,
+      // Falling apart in four steps as it goes.
+      gone: dying ? Math.floor((1 - this.presence) * 4) / 4 : 0,
+      flare: this.flare,
+    });
+    b.shieldUp = silk;
 
-    const x = b.cx - 110;
-    const y = b.cy - 100;
-    // Rising out of the floor, or going back into it: cut at the floor line.
-    const cut = this.floorY - (b.h + 26) * this.presence;
-    ctx.save();
-    if (this.presence < 1) {
-      ctx.beginPath();
-      ctx.rect(x - 10, cut, 240, this.floorY - cut + 2);
-      ctx.clip();
-    }
-    ctx.globalAlpha = 0.85;
-    for (const [rx, ry] of [
-      [-1, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-    ] as const) {
-      ctx.drawImage(this.rim, x + rx, y + ry);
-    }
-    ctx.globalAlpha = 1;
-    ctx.drawImage(this.layer, x, y);
-    // Eyes: two points of white where his are - burning up before it commits.
-    const eye = b.eye;
-    const ex = eye.x;
-    const ey = eye.y - 1;
-    ctx.fillStyle = '#f4eeff';
-    ctx.fillRect(ex - 1.5, ey, 3, 2);
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.fillStyle = `rgba(200,170,255,${(0.5 + this.flare * 0.5).toFixed(2)})`;
-    ctx.fillRect(ex - 3 - this.flare * 3, ey - 1 - this.flare * 2, 6 + this.flare * 6, 4 + this.flare * 4);
-    if (this.flare > 0.05) glow(ctx, ex, ey, 18 + this.flare * 10, `rgba(190,150,255,${(0.5 * this.flare).toFixed(2)})`);
-    ctx.restore();
     // Drawing back for the charge: a broken ring closing on it, wider than the
     // charge's own, which takes over once the blade has cut.
     if (this.plan === 'draw' && this.state === 'duel') {
       const t = clamp(1 - this.planTimer / DRAW_TIME, 0, 1);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = `rgba(170,120,255,${(0.3 + t * 0.5).toFixed(2)})`;
-      ctx.lineWidth = 1.6;
-      ctx.setLineDash([6, 5]);
-      ctx.lineDashOffset = -t * 22;
-      ctx.beginPath();
-      ctx.arc(b.cx, b.cy - 2, 62 - t * 16, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      drawDrawRing(ctx, b.cx, b.cy - 2, t);
     }
     // His charge ring, in its colour: the tell has to read through the dye.
-    if (b.chargeTimer > 0) {
-      const t = Math.min(1, b.chargeTimer / b.chargeTime);
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = b.chargeReady ? 'rgba(200,160,255,0.9)' : `rgba(160,110,255,${(0.25 + t * 0.45).toFixed(2)})`;
-      ctx.lineWidth = b.chargeReady ? 2.2 : 1.6;
-      ctx.beginPath();
-      ctx.arc(b.cx, b.cy - 2, b.chargeReady ? 26 : 46 - t * 20, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-    if (this.shieldUp) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(180,150,240,0.4)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(b.cx, b.cy - 2, 15, 22, 0.4, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+    if (b.chargeTimer > 0 && !b.chargeReady && this.presence >= 1) {
+      drawChargeRing(ctx, snap(b.x) + 8, snap(b.bottom), Math.min(1, b.chargeTimer / b.chargeTime));
     }
   }
 }
+
+/** Above this its flash is a white silhouette (two frames of a blow), below it nothing. */
+const HIT_WHITE = 0.8;
+/** How deep in the floor it lies before it rises: its whole height and its blade. */
+const SINK_DEPTH = 28;
