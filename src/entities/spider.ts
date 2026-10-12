@@ -1,10 +1,15 @@
 import { audio } from '../core/audio';
 import { Rect, approach, clamp, damp, rand, rectsOverlap, sign } from '../core/math';
-import { glow, shadow, withHitFlash } from '../render/sprites';
+import { RAMP } from '../render/palette';
+import { oval } from '../render/pen';
+import { ART, snap } from '../render/pixel';
+import { shadow, withHitFlash } from '../render/sprites';
 import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
+import { line4 } from './puppet';
+import { EGG, SILK, type SpiderFrame, YOUNG, drawArachna, floorRing } from './spider-art';
 
 /** Health before the hero is sized up. Between Ankhor and Ignivor. */
 const SPIDER_HP = 48;
@@ -791,95 +796,74 @@ export class Spider extends Enemy {
     return out;
   }
 
+
   /* -------------------------------------------------------------- drawing */
 
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.floorY === 0) return;
-    this.drawCornerWebs(ctx);
     this.drawPatches(ctx);
     this.drawEggs(ctx);
     if (this.state === 'dropWind' || this.state === 'drop') this.drawMark(ctx);
     this.drawThread(ctx);
-    withHitFlash(ctx, this.flash, (ctx) => this.drawBody(ctx));
-  }
-
-  /** Old webs in the upper corners of her chamber, the room's own decoration. */
-  private drawCornerWebs(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(200,220,235,0.16)';
-    ctx.lineWidth = 1;
-    for (const [cx, dir] of [
-      [this.arenaLeft + 8, 1],
-      [this.arenaRight - 8, -1],
-    ] as const) {
-      const cy = this.ceilingY + 2;
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 5) * (Math.PI / 2);
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + dir * Math.cos(a) * 120, cy + Math.sin(a) * 120);
-        ctx.stroke();
-      }
-      for (let r = 24; r <= 120; r += 24) {
-        ctx.beginPath();
-        for (let i = 0; i <= 5; i++) {
-          const a = (i / 5) * (Math.PI / 2);
-          const x = cx + dir * Math.cos(a) * r;
-          const y = cy + Math.sin(a) * r;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-      }
+    const { frame, facing } = this.frame();
+    if (frame.startsWith('stand') || frame.startsWith('back') || frame === 'curl') {
+      shadow(ctx, this.bx, this.floorY + 1, 96, 0.4);
     }
-    ctx.restore();
+    const white = this.flash >= HIT_WHITE;
+    withHitFlash(
+      ctx,
+      white ? this.flash : 0,
+      (c) => drawArachna(c, frame, this.bx, this.by, facing, this.glowCore > 0.5),
+      white ? { x: this.bx - 76, y: this.by - 68, w: 152, h: 132 } : undefined,
+    );
   }
 
+  /** Which of her frames this moment is, and which way the lash goes. */
+  private frame(): { frame: SpiderFrame; facing: 1 | -1 } {
+    const t = this.anim;
+    const sway = Math.sin(t * 1.6) > 0 ? 'hang1' : 'hang0';
+    const drawn = (): SpiderFrame => (this.tuck > 0.6 ? 'tuck' : this.tuck > 0.25 ? 'half' : sway);
+    switch (this.state) {
+      case 'dormant':
+        return { frame: 'tuck', facing: 1 };
+      case 'descend':
+      case 'dropWind':
+      case 'drop':
+        return { frame: drawn(), facing: 1 };
+      case 'grounded':
+      case 'righting':
+        return { frame: STAND[Math.floor(this.walk * 2) % 4], facing: 1 };
+      case 'lashWind':
+        return { frame: this.lashRaise > 0.6 ? 'lashup' : this.lashRaise > 0.2 ? 'lashmid' : sway, facing: this.lashDir };
+      case 'lash':
+        return { frame: 'lash', facing: this.lashDir };
+      case 'swingWind':
+        return { frame: this.tuck > 0.45 ? 'ball' : 'half', facing: 1 };
+      case 'swing':
+        return { frame: 'ball', facing: 1 };
+      case 'fall':
+        return { frame: this.pose < 1.5 ? 'half' : 'back0', facing: 1 };
+      case 'stunned':
+        // Legs in the air, kicking.
+        return { frame: BACK[Math.floor(this.walk * 0.8) % 3], facing: 1 };
+      case 'dying':
+        return { frame: this.timer > 0.9 ? BACK[Math.floor(this.walk * 0.8) % 3] : 'curl', facing: 1 };
+      default:
+        return { frame: sway, facing: 1 };
+    }
+  }
+
+  /** Silk on the floor, thinning out at the end of its life. */
   private drawPatches(ctx: CanvasRenderingContext2D): void {
-    ctx.save();
-    for (const patch of this.patches) {
-      const a = clamp(patch.life / 0.6, 0, 1);
-      ctx.globalAlpha = a;
-      ctx.fillStyle = 'rgba(226,236,246,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(patch.x, this.floorY - 2, WEB_W / 2, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(236,244,252,0.75)';
-      ctx.lineWidth = 1;
-      for (let i = -3; i <= 3; i++) {
-        ctx.beginPath();
-        ctx.moveTo(patch.x + i * 8, this.floorY - 1);
-        ctx.quadraticCurveTo(patch.x + i * 4, this.floorY - 12 - Math.abs(i) * -1, patch.x - i * 6, this.floorY - 1);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
+    for (const patch of this.patches) SILK.draw(ctx, patch.life < 0.6 ? 'thin' : 'patch', patch.x, this.floorY, 15, 3);
   }
 
+  /** Egg sacs, rocking harder and darker inside as they get ready to hatch. */
   private drawEggs(ctx: CanvasRenderingContext2D): void {
     for (const egg of this.eggs) {
       const near = egg.landed ? clamp(egg.t / 2.3, 0, 1) : 0;
-      const wob = egg.landed ? Math.sin(this.anim * (8 + near * 30)) * near * 2 : 0;
-      ctx.save();
-      ctx.translate(egg.x + wob, egg.y);
-      ctx.fillStyle = '#d8e6dc';
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 9, 11, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(120,150,140,0.6)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(-7, -4);
-      ctx.quadraticCurveTo(0, 2, 7, -4);
-      ctx.moveTo(-7, 3);
-      ctx.quadraticCurveTo(0, 8, 7, 3);
-      ctx.stroke();
-      // Something moving inside, darker as it gets ready.
-      ctx.fillStyle = `rgba(30,40,40,${(0.2 + near * 0.5).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.ellipse(0, 1, 4 + near * 2, 5 + near * 2, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      const wob = egg.landed ? Math.round(Math.sin(this.anim * (8 + near * 30)) * near) * ART : 0;
+      EGG.draw(ctx, near < 0.4 ? 'e0' : near < 0.8 ? 'e1' : 'e2', egg.x + wob, egg.y + 6, 3, 7);
     }
   }
 
@@ -891,218 +875,37 @@ export class Spider extends Enemy {
   private drawMark(ctx: CanvasRenderingContext2D): void {
     const locked = this.state === 'drop' || this.timer < 0.24;
     const k = this.state === 'drop' ? 1 : clamp(1 - this.timer / 0.7, 0.15, 1);
-    ctx.save();
-    ctx.fillStyle = `rgba(0,0,0,${(0.3 + k * 0.4).toFixed(2)})`;
-    ctx.beginPath();
-    ctx.ellipse(this.dropX, this.floorY - 1, 26 + k * 18, 6, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = locked ? 'rgba(255,110,130,0.85)' : `rgba(220,232,246,${(0.3 + k * 0.4).toFixed(2)})`;
-    ctx.lineWidth = locked ? 2.4 : 1.6;
-    ctx.beginPath();
-    ctx.ellipse(this.dropX, this.floorY - 1, 64 - k * 18, 9 - k * 2, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    oval(ctx, snap(this.dropX), snap(this.floorY - 2), 26 + k * 18, 4, RAMP.slate[0]);
+    floorRing(ctx, this.dropX, this.floorY - 2, 64 - k * 18, 9 - k * 2, locked ? 2 : 1, locked ? RAMP.rose[4] : RAMP.slate[6]);
   }
 
+  /** Her thread: one pixel of silk from the roof to her back, frayed where it has been cut at. */
   private drawThread(ctx: CanvasRenderingContext2D): void {
     if (this.state === 'dormant' || this.state === 'fall' || this.state === 'stunned' || this.state === 'righting' || this.state === 'dying') return;
     if (this.state === 'grounded') return;
     const top = this.ceilingY;
     const endX = this.bx;
     const endY = this.by - SPINNERET;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
+    const silk = this.threadFlash > 0.5 ? RAMP.grey[7] : RAMP.slate[5];
+    line4(ctx, this.anchorX, top, endX, endY, silk);
     const frayed = 1 - this.threadHp / THREAD_HP;
-    ctx.strokeStyle = `rgba(${Math.round(210 + 45 * this.threadFlash)},235,250,${(0.55 + this.threadFlash * 0.4).toFixed(2)})`;
-    ctx.lineWidth = 1.6 - frayed * 0.6;
-    ctx.beginPath();
-    ctx.moveTo(this.anchorX, top);
-    ctx.lineTo(endX, endY);
-    ctx.stroke();
     if (frayed > 0) {
       // Where it has been cut at, loose fibres stand out from it.
-      ctx.strokeStyle = 'rgba(230,240,250,0.5)';
-      ctx.lineWidth = 1;
       const midY = (top + endY) / 2;
       for (let i = 0; i < Math.round(frayed * 6); i++) {
-        const y = midY + (i - 3) * 9;
+        const y = midY + (i - 3) * 10;
         const x = this.anchorX + ((endX - this.anchorX) * (y - top)) / Math.max(1, endY - top);
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + (i % 2 ? 5 : -5), y + 4);
-        ctx.stroke();
-      }
-    }
-    ctx.restore();
-  }
-
-  /**
-   * She is drawn from the front, the way anyone knows a spider: abdomen up,
-   * head down, four legs splayed either side. Hanging, the legs reach up and
-   * out round her; standing, they arch over her with the feet on the floor;
-   * on her back the whole drawing is turned over and the legs kick at the air.
-   * The poses blend, so a drop is one movement and not a cut.
-   */
-  private drawBody(ctx: CanvasRenderingContext2D): void {
-    const stand = clamp(this.pose, 0, 1);
-    const flip = clamp(this.pose - 1, 0, 1);
-    const kick = this.state === 'stunned' || this.state === 'dying';
-    const tuck = this.tuck;
-    const open = 1 - tuck * 0.7;
-    const S = 1.4;
-    if (stand > 0.5 && flip < 0.5) shadow(ctx, this.bx, this.floorY + 1, 96, 0.4 * stand);
-    ctx.save();
-    ctx.translate(this.bx, this.by);
-    ctx.rotate(flip * Math.PI);
-    ctx.scale(S, S);
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    const lerp = (a: number, b: number): number => a + (b - a) * stand;
-    const floor = GROUND / S;
-    for (const pass of [0, 1]) {
-      for (const sd of [-1, 1]) {
-        for (let i = 0; i < 4; i++) {
-          const phase = this.anim * (kick ? 9 : 1.6) + i * 1.1 + (sd > 0 ? 0.8 : 0);
-          const sway = Math.sin(phase) * (kick ? 6 : 2);
-          const rootY = -2 + i * 5;
-          // Hanging: up and out round her. Standing: arched over her, feet down.
-          const hkx = sd * (14 + (22 + i * 2) * open);
-          const hky = rootY - (18 - i * 6) * open - 6 + sway;
-          const hfx = sd * (14 + (30 - i * 3) * open);
-          const hfy = rootY + (8 + i * 9) * open + 8 + sway * 0.5;
-          const skx = sd * (22 + i * 7);
-          const sky = -18 + i * 2 + (kick ? sway : sway * 0.3);
-          const sfx = sd * (28 + i * 9 + (kick ? sway : 0));
-          const sfy = kick ? floor - 6 + sway : floor + 1;
-          let kx = lerp(hkx, skx);
-          let ky = lerp(hky, sky);
-          let fx = lerp(hfx, sfx);
-          let fy = lerp(hfy, sfy);
-          // The lash: the front pair on his side up and back, then across.
-          if (i < 2 && sd === this.lashDir && this.lashRaise !== 0) {
-            const up = Math.max(0, this.lashRaise);
-            const out = Math.max(0, -this.lashRaise);
-            kx += sd * (6 * up + 10 * out);
-            ky -= 16 * up - 4 * out;
-            fx += sd * (2 * up + 34 * out);
-            fy -= 34 * up - 10 * out;
-          }
-          const lashing = i < 2 && sd === this.lashDir && this.lashRaise > 0.05;
-          ctx.strokeStyle = pass === 0 ? '#0e0a16' : lashing ? '#5a2238' : '#2a2338';
-          ctx.lineWidth = pass === 0 ? 4.6 : 3.2;
-          ctx.beginPath();
-          ctx.moveTo(sd * 8, rootY);
-          ctx.lineTo(kx, ky);
-          ctx.lineTo(fx, fy);
-          ctx.stroke();
-          if (pass === 1) {
-            ctx.strokeStyle = 'rgba(150,140,200,0.3)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(sd * 8, rootY - 1);
-            ctx.lineTo(kx, ky - 1);
-            ctx.stroke();
-          }
-        }
-      }
-    }
-    this.drawAbdomen(ctx, 0, lerp(-22, -16), lerp(18, 21), lerp(24, 18), 0);
-    this.drawHead(ctx, 0, lerp(8, 6), true);
-    ctx.restore();
-  }
-
-  private drawAbdomen(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, tilt: number): void {
-    const ab = ctx.createRadialGradient(x - 3, y - 4, 4, x, y, Math.max(rx, ry) + 4);
-    ab.addColorStop(0, '#3e3858');
-    ab.addColorStop(0.7, '#1c1828');
-    ab.addColorStop(1, '#0c0a12');
-    ctx.fillStyle = ab;
-    ctx.beginPath();
-    ctx.ellipse(x, y, rx, ry, tilt, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(150,140,200,0.25)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // The crystal in her back: an hourglass of cave light, and the tell.
-    const heat = 0.45 + this.glowCore * 0.55;
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, x, y - 2, 16 + this.glowCore * 14, `rgba(110,225,255,${(0.4 * heat).toFixed(2)})`);
-    ctx.restore();
-    const hw = rx * 0.28;
-    const hh = ry * 0.5;
-    ctx.fillStyle = `rgba(160,240,255,${(0.6 + heat * 0.4).toFixed(2)})`;
-    ctx.beginPath();
-    ctx.moveTo(x - hw * 1.6, y - hh);
-    ctx.lineTo(x + hw * 1.6, y - hh);
-    ctx.lineTo(x, y - 2);
-    ctx.lineTo(x + hw * 1.6, y + hh * 0.9);
-    ctx.lineTo(x - hw * 1.6, y + hh * 0.9);
-    ctx.lineTo(x, y - 2);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  /** Head, eyes and fangs. `down` draws them pointing at the floor. */
-  private drawHead(ctx: CanvasRenderingContext2D, x: number, y: number, down: boolean): void {
-    const hd = ctx.createRadialGradient(x - 2, y - 4, 2, x, y, 16);
-    hd.addColorStop(0, '#463e60');
-    hd.addColorStop(1, '#14101c');
-    ctx.fillStyle = hd;
-    ctx.beginPath();
-    ctx.ellipse(x, y, down ? 13 : 14, down ? 14 : 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    const eyes: [number, number, number][] = down
-      ? [
-          [-4, 7, 2.6],
-          [4, 7, 2.6],
-          [-7, 3, 1.5],
-          [7, 3, 1.5],
-          [-2.5, 2, 1.3],
-          [2.5, 2, 1.3],
-        ]
-      : [
-          [7, -6, 2.4],
-          [10, -3, 2.4],
-          [3, -8, 1.4],
-          [5, -9.5, 1.3],
-          [11, -7, 1.2],
-          [12, -1, 1.2],
-        ];
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    glow(ctx, x + (down ? 0 : 8), y + (down ? 6 : -5), 12, 'rgba(255,90,110,0.6)');
-    ctx.restore();
-    ctx.fillStyle = '#ff6a80';
-    for (const [ex, ey, r] of eyes) {
-      ctx.beginPath();
-      ctx.arc(x + ex, y + ey, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#d8dce8';
-    if (down) {
-      for (const s of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(x + s * 2, y + 11);
-        ctx.quadraticCurveTo(x + s * 6, y + 18, x + s * 1, y + 22);
-        ctx.lineTo(x + s * 1, y + 13);
-        ctx.closePath();
-        ctx.fill();
-      }
-    } else {
-      for (const fy of [3, 7]) {
-        ctx.beginPath();
-        ctx.moveTo(x + 11, y + fy - 2);
-        ctx.quadraticCurveTo(x + 18, y + fy + 1, x + 14, y + fy + 6);
-        ctx.lineTo(x + 12, y + fy + 1);
-        ctx.closePath();
-        ctx.fill();
+        line4(ctx, x, y, x + (i % 2 ? 6 : -6), y + 4, RAMP.slate[6]);
       }
     }
   }
-
 }
+
+/** Above this her flash is a white silhouette (two frames of a blow); below it, nothing. */
+const HIT_WHITE = 0.8;
+const STAND: readonly SpiderFrame[] = ['stand0', 'stand1', 'stand2', 'stand3'];
+const BACK: readonly SpiderFrame[] = ['back0', 'back1', 'back2'];
+
 
 /**
  * What hatches out of her eggs: a hand-sized spider that skitters at the hero
@@ -1147,38 +950,23 @@ export class Spiderling extends Enemy {
     if (this.touchesHazard(world)) this.hurt(99, 0, world);
   }
 
+
   override draw(ctx: CanvasRenderingContext2D): void {
-    withHitFlash(ctx, this.flash, (ctx) => {
-      ctx.save();
-      ctx.translate(this.cx, this.bottom);
-      ctx.scale(this.facing, 1);
-      ctx.strokeStyle = '#1c1828';
-      ctx.lineWidth = 1.6;
-      for (let i = 0; i < 4; i++) {
-        const sw = Math.sin(this.leg + i * 1.7) * 2;
-        for (const s of [-1, 1]) {
-          ctx.beginPath();
-          ctx.moveTo(-2 + i * 2, -6);
-          ctx.lineTo(-2 + i * 2 + s * (5 + i) + sw * s, -10);
-          ctx.lineTo(-2 + i * 2 + s * (8 + i * 1.5) + sw, 0);
-          ctx.stroke();
-        }
-      }
-      ctx.fillStyle = '#26203a';
-      ctx.beginPath();
-      ctx.ellipse(-4, -7, 6, 5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#322a48';
-      ctx.beginPath();
-      ctx.ellipse(4, -6, 4.5, 4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ff6a80';
-      ctx.fillRect(6, -8, 1.6, 1.6);
-      ctx.fillRect(7.5, -6.5, 1.4, 1.4);
-      ctx.fillStyle = 'rgba(140,232,255,0.7)';
-      ctx.fillRect(-6, -9, 3, 2);
-      ctx.restore();
+    const frame = this.onGround ? (['w0', 'w1', 'w2'] as const)[Math.floor(this.leg * 2) % 3] : 'w1';
+    withHitFlash(ctx, this.flash >= 0.8 ? this.flash : 0, (c) => YOUNG.draw(c, frame, this.cx, this.bottom, 5, 5, this.facing > 0 ? 1 : -1), {
+      x: this.cx - 16,
+      y: this.bottom - 16,
+      w: 32,
+      h: 18,
     });
-    this.drawHpPips(ctx);
+    // Its health once struck: a bar one art pixel tall over it, the lost part dark.
+    if (this.hp < this.maxHp && this.hp > 0) {
+      const x = snap(this.cx) - 4 * ART;
+      const y = snap(this.bottom) - 9 * ART;
+      ctx.fillStyle = RAMP.rose[0];
+      ctx.fillRect(x, y, 8 * ART, ART);
+      ctx.fillStyle = RAMP.rose[4];
+      ctx.fillRect(x, y, Math.max(1, Math.round((8 * this.hp) / this.maxHp)) * ART, ART);
+    }
   }
 }

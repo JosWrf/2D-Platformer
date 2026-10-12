@@ -191,6 +191,83 @@ export function limb(
   return px;
 }
 
+/**
+ * A line of cells from (x0, y0) to (x1, y1), Bresenham's, `thick` cells
+ * wide (a square brush), in one letter. Returns the cells it stepped through.
+ */
+export function strokeCells(c: Cells, x0: number, y0: number, x1: number, y1: number, letter: string, thick = 1): [number, number][] {
+  let ax = Math.round(x0);
+  let ay = Math.round(y0);
+  const bx = Math.round(x1);
+  const by = Math.round(y1);
+  const dx = Math.abs(bx - ax);
+  const dy = -Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1;
+  const sy = ay < by ? 1 : -1;
+  const o = Math.floor((thick - 1) / 2);
+  let err = dx + dy;
+  const out: [number, number][] = [];
+  for (let guard = 0; guard < 512; guard++) {
+    for (let i = 0; i < thick; i++) {
+      for (let j = 0; j < thick; j++) {
+        const row = c[ay - o + j];
+        const x = ax - o + i;
+        if (row && x >= 0 && x < row.length) row[x] = letter;
+      }
+    }
+    out.push([ax, ay]);
+    if (ax === bx && ay === by) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) {
+      err += dy;
+      ax += sx;
+    }
+    if (e2 <= dx) {
+      err += dx;
+      ay += sy;
+    }
+  }
+  return out;
+}
+
+/**
+ * A one-pixel line on the canvas (logical coordinates, whole art pixels) that
+ * never steps diagonally: where Bresenham's would, it takes the corner pixel
+ * too. A thread or a chain drawn this way stays one joined stroke once the
+ * actor pass has outlined it, instead of a string of single dots.
+ */
+export function line4(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, color: string, art = 2): void {
+  let ax = Math.floor(x0 / art);
+  let ay = Math.floor(y0 / art);
+  const bx = Math.floor(x1 / art);
+  const by = Math.floor(y1 / art);
+  const dx = Math.abs(bx - ax);
+  const dy = -Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1;
+  const sy = ay < by ? 1 : -1;
+  let err = dx + dy;
+  ctx.fillStyle = color;
+  for (let guard = 0; guard < 4096; guard++) {
+    ctx.fillRect(ax * art, ay * art, art, art);
+    if (ax === bx && ay === by) break;
+    const e2 = 2 * err;
+    const stepX = e2 >= dy;
+    const stepY = e2 <= dx;
+    if (stepX && stepY) {
+      // The corner first, so the stroke stays joined side to side.
+      ctx.fillRect((ax + sx) * art, ay * art, art, art);
+    }
+    if (stepX) {
+      err += dy;
+      ax += sx;
+    }
+    if (stepY) {
+      err += dx;
+      ay += sy;
+    }
+  }
+}
+
 /** Cells laid into a frame of w × h at an offset. */
 export function cellsFrom(maps: readonly Map<string, string>[], w: number, h: number): string[] {
   const c = cellsOf([], w, h);
