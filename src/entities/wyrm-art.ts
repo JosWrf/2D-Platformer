@@ -275,15 +275,6 @@ export const DROOL = new BigSheet<'d0' | 'd1' | 'd2'>({ d0: ['ce', 'de'], d1: ['
 
 /* -------------------------------------------------------------- the fire */
 
-/** Flame frames: a tongue w × h, in two flickers, coolest outside. */
-function flames(prefix: string, w: number, heights: readonly number[], tones: string): Record<string, string[]> {
-  const out: Record<string, string[]> = {};
-  heights.forEach((h, i) => {
-    for (let s = 0; s < 2; s++) out[`${prefix}${i}_${s}`] = despeckle(flame(w, Math.max(2, h), 11 + i * 7 + s * 31, tones));
-  });
-  return out;
-}
-
 /** The wall of flame behind him under the floor: 17 wide, risen to four heights. */
 const PILLAR_STEPS = [10, 21, 31, 41];
 const pillarFrames: Record<string, string[]> = {};
@@ -294,21 +285,34 @@ const TONGUE_STEPS = [3, 5, 7];
 const tongueFrames: Record<string, string[]> = {};
 const TONGUES = new BigSheet<string>(tongueFrames, KEY);
 
+/** One of the fire's frames - a tongue of the wall (`w`) or of a pool (`t`) - made when first wanted. */
+function ensureFlame(kind: 'w' | 't', i: number, flick: number): void {
+  const frames = kind === 'w' ? pillarFrames : tongueFrames;
+  const id = `${kind}${i}_${flick}`;
+  if (frames[id]) return;
+  const h = (kind === 'w' ? PILLAR_STEPS : TONGUE_STEPS)[i];
+  frames[id] = despeckle(flame(kind === 'w' ? 17 : 5, Math.max(2, h), 11 + i * 7 + flick * 31, kind === 'w' ? 'bcdef' : 'cde'));
+}
+
+/** Every frame of the fire, as tasks for warmWyrm. */
+const FIRE_TASKS: (() => void)[] = [
+  ...PILLAR_STEPS.flatMap((_, i) => [0, 1].map((f) => () => ensureFlame('w', i, f))),
+  ...TONGUE_STEPS.flatMap((_, i) => [0, 1].map((f) => () => ensureFlame('t', i, f))),
+];
+
 function ensureFire(): void {
-  if (pillarFrames.w0_0) return;
-  Object.assign(pillarFrames, flames('w', 17, PILLAR_STEPS, 'bcdef'));
-  Object.assign(tongueFrames, flames('t', 5, TONGUE_STEPS, 'cde'));
+  for (const task of FIRE_TASKS) task();
 }
 
 /** A tongue of the wall of flame, risen to `step` (0..3), standing on (x, floor). */
 export function drawPillarFlame(ctx: CanvasRenderingContext2D, step: number, flick: number, x: number, floor: number): void {
-  ensureFire();
+  ensureFlame('w', step, flick);
   PILLAR_FLAMES.draw(ctx, `w${step}_${flick}`, x, floor, 8, PILLAR_STEPS[step]);
 }
 
 /** A tongue on a pool, `n` (0..2) tall, standing on (x, y). */
 export function drawTongue(ctx: CanvasRenderingContext2D, n: number, flick: number, x: number, y: number): void {
-  ensureFire();
+  ensureFlame('t', n, flick);
   TONGUES.draw(ctx, `t${n}_${flick}`, x, y, 2, TONGUE_STEPS[n]);
 }
 
@@ -409,7 +413,7 @@ const PENDING: (() => void)[] = [
   ...JAWS.map((_, n) => () => ensureHeads(n)),
   ...JAWS.map((_, n) => () => ANGLES.forEach((_a, i) => HEADS.bake(`h${n}_${i}`))),
   ...JAWS.map((_, n) => () => ANGLES.forEach((_a, i) => HEADS.bake(`h${n}_${i}`, 'hot'))),
-  ensureFire,
+  ...FIRE_TASKS,
 ];
 
 /** Works out what is still missing of him for up to `budget` ms. True once all of him is ready. */

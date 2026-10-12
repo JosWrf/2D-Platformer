@@ -139,14 +139,13 @@ export function rotSprite(g: Grid, deg: number, px: number, py: number, outW: nu
 }
 
 /** rotSprite at several angles, the eightfold blow-up done once for all of them. */
-export function rotSprites(g: Grid, degs: readonly number[], px: number, py: number, outW: number, outH: number, ox = 0, oy = 0): string[][] {
+export function rotSprites(g: Grid, degs: readonly number[], px: number, py: number, outW: number, outH: number, ox = 0, oy = 0, passes = 3): string[][] {
   let big = planeOf(g);
-  for (let i = 0; i < 3; i++) big = scale2x(big);
-  return degs.map((deg) => turnBig(big, deg, px, py, outW, outH, ox, oy));
+  for (let i = 0; i < passes; i++) big = scale2x(big);
+  return degs.map((deg) => turnBig(big, 1 << passes, deg, px, py, outW, outH, ox, oy));
 }
 
-function turnBig(big: Plane, deg: number, px: number, py: number, outW: number, outH: number, ox: number, oy: number): string[] {
-  const S = 8;
+function turnBig(big: Plane, S: number, deg: number, px: number, py: number, outW: number, outH: number, ox: number, oy: number): string[] {
   const a = (deg * Math.PI) / 180;
   const ca = Math.cos(a);
   const sa = Math.sin(a);
@@ -168,20 +167,29 @@ function turnBig(big: Plane, deg: number, px: number, py: number, outW: number, 
 }
 
 /**
- * A part turned to each of `degs` about its pivot (px, py) with RotSprite,
- * each turn cropped to what it covers and cleaned of lone cells; with the
- * pivot's place in each cropped frame.
+ * RotSprite made ready for one part: the blow-up done once, and a function
+ * that turns it to an angle about its pivot (px, py) - cropped to what it
+ * covers, cleaned of lone cells, with the pivot's place in the result. So a
+ * big part can be turned one angle at a time. `passes` 2 blows it up four
+ * times instead of eight: a quarter of the work, edges nearly as clean.
  */
-export function turnings(g: Grid, px: number, py: number, degs: readonly number[]): { rows: string[]; x: number; y: number }[] {
+export function turner(g: Grid, px: number, py: number, passes = 3): (deg: number) => { rows: string[]; x: number; y: number } {
   let r = 1;
   g.forEach((row, y) => {
     for (let x = 0; x < row.length; x++) if (row[x] !== '.' && row[x] !== ' ') r = Math.max(r, Math.hypot(x + 0.5 - px, y + 0.5 - py));
   });
   const half = Math.ceil(r) + 2;
-  return rotSprites(g, degs, px, py, half * 2, half * 2, half - px, half - py).map((t) => {
-    const cut = crop(t);
+  let big = planeOf(g);
+  for (let i = 0; i < passes; i++) big = scale2x(big);
+  return (deg) => {
+    const cut = crop(turnBig(big, 1 << passes, deg, px, py, half * 2, half * 2, half - px, half - py));
     return { rows: despeckle(cut.rows), x: half - cut.x, y: half - cut.y };
-  });
+  };
+}
+
+/** A part turned to each of `degs` (see turner). */
+export function turnings(g: Grid, px: number, py: number, degs: readonly number[], passes = 3): { rows: string[]; x: number; y: number }[] {
+  return degs.map(turner(g, px, py, passes));
 }
 
 /** The frame's filled box: where to crop it to, and where its old (0, 0) went. */

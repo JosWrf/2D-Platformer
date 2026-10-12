@@ -1,6 +1,6 @@
 import { RAMP } from '../render/palette';
 import { type Grid } from '../render/sheet';
-import { BigSheet, type Cells, cellsOf, crop, despeckle, fillPoly, rowsOf, strokeCells4, turnings } from './puppet';
+import { BigSheet, type Cells, cellsOf, crop, despeckle, fillPoly, rowsOf, strokeCells4, turner } from './puppet';
 
 /**
  * Vesperon, drawn for the grid: the lord of the keep, front on, in a high
@@ -650,14 +650,27 @@ type WholeFrame = 'dive18' | 'dive32' | 'dive46' | 'die0' | 'die1' | 'die2' | 'd
 const wholeRows = {} as Record<WholeFrame, string[]>;
 const wholeAt = {} as Record<WholeFrame, { x: number; y: number }>;
 
+let diveTurn: ((deg: number) => { rows: string[]; x: number; y: number }) | null = null;
+
+/** The dive's figure, blown up once to be turned (a big part: four times, not eight). */
+function diveTurner(): (deg: number) => { rows: string[]; x: number; y: number } {
+  if (!diveTurn) {
+    const base = crop(rowsOf(whole('fly2', 'half0', 100, 70)));
+    diveTurn = turner(base.rows, 100 - base.x, 70 - base.y, 2);
+  }
+  return diveTurn;
+}
+
+function makeDive(i: number): void {
+  const id = `dive${DIVE_DEG[i]}` as WholeFrame;
+  if (wholeRows[id]) return;
+  const t = diveTurner()(DIVE_DEG[i]);
+  wholeRows[id] = t.rows;
+  wholeAt[id] = { x: t.x, y: t.y };
+}
+
 function makeDives(): void {
-  if (wholeRows.dive18) return;
-  const base = crop(rowsOf(whole('fly2', 'half0', 100, 70)));
-  turnings(base.rows, 100 - base.x, 70 - base.y, DIVE_DEG).forEach((t, i) => {
-    const id = `dive${DIVE_DEG[i]}` as WholeFrame;
-    wholeRows[id] = t.rows;
-    wholeAt[id] = { x: t.x, y: t.y };
-  });
+  DIVE_DEG.forEach((_, i) => makeDive(i));
 }
 
 /** A little bat, the shape he leaves in. */
@@ -704,16 +717,21 @@ function scatter(g: Grid, gone: number, hx: number, hy: number): string[] {
 }
 
 /** His end: the figure with its wings half spread, fraying into bats over four steps. */
+const GONE = [0, 0.3, 0.55, 0.8];
+let deathBase: { rows: string[]; x: number; y: number } | null = null;
+
+function makeDeathStep(i: number): void {
+  const id = `die${i}` as WholeFrame;
+  if (wholeRows[id]) return;
+  deathBase ??= crop(rowsOf(whole('fall1', 'half0', 110, 70)));
+  const hx = 110 - deathBase.x;
+  const hy = 70 - deathBase.y;
+  wholeRows[id] = scatter(deathBase.rows, GONE[i], hx, hy);
+  wholeAt[id] = { x: hx, y: hy };
+}
+
 function makeDeath(): void {
-  if (wholeRows.die0) return;
-  const base = crop(rowsOf(whole('fall1', 'half0', 110, 70)));
-  const hx = 110 - base.x;
-  const hy = 70 - base.y;
-  [0, 0.3, 0.55, 0.8].forEach((gone, i) => {
-    const id = `die${i}` as WholeFrame;
-    wholeRows[id] = scatter(base.rows, gone, hx, hy);
-    wholeAt[id] = { x: hx, y: hy };
-  });
+  for (let i = 0; i < GONE.length; i++) makeDeathStep(i);
 }
 
 const WHOLE = new BigSheet<WholeFrame>(wholeRows, KEY, PALETTES);
@@ -730,14 +748,15 @@ const PENDING: (() => void)[] = [
     ensureWing(n);
     WINGS.bake(n);
   }),
-  () => {
-    makeDives();
-    for (const d of DIVE_DEG) WHOLE.bake(`dive${d}`, 'hot');
-  },
-  () => {
-    makeDeath();
-    for (let i = 0; i < 4; i++) WHOLE.bake(`die${i}` as WholeFrame);
-  },
+  diveTurner,
+  ...DIVE_DEG.map((d, i) => () => {
+    makeDive(i);
+    WHOLE.bake(`dive${d}`, 'hot');
+  }),
+  ...GONE.map((_, i) => () => {
+    makeDeathStep(i);
+    WHOLE.bake(`die${i}` as WholeFrame);
+  }),
 ];
 
 /** Works out what is still missing of him for up to `budget` ms. True once all of him is ready. */
