@@ -384,6 +384,23 @@ export function drawWards(ctx: CanvasRenderingContext2D, level: Level, camera: C
   }
 }
 
+/**
+ * Where lava lies across the screen, as [from, to] in art columns, a little
+ * wider than the pools: what is drawn in front of everything must not stand
+ * in front of a pool of fire (Background.drawFront).
+ */
+export function lavaSpans(level: Level, camera: Camera): [number, number][] {
+  const out: [number, number][] = [];
+  const left = camera.renderX / TILE - 1;
+  const right = (camera.renderX + camera.viewW) / TILE + 1;
+  for (const run of terrainOf(level).lavaRuns) {
+    if (run.tx1 < left) continue;
+    if (run.tx0 > right) break;
+    out.push([Math.floor((run.tx0 * TILE - camera.renderX) / ART) - 6, Math.ceil(((run.tx1 + 1) * TILE - camera.renderX) / ART) + 6]);
+  }
+  return out;
+}
+
 /** The light each standing ward in view throws on the floor at its foot. */
 export function wardLights(level: Level, camera: Camera, add: (x: number, y: number, radius: number, rgb: string, strength: number, tint: number) => void): void {
   const art = terrainOf(level);

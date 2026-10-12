@@ -231,7 +231,8 @@ function markIn(kind: HeadKind, x: number, y: number): number {
   switch (kind) {
     case 'crown':
       if (inPoly(x, y, [-12, -15, 12, -15, 12, -19, -12, -19])) return cell(H_MARK, 0);
-      for (let i = -1; i <= 1; i++) if (inPoly(x, y, [i * 9 - 3.2, -18, i * 9, -31, i * 9 + 3.2, -18])) return cell(H_MARK, i === 0 ? 1 : 0);
+      // Its points end two pixels wide: a point of one was a lone gold dot in the outline.
+      for (let i = -1; i <= 1; i++) if (inPoly(x, y, [i * 9 - 3.6, -18, i * 9 - 2, -30, i * 9 + 2, -30, i * 9 + 3.6, -18])) return cell(H_MARK, i === 0 ? 1 : 0);
       return 0;
     case 'storm':
       for (const s of [-1, 1]) if (hornIn(x, y, -7, -12 + s * 2, -20, -23 + s * 6, -29, -16 + s * 13, 3.4)) return cell(H_MARK, 0);

@@ -19,6 +19,7 @@ interface Layer {
   sparks: { x: number; y: number; css: string; period: number; on: number; phase: number }[];
   drips: { x: number; top: number; bottom: number; period: number; phase: number; css: string }[];
   shimmer: readonly [number, number] | null;
+  clumps: readonly (readonly [number, number])[];
 }
 
 interface Built {
@@ -124,7 +125,7 @@ export class Background {
    * is painted in the palette's own colours. Between two zones each shows
    * the clumps of whichever zone is nearer.
    */
-  drawFront(ctx: CanvasRenderingContext2D, camera: Camera, focusX = camera.x + this.viewW / 2): void {
+  drawFront(ctx: CanvasRenderingContext2D, camera: Camera, focusX = camera.x + this.viewW / 2, keepOut: readonly (readonly [number, number])[] = []): void {
     const { from, to, t } = zoneBlend(focusX, this.rooms);
     const zone = t > 0.5 ? to : from;
     const front = this.built(zone).front;
@@ -135,7 +136,36 @@ export class Background {
     ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = false;
     const restY = Math.max(0, camera.worldBounds.h - this.viewH) / ART;
-    this.paint(ctx, front, camera.renderX / ART - zone.start / ART, camera.renderY / ART, restY, 0);
+    const camX = camera.renderX / ART - zone.start / ART;
+    if (keepOut.length > 0) {
+      // Never in front of what must be seen - a pool of lava: a clump that
+      // would stand over one is left out, the whole of it.
+      const drop: [number, number][] = [];
+      for (const layer of front) {
+        const shift = Math.round(camX * layer.k);
+        const ox = ((shift % layer.w) + layer.w) % layer.w;
+        for (const [c0, c1] of layer.clumps) {
+          for (let n = -1; n <= Math.ceil(ART_W / layer.w); n++) {
+            const a = c0 - ox + n * layer.w;
+            const b = c1 - ox + n * layer.w;
+            if (b < 0 || a > ART_W) continue;
+            if (keepOut.some(([l0, l1]) => a < l1 && b > l0)) drop.push([a, b]);
+          }
+        }
+      }
+      if (drop.length > 0) {
+        drop.sort((p, q) => p[0] - q[0]);
+        const clip = new Path2D();
+        let x = 0;
+        for (const [a, b] of drop) {
+          if (a > x) clip.rect(x, 0, a - x, ART_H);
+          x = Math.max(x, b);
+        }
+        if (x < ART_W) clip.rect(x, 0, ART_W - x, ART_H);
+        ctx.clip(clip);
+      }
+    }
+    this.paint(ctx, front, camX, camera.renderY / ART, restY, 0);
     ctx.restore();
   }
 
@@ -325,6 +355,7 @@ function layerOf(s: Strip, ink: Ink): Layer {
     sparks: (s.sparks ?? []).map((sp) => ({ ...sp, css: css(ink(sp.hex)) })),
     drips: (s.drips ?? []).map((d) => ({ ...d, css: css(ink(d.hex)) })),
     shimmer: s.shimmer ?? null,
+    clumps: s.clumps ?? [],
   };
 }
 

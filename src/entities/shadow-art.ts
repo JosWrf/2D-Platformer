@@ -89,14 +89,15 @@ const SHADOW_OF: Readonly<Record<string, string>> = {
   '#5ac54f': RAMP.plum[2],
   '#99e65f': RAMP.plum[2],
   '#d3fc7e': RAMP.plum[3],
-  // Blues: hood, tunic and cape, onto the plum ramp at his own lightness.
-  '#03193f': RAMP.plum[0],
-  '#00396d': RAMP.plum[1],
-  '#0069aa': RAMP.plum[2],
-  '#0098dc': RAMP.plum[3],
-  '#00cdf9': RAMP.violet[4],
-  '#0cf1ff': RAMP.violet[4],
-  '#94fdff': RAMP.violet[5],
+  // Blues: hood, tunic and cape, onto the plum ramp a step under his own
+  // lightness - a shadow, not the hero dressed in purple.
+  '#03193f': RAMP.slate[1],
+  '#00396d': RAMP.plum[0],
+  '#0069aa': RAMP.plum[1],
+  '#0098dc': RAMP.plum[2],
+  '#00cdf9': RAMP.plum[3],
+  '#0cf1ff': RAMP.plum[3],
+  '#94fdff': RAMP.violet[4],
   // Violets and plums: its own colours, a step down.
   '#0c0293': RAMP.slate[1],
   '#3003d9': RAMP.plum[0],
@@ -187,6 +188,7 @@ const SOLID = 160;
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
 
 const RIM = (0xff000000 | abgr24(UMBRA.rim)) >>> 0;
+const RIM_EDGE = (0xff000000 | abgr24(UMBRA.pale)) >>> 0;
 const WHITE = 0xffffffff;
 const EYE = (0xff000000 | abgr24(UMBRA.eye)) >>> 0;
 const EYE_CORE = WHITE;
@@ -281,11 +283,16 @@ export class UmbraPainter {
     if (!look.white) {
       // The rim: down the right-hand edge of every mass at least three pixels
       // across - hood, back, cape, tunic - and not along a limb or the blade,
-      // which it would only turn into a magenta line.
+      // which it would only turn into a magenta line. Two pixels of it where
+      // the mass is wider, pale on the outside: the rift's glow behind it.
       for (let y = 0; y < LH; y++) {
-        let i = y * LW + 2;
-        for (let x = 2; x < LW - 1; x++, i++) {
-          if (body[i] && !body[i + 1] && body[i - 1] && body[i - 2]) px[i] = RIM;
+        let i = y * LW + 3;
+        for (let x = 3; x < LW - 1; x++, i++) {
+          if (!body[i] || body[i + 1] || !body[i - 1] || !body[i - 2]) continue;
+          if (body[i - 3]) {
+            px[i] = RIM_EDGE;
+            px[i - 1] = RIM;
+          } else px[i] = RIM;
         }
       }
       const put = (x: number, y: number, c: number): void => {

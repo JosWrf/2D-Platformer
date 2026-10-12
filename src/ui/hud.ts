@@ -142,12 +142,12 @@ const FADE_LOWER = [UI.dusk, UI.steel, UI.slate, UI.frost] as const;
  * up through four colours rather than through transparency, the way a
  * palette fade does, and never as a dither crawling over the letters.
  */
-export function drawBanner(ctx: CanvasRenderingContext2D, title: string, sub: string | undefined, level: number): void {
+export function drawBanner(ctx: CanvasRenderingContext2D, title: string, sub: string | undefined, level: number, at = BANNER_Y): void {
   if (level <= 0.12) return;
   const step = Math.min(FADE.length - 1, Math.floor(level * FADE.length));
   const big = { scale: 2, color: FADE[step], lower: FADE_LOWER[step], ...OVER, shadow: UI.night };
   const lines = bannerLines(title);
-  let y = 46 - (lines.length - 1) * 11;
+  let y = at - (lines.length - 1) * 11;
   let widest = 0;
   for (const line of lines) {
     widest = Math.max(widest, text(ctx, line, ART_W / 2, y, { ...big, align: 'center' }));
@@ -164,6 +164,12 @@ export function drawBanner(ctx: CanvasRenderingContext2D, title: string, sub: st
     text(ctx, sub, ART_W / 2, ruleY + 7, { font: 'small', color: step >= 3 ? UI.gold : UI.goldDark, align: 'center', ...OVER });
   }
 }
+
+/** The art row a banner's title stands on: near the top, and further down when a boss up there would be behind it. */
+export const BANNER_Y = 46;
+export const BANNER_LOW_Y = 128;
+/** The stretch of the screen a banner covers, in art pixels: x, y, w, h. */
+export const BANNER_BAND = [90, 20, 300, 50] as const;
 
 const bannerSplits = new Map<string, readonly string[]>();
 

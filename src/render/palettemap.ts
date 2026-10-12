@@ -472,19 +472,22 @@ export class PaletteMap {
 
   /**
    * The fall: the world sinking into old blood, k = 1..3 - each colour to the
-   * rose ramp's colour of about its lightness, and darker with every step.
+   * rose ramp, in the order of its lightness, and darker with every step.
    */
   bleed(k: number): Uint8Array {
     const rose = RAMP.rose.map((hex) => HEX.indexOf(hex)).filter((i) => i >= 0 && !NEON.has(HEX[i]));
     const plum = ['#1c121c', '#391f21'].map((hex) => HEX.indexOf(hex));
     const ramp = [...plum, ...rose];
     return this.table(`r${k}`, (i) => {
-      const target = this.L[i] * (1 - 0.18 * k) - 4 * k;
-      let best = ramp[0];
-      for (const j of ramp) if (Math.abs(this.L[j] - target) < Math.abs(this.L[best] - target)) best = j;
       // The first step keeps a little of the colour: half the pixels' hue
       // would be a pattern, so instead it only darkens.
-      return k === 1 ? this.alongRamp(i, -1) : best;
+      if (k === 1) return this.alongRamp(i, -1);
+      // Then each colour goes to the ramp of old blood by where its lightness
+      // stands, squeezed towards the dark end as the fall goes on: what was
+      // lighter stays lighter. (By lightness alone, a dim moon came out the
+      // colour of the sky round it, and only its rim was left - a red bracket.)
+      const at = Math.round(Math.max(0, (this.L[i] - 8) / 92) * (ramp.length - 1) * (1 - 0.17 * k));
+      return ramp[Math.min(ramp.length - 1, at)];
     });
   }
 

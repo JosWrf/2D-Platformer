@@ -337,13 +337,14 @@ export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: 
   ['Achtzehn Bosse stehen zwischen dir und dem Tor nach Hause —', 'keiner lässt sich umgehen.'].forEach((line, i) =>
     text(ctx, line, TITLE_WORDS_X, 76 + i * 9, { font: 'small', color: UI.mist, align: 'center', ...OVER }),
   );
-  // The call to start, pulsing between two steps of the slate ramp rather
-  // than vanishing: whenever someone looks, it is there to be read.
+  // The call to start, in gold and pulsing between two steps of it rather
+  // than vanishing: whenever someone looks, it is there to be read, and it
+  // is the brightest thing under the logo.
   const on = blinkOn(time, 1.6, 0.6);
   text(ctx, 'LEERTASTE ZUM STARTEN', TITLE_CALL_X, 214, {
     scale: 2,
-    color: on ? UI.white : UI.mist,
-    lower: on ? UI.frost : UI.slate,
+    color: on ? UI.goldLight : UI.gold,
+    lower: on ? UI.gold : UI.goldDark,
     align: 'center',
     ...OVER,
     shadow: UI.night,

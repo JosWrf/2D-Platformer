@@ -32,9 +32,12 @@ import { ART, ART_H, ART_W, abgrOf, actorCoverage, makeCanvas, settleActors } fr
 import { PaletteMap } from './render/palettemap';
 import { Scatter } from './render/scatter';
 import { PALETTE, mixHex, zoneAt, zoneBlend } from './render/palette';
-import { drawTilemap, drawWards, wardLights } from './render/tilemap';
+import { drawTilemap, drawWards, lavaSpans, wardLights } from './render/tilemap';
 import {
   RELIC_ROW,
+  BANNER_BAND,
+  BANNER_LOW_Y,
+  BANNER_Y,
   drawBanner,
   drawBossBar,
   drawCounters,
@@ -47,7 +50,7 @@ import {
 } from './ui/hud';
 import { UI, screen } from './ui/kit';
 import * as screens from './ui/screens';
-import { LEDGE_HERO_X, LEDGE_TOP, LEDGE_Y, titleLedge } from './ui/titleScene';
+import { LEDGE_HERO_X, LEDGE_TOP, LEDGE_Y, MIST_Y, titleLedge, titleMist } from './ui/titleScene';
 import type { PauseEntry } from './ui/screens';
 import type { World } from './world/context';
 import { Arena, Level } from './world/level';
@@ -389,7 +392,7 @@ export class Game implements World {
   private bossIntro = 0;
   private bossGhostHp = 0;
   /** The banner across the top; `sub` is a smaller second line under it. */
-  private zoneBanner: { text: string; timer: number; sub?: string } = { text: '', timer: 0 };
+  private zoneBanner: { text: string; timer: number; sub?: string; low?: boolean } = { text: '', timer: 0 };
   /** Which list the pause screen shows: the relics, or the boss attacks. */
   private pausePage: 'relics' | 'skills' = 'relics';
   private currentZone = '';
@@ -1421,6 +1424,18 @@ export class Game implements World {
    * the darkness, so anything the player must see - hazards, pickups, the
    * knight - has to be in here.
    */
+  /** Whether a boss in the fight is where a banner stands near the top of the screen. */
+  private bossUnderBanner(): boolean {
+    const [bx, by, bw, bh] = BANNER_BAND;
+    const covers = (e: { x: number; y: number; w: number; h: number }): boolean => {
+      const x = (e.x - this.camera.renderX) / ART;
+      const y = (e.y - this.camera.renderY) / ART;
+      return x < bx + bw && x + e.w / ART > bx && y < by + bh && y + e.h / ART > by;
+    };
+    if (this.boss && this.boss.engaged && !this.boss.dead && covers(this.boss)) return true;
+    return this.enemies.some((e) => e.engaged && !e.dead && e.barName() !== null && covers(e));
+  }
+
   private collectLights(): Light[] {
     const lights: Light[] = [];
     const add = (x: number, y: number, radius: number, rgb: string, strength: number, tint = 0.22): void => {
@@ -1710,7 +1725,7 @@ export class Game implements World {
     this.drawActors(a);
     // The backdrop's sparse foreground strip, in front of the actors and below
     // the floor's surface: it frames the play without hiding any of it.
-    this.background.drawFront(a, this.camera, this.player.cx);
+    this.background.drawFront(a, this.camera, this.player.cx, lavaSpans(this.level, this.camera));
 
     a.save();
     a.translate(-this.camera.renderX, -this.camera.renderY);
@@ -1846,6 +1861,7 @@ export class Game implements World {
     this.background.draw(a, cam, this.time);
     a.save();
     a.setTransform(1, 0, 0, 1, 0, 0);
+    a.drawImage(titleMist(), 0, MIST_Y);
     a.drawImage(titleLedge(), 0, LEDGE_Y);
     a.restore();
 
@@ -1991,7 +2007,11 @@ export class Game implements World {
     // Zone banner.
     if (this.zoneBanner.timer > 0) {
       const t = this.zoneBanner.timer;
-      drawBanner(ctx, this.zoneBanner.text, this.zoneBanner.sub, clamp(t > 2.6 ? (3.2 - t) / 0.6 : t / 1.2, 0, 1));
+      // A boss up where the banner stands (Vesperon comes down from the top of
+      // the screen) would be behind it: the banner steps down out of his way,
+      // and stays down until it is gone.
+      if (!this.zoneBanner.low && this.bossUnderBanner()) this.zoneBanner.low = true;
+      drawBanner(ctx, this.zoneBanner.text, this.zoneBanner.sub, clamp(t > 2.6 ? (3.2 - t) / 0.6 : t / 1.2, 0, 1), this.zoneBanner.low ? BANNER_LOW_Y : BANNER_Y);
     }
 
     // Boss bar.

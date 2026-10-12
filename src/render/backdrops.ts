@@ -77,6 +77,8 @@ export interface Strip {
   drips?: Drip[];
   /** Rows that waver sideways by a pixel in the heat, [first row, rows]. */
   shimmer?: readonly [number, number];
+  /** The front strip's clumps, as [from, to] columns of the strip: each left out whole where it would stand in front of lava. */
+  clumps?: readonly (readonly [number, number])[];
 }
 
 /** A pixel that shows `hex` for `on` seconds of every `period`. */
@@ -180,6 +182,8 @@ interface SkyPlan {
   starHex?: readonly [string, string];
   /** Centre and radius of the moon, and its colours: disc, seas, lit rim, haze. */
   moon?: { x: number; y: number; r: number; disc: string; sea: string; lit: string; haze?: string; crescent?: boolean };
+  /** A bank of far cloud across the zenith: its first row, how many rows, how much of it is cloud (0-1). */
+  clouds?: { y: number; rows: number; cover: number; seed: number };
 }
 
 /**
@@ -241,6 +245,30 @@ function nightSky(look: Look, ink: Ink, rng: Rng, plan: SkyPlan): Strip {
       }
     }
     if (moon.crescent) p.disc(mx + Math.round(r * 0.45), my - Math.round(r * 0.2), r, base);
+  }
+  // A bank of far cloud across the zenith, in the horizon's colour: solid,
+  // thickest along its middle, with a ragged edge, and no lone pixels of it -
+  // a large flat sky with something in it, over the moon if it passes there.
+  const clouds = plan.clouds;
+  if (clouds) {
+    const { y: cy, rows, cover, seed } = clouds;
+    const w = p.w;
+    const mask = new Uint8Array(w * rows);
+    for (let x = 0; x < w; x++) {
+      const puff = noise(x, w, w / 48, seed) * 0.6 + noise(x, w, w / 14, seed + 3) * 0.4;
+      for (let r = 0; r < rows; r++) {
+        const v = 1 - Math.abs((r + 0.5) / rows - 0.5) * 2;
+        if (v * puff > 1 - cover) mask[r * w + x] = 1;
+      }
+    }
+    for (let r = 0; r < rows; r++) {
+      for (let x = 0; x < w; x++) {
+        const i = r * w + x;
+        if (!mask[i]) continue;
+        const n = mask[r * w + ((x + w - 1) % w)] + mask[r * w + ((x + 1) % w)] + (r > 0 ? mask[i - w] : 0) + (r < rows - 1 ? mask[i + w] : 0);
+        if (n >= 2) p.set(x, cy + r, base);
+      }
+    }
   }
   return { pix: p, k: 0.02, ky: 0, y: 0, below: look.horizon, sparks };
 }
@@ -429,13 +457,38 @@ function* den(look: Look, ink: Ink): Painting {
   strips.push({ pix: mid, k: 0.3, y: 92, below: look.near });
   yield;
 
-  // Two great trunks, one standing, one fallen across the clearing.
+  // Two great trunks, snapped off where the boar's kind leaned on them, one
+  // standing and one fallen across the clearing. A standing one tapers from
+  // its roots to a splintered top, its bark in grooves, lit down its left
+  // edge, the stubs of its branches broken short - a tree, where a straight
+  // dark bar to the top of the screen was a monolith.
   const trunks = new Pix(832, 180);
   for (let x = rng.int(40, 90); x < trunks.w - 80; x += rng.int(260, 380)) {
-    trunks.rect(x, 0, 12, 176, near);
-    trunks.rect(x, 0, 2, 176, far);
-    for (let y = 10; y < 170; y += rng.int(14, 26)) trunks.rect(x + rng.int(3, 8), y, 1, rng.int(4, 9), deep);
-    for (let i = 0; i < 4; i++) trunks.line(x + 6, 160, x + 6 + rng.int(-22, 22), 176, near);
+    const top = rng.int(26, 44);
+    const halfAt = (y: number): number => 5 + (y > 150 ? Math.round((y - 150) * 0.35) : 0) + (y > 120 ? 1 : 0);
+    const splinter: number[] = [];
+    for (let i = -8; i <= 8; i++) splinter.push(top + rng.int(0, 7) - (i === -2 || i === 3 ? rng.int(6, 12) : 0));
+    for (let y = 0; y < 176; y++) {
+      const h = halfAt(y);
+      for (let dx = -h; dx <= h; dx++) {
+        if (y < splinter[Math.max(0, Math.min(16, dx + 8))]) continue;
+        const c = dx <= -h + 1 ? far : dx === h ? deep : near;
+        trunks.set(x + dx, y, c);
+      }
+    }
+    // The bark's grooves, broken here and there.
+    for (const gx of [-2, 1, 3]) {
+      for (let y = top + 6; y < 170; y++) if (noise(y, 180, 9, x + gx * 7) > 0.35) trunks.set(x + gx, y, deep);
+    }
+    // Stubs of branches, snapped short, lit along their tops.
+    for (const [sy, side] of [[top + rng.int(18, 30), -1], [top + rng.int(45, 70), 1]] as const) {
+      const sx = x + side * (halfAt(sy) + 1);
+      for (let k = 0; k < 9; k++) {
+        trunks.rect(sx + side * k, sy - Math.round(k * 0.6), 1, 3, near);
+        trunks.set(sx + side * k, sy - Math.round(k * 0.6), far);
+      }
+    }
+    for (let i = 0; i < 4; i++) trunks.line(x, 160, x + rng.int(-24, 24), 176, near);
   }
   const fx = rng.int(160, 300);
   for (let i = 0; i < 8; i++) trunks.line(fx, 150 + i, fx + 150, 128 + i, near);
@@ -582,6 +635,7 @@ function* vault(look: Look, ink: Ink): Painting {
       glow: [[86, 30, 1, 3], [116, 156, 3, 3]],
       stars: 60,
       starRows: 70,
+      clouds: { y: 4, rows: 26, cover: 0.62, seed: 0x601e },
     }),
   ];
   strips.push({ pix: cityline(rng, ink('#424c6e'), ink('#657392'), slate), k: 0.05, y: 84, below: look.horizon });
@@ -1310,6 +1364,7 @@ function* fortress(look: Look, ink: Ink, plan: CastlePlan): Painting {
       stars: 80,
       starRows: 74,
       moon: plan.moon,
+      clouds: { y: 6, rows: 24, cover: 0.58, seed: plan.seed + 77 },
     }),
   ];
   const sky = strips[0];
@@ -1856,7 +1911,9 @@ function frontBrush(seed: number, bodyHex: string, litHex: string, kind: 'fern' 
   const body = abgr(bodyHex);
   const lit = abgr(litHex);
   const p = new Pix(1280, 40);
+  const clumps: [number, number][] = [];
   for (let x = rng.int(40, 140); x < p.w - 40; x += rng.int(240, 420)) {
+    clumps.push([x - 26, x + 46]);
     if (kind === 'fern') {
       for (let i = 0; i < 7; i++) {
         const a = Math.PI * (0.25 + (0.5 * i) / 6);
@@ -1884,7 +1941,7 @@ function frontBrush(seed: number, bodyHex: string, litHex: string, kind: 'fern' 
       }
     }
   }
-  return { pix: p, k: 1.25, y: 232 };
+  return { pix: p, k: 1.25, y: 232, clumps };
 }
 
 /** The theatre's footlights: hooded lamps along the front of the stage, flames lit. */

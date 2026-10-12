@@ -122,3 +122,41 @@ export function titleLedge(): HTMLCanvasElement {
   ledge = p.canvas();
   return ledge;
 }
+
+/** Where the mist in the valley starts, in art rows. */
+export const MIST_Y = 192;
+
+let mist: HTMLCanvasElement | null = null;
+
+/**
+ * The valley between the crag and the castle, filled with mist: two banks of
+ * it one behind the other, each a ragged crest the moon catches along its
+ * top and solid fog below - so the lower part of the title is a place, not
+ * an empty dark band, and the call to start stands on something.
+ */
+export function titleMist(): HTMLCanvasElement {
+  if (mist) return mist;
+  const w = 480;
+  const h = 270 - MIST_Y;
+  const p = new Pix(w, h);
+  const fog = abgr('#2a2f4e');
+  const crest = abgr('#424c6e');
+  const banks: readonly (readonly [number, number, number])[] = [
+    [8, 7, 41],
+    [30, 9, 67],
+  ];
+  for (const [base, amp, seed] of banks) {
+    const top = new Int16Array(w);
+    for (let x = 0; x < w; x++) {
+      const v = noise(x, w, 9, seed) * 0.7 + noise(x, w, 31, seed + 5) * 0.3;
+      top[x] = Math.round(base + (v - 0.5) * 2 * amp);
+    }
+    for (let x = 0; x < w; x++) {
+      for (let y = Math.max(0, top[x]); y < h; y++) p.set(x, y, fog);
+      // The crest, lit where it rises towards the moon on the right.
+      if (top[x] >= 0 && top[x] < h && (x === w - 1 || top[x + 1] <= top[x])) p.set(x, top[x], crest);
+    }
+  }
+  mist = p.canvas();
+  return mist;
+}
