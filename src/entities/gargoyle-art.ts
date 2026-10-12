@@ -25,11 +25,14 @@ import { despeckle, insidePoly, line4 } from './boss-pixels';
 /* ------------------------------------------------------------------ paints */
 
 /*
- * Letters: A moon glint, B light, C body, D shade, E deep; M and N the near
- * and far wing skin; K claws and fangs; Q the inside of the mouth; j the
- * spout's channel along the jaw; G and H moss; e the eye's core, f its rim, g
- * the ring round it that lights up when he is about to strike; r and q a
- * crack's glowing core and its dark lip.
+ * Letters: A the moon along his top edges, B lit planes, C body, D shade, E
+ * deep, F the crevices, the cracks of weathering and the wing's struts, W
+ * the brightest points (horn tips, claw tips); M and O the near wing's skin,
+ * lit along its leading edge and a step darker towards the scallops, N the
+ * far wing's; K claws and fangs; Q the inside of the mouth; j the spout's
+ * channel along the jaw; H G I J moss from its shadow to its brightest; U and
+ * V lichen; e the eye's core, f its rim, g the ring round it that lights up
+ * when he is about to strike; r and q a crack's glowing core and its dark lip.
  *
  * The two bodies are told apart by value before anything else: stone is the
  * palest thing on the battlements, flesh a step of slate darker than it and
@@ -40,22 +43,30 @@ type Paint = Readonly<Record<string, string>>;
 
 const WHITE = '#ffffff';
 
+/** Five greys cut into planes, a cool moon on the top edges, moss and lichen where the rain sits. */
 const STONE: Paint = {
-  A: WHITE,
+  A: RAMP.slate[6],
   B: WHITE,
   C: RAMP.grey[6],
   D: RAMP.grey[5],
   E: RAMP.grey[4],
+  F: RAMP.grey[3],
+  W: WHITE,
   M: RAMP.grey[6],
+  O: RAMP.grey[5],
   N: RAMP.grey[5],
   K: WHITE,
-  Q: RAMP.grey[3],
-  j: RAMP.grey[4],
-  G: RAMP.green[3],
-  H: RAMP.green[2],
-  e: RAMP.grey[3],
-  f: RAMP.grey[4],
-  g: RAMP.grey[5],
+  Q: RAMP.grey[2],
+  j: RAMP.grey[3],
+  H: RAMP.green[1],
+  G: RAMP.green[2],
+  I: RAMP.green[3],
+  J: RAMP.green[4],
+  U: RAMP.earth[5],
+  V: RAMP.earth[4],
+  e: RAMP.grey[1],
+  f: RAMP.grey[2],
+  g: RAMP.grey[4],
 };
 
 /** Water in the spout's channel while it gurgles and spits. */
@@ -68,13 +79,20 @@ const WARM: Paint = {
   C: RAMP.slate[5],
   D: RAMP.slate[4],
   E: RAMP.slate[3],
+  F: RAMP.slate[2],
+  W: WHITE,
   M: RAMP.slate[5],
+  O: RAMP.slate[4],
   N: RAMP.slate[4],
   K: RAMP.earth[7],
   Q: RAMP.rose[0],
   j: RAMP.slate[3],
-  G: RAMP.green[2],
   H: RAMP.green[1],
+  G: RAMP.green[2],
+  I: RAMP.green[2],
+  J: RAMP.green[3],
+  U: RAMP.slate[5],
+  V: RAMP.slate[4],
   e: RAMP.rose[3],
   f: RAMP.rose[1],
   g: RAMP.slate[4],
@@ -87,13 +105,20 @@ function flesh(eye: string, rim: string, tell: boolean): Paint {
     C: RAMP.slate[4],
     D: RAMP.slate[3],
     E: RAMP.slate[2],
-    M: RAMP.slate[4],
+    F: RAMP.slate[1],
+    W: RAMP.earth[7],
+    M: RAMP.slate[5],
+    O: RAMP.slate[4],
     N: RAMP.slate[3],
     K: RAMP.earth[7],
     Q: RAMP.rose[0],
     j: RAMP.slate[2],
-    G: RAMP.green[2],
     H: RAMP.green[1],
+    G: RAMP.green[2],
+    I: RAMP.green[2],
+    J: RAMP.green[3],
+    U: RAMP.slate[4],
+    V: RAMP.slate[3],
     e: tell ? WHITE : eye,
     f: rim,
     g: tell ? rim : RAMP.slate[2],
@@ -103,16 +128,20 @@ function flesh(eye: string, rim: string, tell: boolean): Paint {
 /** The flash of turning to stone: paler than stone. */
 const WASH: Paint = {
   ...STONE,
-  C: WHITE,
-  D: RAMP.grey[6],
-  E: RAMP.grey[5],
-  M: WHITE,
-  N: RAMP.grey[6],
+  B: WHITE,
+  C: RAMP.grey[6],
+  D: RAMP.grey[5],
+  E: RAMP.grey[4],
+  F: RAMP.grey[3],
+  M: RAMP.grey[6],
+  O: RAMP.grey[5],
+  N: RAMP.grey[5],
+  K: WHITE,
   Q: RAMP.grey[4],
   j: RAMP.grey[5],
-  e: RAMP.grey[4],
-  f: RAMP.grey[5],
-  g: RAMP.grey[6],
+  e: RAMP.grey[3],
+  f: RAMP.grey[4],
+  g: RAMP.grey[5],
 };
 
 const PAINTS = {
@@ -278,8 +307,16 @@ class Painter {
   }
 
   /** A polyline drawn as a chain of capsules of one width. */
-  stroke(pts: readonly number[], width: number, tone: string): void {
-    for (let i = 0; i + 3 < pts.length; i += 2) this.limb(pts[i], pts[i + 1], width / 2, pts[i + 2], pts[i + 3], width / 2, tone);
+  stroke(pts: readonly number[], width: number, tone: string | ((x: number, y: number) => string | null)): void {
+    const r = width / 2;
+    for (let i = 0; i + 3 < pts.length; i += 2) {
+      const [x1, y1, x2, y2] = [pts[i], pts[i + 1], pts[i + 2], pts[i + 3]];
+      this.fill(
+        [Math.min(x1, x2) - r, Math.min(y1, y2) - r, Math.max(x1, x2) + r, Math.max(y1, y2) + r],
+        (x, y) => segDist(x, y, x1, y1, x2, y2) <= r,
+        (x, y) => (typeof tone === 'string' ? tone : tone(x, y)),
+      );
+    }
   }
 }
 
@@ -309,6 +346,19 @@ function cubicPts(x0: number, y0: number, ax: number, ay: number, bx: number, by
 }
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+
+/** How far a point is from a segment. */
+function segDist(x: number, y: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const t = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(x1 + dx * t - x, y1 + dy * t - y);
+}
+
+/** Which side of a segment's line a point is on: negative to its left, going from the first end to the second. */
+function segSide(x: number, y: number, x1: number, y1: number, x2: number, y2: number): number {
+  return ((x - x1) * (y2 - y1) - (y - y1) * (x2 - x1)) / (Math.hypot(x2 - x1, y2 - y1) || 1);
+}
 
 /* -------------------------------------------------------------------- rig */
 
@@ -471,15 +521,25 @@ class Rig {
     scallop(tips[0][0], tips[0][1], tips[1][0], tips[1][1]);
     scallop(tips[1][0], tips[1][1], tips[2][0], tips[2][1]);
     scallop(tips[2][0], tips[2][1], back.x, back.y);
-    g.poly(pts, far ? 'N' : 'M');
-    // The struts: ridges in the skin, a step lighter than it; the arm bone heavy.
+    // The skin: lit along the leading edge, a step darker towards the scallops.
+    const lead = (x: number, y: number): number => Math.min(segDist(x, y, 0, 0, wx, wy), segDist(x, y, wx, wy, tips[0][0], tips[0][1]));
+    g.poly(pts, (x, y) => (lead(x, y) < 13 ? (far ? 'N' : 'M') : far ? 'E' : 'O'));
     // The struts, grooved into the skin; the leading one carries the light.
-    for (const [tx, ty] of tips) g.stroke([wx, wy, tx, ty], 2, far ? 'E' : 'D');
-    g.stroke([wx, wy, tips[0][0], tips[0][1]], 2.2, far ? 'D' : 'B');
-    g.limb(0, 0, 3, wx, wy, 2.2, far ? 'D' : (_t, side) => (side < 0 ? 'B' : 'C'));
+    for (const [tx, ty] of tips.slice(1)) g.stroke([wx, wy, tx, ty], 2, far ? 'F' : 'E');
+    g.stroke([wx, wy, tips[0][0], tips[0][1]], 2.4, far ? 'D' : (x, y) => (segSide(x, y, wx, wy, tips[0][0], tips[0][1]) < 0 ? 'B' : 'C'));
+    g.limb(0, 0, 3.2, wx, wy, 2.4, far ? 'D' : (_t, side) => (side < -0.6 ? 'B' : 'C'));
     // The thumb claw at the wrist.
     g.poly([wx - 1, wy - 1, wx + 5, wy - 6, wx + 2, wy + 1], 'K');
-    if (!far && o < 0.5) g.oval(wx * 0.7, wy * 0.7 + 1, 4.5, 2.2, 'G');
+    if (!far) {
+      // A crack across the skin, and moss where the folded wing holds the rain.
+      const cx = lerp(wx, tips[1][0], 0.45);
+      const cy = lerp(wy, tips[1][1], 0.45);
+      g.stroke([cx, cy, cx - 5 + o * 3, cy + 6, cx - 3 + o * 5, cy + 11], 1.7, 'F');
+      if (o < 0.5) {
+        this.moss(wx * 0.7, wy * 0.7 + 1, 1.2);
+        this.moss(wx * 0.45 - 2, wy * 0.45 + 2, 0.8);
+      }
+    }
     g.restore();
   }
 
@@ -487,8 +547,8 @@ class Rig {
   private tail(): void {
     const g = this.g;
     const lift = this.p.fly * 12;
-    g.stroke([-18, -12, ...cubicPts(-18, -12, -28, -8 - lift * 0.4, -34, -2 - lift, -42, -4 - lift)], 4.4, 'D');
-    g.stroke([-41, -4 - lift, ...quadPts(-41, -4 - lift, -44, -6 - lift, -45, -9 - lift, 3)], 2.6, 'D');
+    g.stroke([-18, -12, ...cubicPts(-18, -12, -28, -8 - lift * 0.4, -34, -2 - lift, -42, -4 - lift)], 4.4, 'C');
+    g.stroke([-41, -4 - lift, ...quadPts(-41, -4 - lift, -44, -6 - lift, -45, -9 - lift, 3)], 2.6, 'C');
     const tx = -46;
     const ty = -11 - lift;
     g.poly([tx - 5, ty + 2, tx, ty - 6, tx + 5, ty + 2, tx, ty + 1], 'C');
@@ -505,10 +565,11 @@ class Rig {
     g.turn(p.fly * 0.95 + swing - p.rear * 0.12);
     g.translate(-HIP.x, -HIP.y);
     const haunch = [-21, -11, ...cubicPts(-21, -11, -24, -24, -11, -30, -2, -23), ...quadPts(-2, -23, 4, -16, 0, -9), ...quadPts(0, -9, -9, -4, -21, -11)];
-    const cut = facets(-24, -30, 4, -4, 9, -10, -19, 13, far ? -0.3 : 0.05, far);
+    const cut = facets(-24, -30, 4, -4, 9, -10, -19, 13, far ? -0.15 : 0.25, far);
     g.poly(haunch, (x, y) => (far ? DARKER[cut(x, y)] : cut(x, y)));
-    g.poly([-3, -12, ...quadPts(-3, -12, 2, -6, -2, -2), -16, -1.5, ...quadPts(-16, -1.5, -19, -4, -15, -7)], far ? 'E' : 'D');
+    g.poly([-3, -12, ...quadPts(-3, -12, 2, -6, -2, -2), -16, -1.5, ...quadPts(-16, -1.5, -19, -4, -15, -7)], far ? 'E' : 'C');
     g.oval(-8, -2.2, 8.5, 2.8, far ? 'D' : 'C');
+    if (!far) this.lichen(-13, -16, 0.9);
     for (let i = 0; i < 3; i++) {
       const bx = -2 + i * 2;
       g.poly([bx - 1.6, -3.6 + i * 0.4, bx + 4, -3 + i, bx + 3.6, 0.6, bx, -0.8], 'K');
@@ -528,7 +589,7 @@ class Rig {
       ...quadPts(4, -9, -8, -6, -21, -12),
     ];
     // Cut in facets: the light by which way a plane of him faces.
-    g.poly(outline, facets(-26, -50, 19, -6, 11, -3, -27, 21, 0.1, true));
+    g.poly(outline, facets(-26, -50, 19, -6, 11, -3, -27, 21, 0.3, true));
     // The courses of plates down the chest.
     for (let i = 0; i < 4; i++) {
       const y = -32 + i * 5.5;
@@ -541,9 +602,31 @@ class Rig {
       const y = -14 - Math.sin(t * Math.PI * 0.9 + 0.25) * 31 - t * 2;
       g.poly([x - 2.6, y + 1.8, x - 0.4, y - 3.8, x + 2.6, y + 1.4], 'C');
     }
-    // Moss on the shoulders.
-    g.oval(1, -45.5, 7.5, 2.8, 'G');
-    g.oval(-13, -37.5, 4.5, 2.2, 'H');
+    // A hundred winters of weather: cracks down the stone of his back and chest.
+    g.stroke([-16, -36, -12, -30, -14, -24, -10, -18], 1.7, 'F');
+    g.stroke([9, -40, 6, -34, 8, -29], 1.7, 'F');
+    // Lichen on his flank, moss in clumps on the shoulders where the rain sits.
+    this.lichen(-18, -22, 1.1);
+    this.lichen(4, -14, 0.8);
+    this.moss(1, -45.5, 1.5);
+    this.moss(-12, -38, 1.1);
+    this.moss(8, -42.5, 0.8);
+  }
+
+  /** A clump of moss: its shadow under it, its body, a lit top and a bright point. */
+  private moss(x: number, y: number, s: number): void {
+    const g = this.g;
+    g.oval(x + 0.9 * s, y + 0.9 * s, 3.6 * s, 2 * s, 'H');
+    g.oval(x, y, 3.4 * s, 2 * s, 'G');
+    g.oval(x - 1 * s, y - 0.8 * s, 2.2 * s, 1.3 * s, 'I');
+    g.oval(x - 1.6 * s, y - 1.2 * s, 1.6 * s, 1 * s, 'J');
+  }
+
+  /** A patch of lichen, rust-gold on the grey. */
+  private lichen(x: number, y: number, s: number): void {
+    const g = this.g;
+    g.oval(x + 0.7 * s, y + 0.6 * s, 2.8 * s, 1.9 * s, 'V');
+    g.oval(x, y, 2.4 * s, 1.6 * s, 'U');
   }
 
   /** A foreleg: shoulder to elbow to a paw with three hooked claws. */
@@ -570,8 +653,8 @@ class Rig {
     const wx = ex + Math.cos(a2) * 18;
     const wy = ey + Math.sin(a2) * 18;
     g.limb(sx, sy, 5.4, ex, ey, 3.6, far ? 'D' : (_t, side) => (side < -1.5 ? 'B' : 'C'));
-    g.limb(ex, ey, 3.6, wx, wy, 2.6, far ? 'E' : 'D');
-    g.oval(wx, wy, 4.6, 3.6, far ? 'E' : 'D');
+    g.limb(ex, ey, 3.6, wx, wy, 2.6, far ? 'E' : (_t, side) => (side < -1 ? 'B' : 'C'));
+    g.oval(wx, wy, 4.6, 3.6, far ? 'E' : 'C');
     const ux = Math.cos(a2);
     const uy = Math.sin(a2);
     const claw = 6.5 + p.rear * 2.5 + p.swipe * 2;
@@ -622,7 +705,8 @@ class Rig {
     g.poly([-3, -9.5, ...quadPts(-3, -9.5, 6, -12.5, 12.5, -6.5, 4), 11, -4.6, ...quadPts(11, -4.6, 5, -7.4, -2, -6.5, 4)], (_x, y) => (y < -8.6 ? 'B' : 'D'));
     // The near horn, over everything - broken off in his second half.
     this.horn(0, 0, 'C', p.broken);
-    g.oval(-3.5, -8.3, 3.6, 1.5, 'G');
+    this.moss(-3.5, -8.6, 0.8);
+    g.stroke([-6, -2, -3, 1, -4, 4], 1.4, 'F');
     g.restore();
   }
 
@@ -651,6 +735,8 @@ class Rig {
 /** Every frame is drawn on this grid, his feet's middle at (FOOT_X, FOOT_Y) - the cell edge his soles stand on. */
 const GW = 96;
 const GH = 84;
+/** Art cells per logical pixel of his rig: half, and a tenth more - he stands a little taller than his box. */
+const SIZE = 0.55;
 const FOOT_X = 54;
 const FOOT_Y = 72;
 
@@ -711,7 +797,7 @@ function bounds(cells: string[][]): [number, number, number, number] {
 function placed(p: PoseSpec, tilt: number): Painter {
   const g = new Painter(GW, GH);
   g.translate(FOOT_X, FOOT_Y);
-  g.scale(0.5, 0.5);
+  g.scale(SIZE, SIZE);
   g.turn(p.roll + tilt);
   return g;
 }
