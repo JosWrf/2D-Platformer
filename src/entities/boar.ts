@@ -256,8 +256,8 @@ export class Boar extends Enemy {
   /** Roughly where his snout is, for the breath and the dirt. */
   private snout(): { x: number; y: number } {
     return {
-      x: this.cx + this.facing * (33 - this.rearUp * 10),
-      y: this.bottom - 15 + this.lower * 7 + this.dig * 9 - this.rearUp * 34,
+      x: this.cx + this.facing * (66 - this.rearUp * 22),
+      y: this.bottom - 36 + this.lower * 8 + this.dig * 10 - this.rearUp * 52,
     };
   }
 
@@ -845,7 +845,7 @@ export class Boar extends Enemy {
   /** Dust off the scraping hoof, thrown back behind him. */
   private kickDust(world: World): void {
     world.particles.spawn({
-      x: this.cx + this.facing * 8,
+      x: this.cx + this.facing * 16,
       y: this.bottom - 2,
       vx: -this.facing * rand(80, 200),
       vy: -rand(40, 140),
@@ -859,7 +859,7 @@ export class Boar extends Enemy {
   /** Clods off the tusks, flying back over him. */
   private throwDirt(world: World): void {
     world.particles.spawn({
-      x: this.cx + this.facing * 28,
+      x: this.cx + this.facing * 56,
       y: this.bottom - 4,
       vx: -this.facing * rand(40, 160),
       vy: -rand(180, 320),
@@ -873,12 +873,12 @@ export class Boar extends Enemy {
   override lights(): GlowLight[] {
     const out: GlowLight[] = [];
     if (this.dead) return out;
-    out.push({ x: this.cx, y: this.bottom - 22, radius: 130, rgb: '235,190,140', strength: 0.55, tint: 0.22 });
+    out.push({ x: this.cx, y: this.bottom - 44, radius: 150, rgb: '235,190,140', strength: 0.55, tint: 0.22 });
     if (this.state !== 'dormant' && this.state !== 'dying') {
       const s = this.snout();
-      out.push({ x: s.x - this.facing * 12, y: s.y - 10, radius: 34 + this.eyeHeat * 44, rgb: '255,70,50', strength: 0.45 + this.eyeHeat * 0.4, tint: 0.4 });
+      out.push({ x: s.x - this.facing * 28, y: s.y - 20, radius: 34 + this.eyeHeat * 44, rgb: '255,70,50', strength: 0.45 + this.eyeHeat * 0.4, tint: 0.4 });
     }
-    if (this.state === 'dazed') out.push({ x: this.cx + this.facing * 14, y: this.bottom - 52, radius: 70, rgb: '255,226,122', strength: 0.6, tint: 0.35 });
+    if (this.state === 'dazed') out.push({ x: this.cx + this.facing * 36, y: this.bottom - 84, radius: 70, rgb: '255,226,122', strength: 0.6, tint: 0.35 });
     for (const w of this.waves) out.push({ x: w.x, y: this.floorY - 10, radius: 70, rgb: '230,190,130', strength: 0.6, tint: 0.3 });
     for (const l of this.lobs) out.push({ x: l.x, y: l.y, radius: 84, rgb: '200,180,160', strength: 0.8, tint: 0.34 });
     return out;
@@ -894,14 +894,14 @@ export class Boar extends Enemy {
     // About to come - scraping, charging, rearing, digging, off a wall: the
     // ember of his eye goes white-hot (and its light flares, see lights()).
     const hot = this.eyeHeat > 0.5 && this.state !== 'dazed' && this.state !== 'dying' && this.state !== 'dormant';
-    shadow(ctx, this.cx, this.bottom, W * 0.95, 0.38);
+    shadow(ctx, this.cx + this.facing * 8, this.bottom, 128, 0.38);
     // Struck: his silhouette in white for the first two frames, then himself.
     const white = this.flash >= HIT_WHITE;
     withHitFlash(
       ctx,
       white ? this.flash : 0,
       (c) => drawBoar(c, frame, this.cx, this.bottom, facing, hot),
-      white ? { x: this.cx - 58, y: this.bottom - 76, w: 116, h: 80 } : undefined,
+      white ? { x: this.cx - 104, y: this.bottom - 132, w: 208, h: 136 } : undefined,
     );
     if (this.state === 'dazed') this.drawStars(ctx);
     for (const l of this.lobs) {
@@ -967,8 +967,8 @@ export class Boar extends Enemy {
 
   /** Stars round the head of a dazed boar, so the window reads from across the den. */
   private drawStars(ctx: CanvasRenderingContext2D): void {
-    const hx = this.cx + this.facing * 24;
-    const hy = this.bottom - 54;
+    const hx = this.cx + this.facing * 40;
+    const hy = this.bottom - 84;
     for (let i = 0; i < 4; i++) {
       const a = this.anim * 4.5 + (i * Math.PI) / 2;
       const front = Math.sin(a) > 0;

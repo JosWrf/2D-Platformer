@@ -1,39 +1,40 @@
 import { RAMP } from '../render/palette';
 import { Sheet, compose, type Grid } from '../render/sheet';
-import { cellsFrom, crop, edit, limb, pad, rotSprite, shear } from './puppet';
+import { cellsFrom, cellsOf, crop, despeckle, edit, limb, pad, rotSprite, rowsOf, shear } from './puppet';
 
 /**
- * Grimmzahn, drawn for the grid: a boar of some forty-five art pixels from
- * rump to snout - a wedge of a beast, the line of his back falling from the
- * crest over his shoulders down his long head to the snout, short legs under
- * a deep chest, a curved ivory tusk the brightest thing on him.
+ * Grimmzahn, drawn for the grid: a wild boar some seventy art pixels from
+ * rump to snout and two heroes tall at the crest. A high hump over the
+ * shoulders, the back sloping from it down to a rounded rump; a deep chest on
+ * short, thick legs; a long wedge of a head falling from the poll to the flat
+ * disc of the snout, a curved ivory tusk standing up out of the lower jaw -
+ * the brightest thing on him - and a small ember of an eye under the brow.
+ * The mane is a silhouette of black bristles along the spine, tallest over
+ * the hump, lying flat asleep and standing up when he means it - scraping,
+ * charging. The hide is three tones of brown lit from the upper left, with short
+ * strokes of hair in the darker and the lighter tone running down his flanks.
  *
- * He is put together from parts, the way a big sprite is puppeted: one body
- * (its hide shaded from the upper left, a tan top-light over the rump and
- * the shoulders, the mane's dark band along the spine), a crest of bristle
- * tufts in three moods (lying, standing, laid back in the wind of a charge),
- * one head - turned down or up by shearing its columns, given its moods by a
- * few changed pixels (a hot eye, a dazed one, a shut one, the jaw dropped,
- * the tongue out) - and four legs laid down at the angles of each pose.
- * Rearing he is turned about his hind hip with RotSprite. Every frame is made
- * once, when the sheet is first used, and drawn from then on as a blit.
+ * He is put together from parts, the way a big sprite is puppeted: one body,
+ * a crest in three moods, one head - turned down or up about the neck with
+ * RotSprite, given its moods by a few changed pixels (a hot eye, a dazed one,
+ * a shut one, the jaw dropped, the tongue out) - and four legs laid down at
+ * the angles of each pose. Rearing he is turned about his hind hip. Every
+ * frame is made once, when it is first wanted, and drawn from then on as a
+ * blit.
  *
  * Frames face right and stand on their bottom row. No outer outline: the
  * actor pass puts it round him.
  */
 
 const KEY: Record<string, string> = {
-  /** Bristles, hooves. */
+  /** Bristles, hooves, nostrils. */
   K: RAMP.earth[0],
-  /** The bristles' rust glint. */
-  k: RAMP.rust[0],
-  /** Hide: deepest shadow, shadow, hide, tan top-light, a rust spark of it. */
+  /** Hide: shadow, hide, lit, highlight. */
   D: RAMP.earth[1],
   d: RAMP.earth[2],
   m: RAMP.earth[3],
   l: RAMP.earth[4],
-  r: RAMP.rust[1],
-  /** Snout and tusk: the tusk's root, its shade, its ivory. */
+  /** Snout and tusk: the snout's disc, the tusk's shade, its ivory. */
   S: RAMP.earth[5],
   t: RAMP.earth[6],
   T: RAMP.earth[7],
@@ -49,185 +50,253 @@ const KEY: Record<string, string> = {
 /** About to come: the ember goes white-hot. */
 const PALETTES = { hot: { e: RAMP.fire[4] } };
 
+type Pt = [number, number];
+
 /* ------------------------------------------------------------------ body */
 
 /*
- * The body in the coordinates of a 48 × 28 box he stands in: where the hide
- * starts and ends, column by column - the spine falling from the crest over
- * the shoulders (x 18-26) to the rump, the belly rising from a deep chest.
+ * The body in a box 60 wide and 52 tall he stands in, the ground under its
+ * bottom row: heights above the ground of the top and the bottom of the hide,
+ * column by column, from the rump (x 1) to the neck (x 54).
  */
-const TOP: Record<number, number> = {
-  3: 12, 4: 10, 5: 9, 6: 8, 7: 8, 8: 7, 9: 7, 10: 7, 11: 6, 12: 6, 13: 6, 14: 5, 15: 5, 16: 5, 17: 5, 18: 4, 19: 4,
-  20: 4, 21: 4, 22: 4, 23: 4, 24: 4, 25: 4, 26: 4, 27: 5, 28: 5, 29: 6, 30: 6, 31: 7, 32: 7, 33: 8,
-};
-const BOT: Record<number, number> = {
-  3: 15, 4: 17, 5: 18, 6: 19, 7: 19, 8: 19, 9: 19, 10: 19, 11: 19, 12: 19, 13: 19, 14: 19, 15: 20, 16: 20, 17: 20,
-  18: 20, 19: 20, 20: 20, 21: 20, 22: 20, 23: 21, 24: 21, 25: 21, 26: 21, 27: 21, 28: 21, 29: 21, 30: 21, 31: 21,
-  32: 21, 33: 21,
-};
+const BOX_W = 60;
+const BOX_H = 52;
+const GROUND = BOX_H - 1;
+
+function interp(points: readonly (readonly [number, number])[]): Record<number, number> {
+  const out: Record<number, number> = {};
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [x0, h0] = points[i];
+    const [x1, h1] = points[i + 1];
+    for (let x = x0; x <= x1; x++) out[x] = Math.round(h0 + ((h1 - h0) * (x - x0)) / Math.max(1, x1 - x0));
+  }
+  return out;
+}
+
+/** The back: the rump rounding up, the long slope to the hump over the shoulders, the withers falling to the neck. */
+const TOP = interp([
+  [1, 14],
+  [2, 18],
+  [3, 21],
+  [4, 24],
+  [6, 26],
+  [9, 28],
+  [14, 30],
+  [20, 33],
+  [26, 37],
+  [32, 41],
+  [37, 43],
+  [41, 44],
+  [44, 44],
+  [47, 43],
+  [50, 41],
+  [54, 38],
+]);
+/** The belly: the ham down to the hock, the belly tucked up between the legs, the deep chest, the throat. */
+const BOT = interp([
+  [1, 11],
+  [2, 9],
+  [4, 8],
+  [14, 8],
+  [17, 11],
+  [20, 14],
+  [34, 14],
+  [37, 12],
+  [48, 12],
+  [51, 14],
+  [54, 17],
+]);
 
 function bodyGrid(): string[] {
-  const g: string[][] = [];
-  for (let y = 0; y < 22; y++) g.push(new Array<string>(34).fill('.'));
-  for (let x = 3; x <= 33; x++) {
-    const t = TOP[x];
-    const b = BOT[x];
-    for (let y = t; y <= b; y++) {
-      // Hide; shadow over the belly and down the barrel; the deepest under it.
-      g[y][x] = y >= b ? 'D' : y >= b - 2 || (y >= b - 3 && x >= 12 && x <= 23) ? 'd' : 'm';
+  const c = cellsOf([], BOX_W, BOX_H);
+  for (let x = 1; x <= 54; x++) {
+    const top = GROUND - TOP[x];
+    const bot = GROUND - BOT[x];
+    for (let y = top; y <= bot; y++) {
+      const fromTop = y - top;
+      const fromBot = bot - y;
+      // Lit along the back, darker down the flanks, darkest under the belly.
+      c[y][x] = fromBot <= 1 ? 'D' : fromTop <= 3 ? 'l' : fromBot <= 5 && x > 16 && x < 50 ? 'd' : 'm';
     }
-    // The mane's band along the spine.
-    if (x >= 6 && x <= 30) {
-      g[t][x] = 'K';
-      if (x >= 9 && x <= 29) g[t + 1][x] = 'K';
-    }
-    // The top-light just under it, wherever the back faces up or up-left.
-    const under = t + (x >= 9 && x <= 29 ? 2 : x >= 6 && x <= 30 ? 1 : 0);
-    const rising = (TOP[x + 1] ?? 99) <= t;
-    if ((rising || x <= 6) && under < b - 2 && x <= 30) g[under][x] = 'l';
   }
-  for (const [x, y] of [
-    [22, 6],
-    [23, 6],
-    [24, 6],
-    [4, 11],
-  ]) {
-    g[y][x] = 'r';
-  }
-  // The rump's lit edge.
-  for (let y = 10; y < 14; y++) {
-    for (let x = 2; x < 8; x++) {
-      if (g[y][x] === 'm' || g[y][x] === 'd') {
-        g[y][x] = 'l';
+  // The rump's lit curve, the shoulder blade's shadow, the ham's crease.
+  for (let y = GROUND - 26; y <= GROUND - 14; y++) {
+    for (let x = 1; x < 10; x++) {
+      if (c[y][x] !== '.') {
+        c[y][x] = 'l';
+        if (c[y][x + 1] !== '.') c[y][x + 1] = 'l';
         break;
       }
     }
   }
-  return g.map((r) => r.join(''));
+  const crease = (pts: Pt[], l: string): void => {
+    for (const [x, h] of pts) if (c[GROUND - h]?.[x] && c[GROUND - h][x] !== '.') c[GROUND - h][x] = l;
+  };
+  crease(
+    [
+      [38, 30],
+      [37, 29],
+      [37, 28],
+      [36, 27],
+      [36, 26],
+      [36, 25],
+      [36, 24],
+      [37, 23],
+      [37, 22],
+      [38, 21],
+      [38, 20],
+      [39, 19],
+    ],
+    'D',
+  );
+  crease(
+    [
+      [15, 24],
+      [16, 23],
+      [16, 22],
+      [17, 21],
+      [17, 20],
+      [17, 19],
+      [17, 18],
+      [16, 17],
+      [16, 16],
+    ],
+    'D',
+  );
+  // Hair: short strokes down and back across the flanks - the darker tone in
+  // the hide, the lighter one in the lit band along the back.
+  for (let y = 0; y < BOX_H - 1; y++) {
+    for (let x = 2; x < 54; x++) {
+      const at = c[y][x];
+      const row = y >> 2;
+      if (((x + row * 3) % 6 !== 0) || (y & 3) !== 1) continue;
+      if (at === 'm' && c[y + 1][x - 1] === 'm') {
+        c[y][x] = 'd';
+        c[y + 1][x - 1] = 'd';
+      } else if (at === 'l' && c[y + 1][x - 1] === 'l' && x > 6) {
+        c[y][x] = 'm';
+        c[y + 1][x - 1] = 'm';
+      }
+    }
+  }
+  return despeckle(rowsOf(c));
 }
 
 const BODY = bodyGrid();
 
-/** The crest: tufts along the spine, (column, height), leaning back, a rust glint down the lit edge of each. */
-function crest(tufts: readonly (readonly [number, number])[], lean: number): string[] {
-  const g: string[][] = [];
-  for (let y = 0; y < 14; y++) g.push(new Array<string>(34).fill('.'));
-  for (const [x0, h] of tufts) {
-    const base = Math.min(TOP[x0], TOP[x0 + 1], TOP[x0 + 2]);
+/**
+ * The mane: black bristles along the spine from the rump to the poll, in
+ * tufts leaning back - `rise` scales their height (1 lying, more raised, less
+ * laid flat), `lean` how far back the tips go.
+ */
+function crest(rise: number, lean: number): string[] {
+  const c = cellsOf([], BOX_W, BOX_H);
+  // The band of dark hair the bristles grow from.
+  for (let x = 12; x <= 54; x++) {
+    const top = GROUND - TOP[x];
+    c[top][x] = 'K';
+    if (x > 16 && x < 52) c[top + 1][x] = 'K';
+  }
+  // Tufts: tallest over the hump.
+  for (let x0 = 14; x0 <= 52; x0 += 3) {
+    const peak = x0 <= 42 ? (x0 - 14) / 28 : 1 - (x0 - 42) / 20;
+    const h = Math.round((2 + peak * 7) * rise);
+    if (h <= 0) continue;
+    const base = GROUND - TOP[x0];
     for (let k = 0; k < h; k++) {
       const y = base - 1 - k;
-      if (y < 0) continue;
-      const left = x0 - Math.floor((k * lean) / 2) - (k === h - 1 && h > 1 ? 1 : 0);
-      for (let x = left; x < left + Math.max(1, 3 - k); x++) g[y][x] = 'K';
-      g[y][left] = 'k';
+      if (y < 0) break;
+      const back = Math.round(((k + 1) * lean) / 2);
+      const w = k < h * 0.4 ? 3 : k < h * 0.8 ? 2 : 1;
+      for (let i = 0; i < w; i++) {
+        const x = x0 - back + i - 1;
+        if (x >= 0 && x < BOX_W) c[y][x] = k < h - 1 || w > 1 ? 'K' : 'D';
+      }
     }
   }
-  return g.map((r) => r.join(''));
+  return despeckle(rowsOf(c));
 }
 
-const CREST = crest(
-  [
-    [6, 1],
-    [9, 2],
-    [12, 2],
-    [15, 3],
-    [18, 3],
-    [21, 4],
-    [24, 4],
-    [27, 3],
-    [29, 2],
-  ],
-  1,
-);
-/** Standing up: he means it. */
-const CREST_UP = crest(
-  [
-    [6, 2],
-    [9, 3],
-    [12, 4],
-    [15, 4],
-    [18, 5],
-    [21, 5],
-    [24, 5],
-    [27, 4],
-    [29, 3],
-  ],
-  1,
-);
-/** Laid back in the wind of a charge: no taller than his head. */
-const CREST_FLAT = crest(
-  [
-    [9, 1],
-    [12, 1],
-    [15, 2],
-    [18, 2],
-    [21, 2],
-    [24, 2],
-    [27, 2],
-  ],
-  3,
-);
+const CREST = crest(1, 1);
+/** Standing up - hackles raised: he means it, scraping and charging. */
+const CREST_UP = crest(1.35, 0.9);
+/** Laid flat: asleep, beaten. */
+const CREST_FLAT = crest(0.55, 3);
 
-const TAIL: Grid = ['.DD', 'D..', 'D..', 'KD.', 'K..'];
-const TAIL_UP: Grid = ['.DD', 'D.K', '...'];
+/** The tail: a thin rope with a tuft, hanging or up. */
+const TAIL: Grid = ['.D', 'D.', 'D.', 'D.', 'KD', 'K.'];
+const TAIL_UP: Grid = ['..KK', '.D..', 'D...'];
 
 /* ------------------------------------------------------------------ head */
 
-/** The head, neck at the left: ear, brow, ember eye, the long face falling to the snout, the tusk. */
+/**
+ * The head, neck at the left: the ear, the long face falling from the poll
+ * to the flat disc of the snout, the ember eye under the brow, the jowl, the
+ * lower jaw, and the tusk curving up out of it, ivory against the cheek.
+ */
 const HEAD: Grid = [
-  '.................',
-  '..D..............',
-  '..dD.............',
-  '.mdD.............',
-  '.mmd.............',
-  'mmmmll...........',
-  'mmmmmmll.........',
-  'mmmDemmmll.......',
-  'mmmmmmmmmml......',
-  'mmmmmmmmmmml.....',
-  'mmmmmmmmmmmml....',
-  'mmdmmmmmmmmmml...',
-  'mmdmmmmmmmmmmml..',
-  'mmmdmmmmmmmmmmml.',
-  'mmmdmmmmmmmmmmmlS',
-  'mmmmdmmmmmmmmmmlS',
-  'dmmmmddmmmmmmTmlD',
-  'ddmmmmmdmmmmTtdll',
-  'dddddddddmmTmddl.',
-  '.DDDDDDDDDStDDD..',
+  '...K......................',
+  '...KD.....................',
+  '..KmD.....................',
+  '..KmdD....................',
+  '.KmmdD....................',
+  '.KmmddD...................',
+  'mmmmmmmll.................',
+  'mmmmmmmmmll...............',
+  'mmmmmmmmmmmll.............',
+  'dmmmmmmmmmmmmll...........',
+  'dmmmmmmKKKKmmmmll.........',
+  'ddmmmmmmeeDmmmmmmll.......',
+  'dddmmmmmmDmmmmmmmmmll.....',
+  'ddddmmmmmmmmmmmmmmmmmml...',
+  'Dddddmmdmmmmmmmmmmmmmmmml.',
+  'DDddddmmdmmmmmmmmmmmmmmmSS',
+  'DDdddddmmddmmmmmmmmmmmmSlS',
+  'DDDddddddmmdddmmmmmmmmmSKS',
+  'DDDdddddddddddddmmTmmmmSlS',
+  'DDDDddddddddddddmTTmmmmSKS',
+  'DDDDdddddddddddddtTmmmdSSS',
+  'DDDDDdddddddddddtTdddddSS.',
+  '.DDDDDdddddddddtTdddDDDD..',
+  '..DDDDDDDDDDDDtTDDDDDD....',
+  '...DDDDDDDDDDDDDDDDD......',
 ];
-/** Where the head's (0, 0) sits on the body. */
-const HEAD_AT = [29, 2] as const;
+
+/** Where the head's (0, 0) sits on the body's box. */
+const HEAD_AT = [47, 5] as const;
 
 type Mood = readonly (readonly [number, number, string])[];
 const SHUT: Mood = [
-  [3, 7, 'D'],
-  [4, 7, 'D'],
+  [8, 11, 'D'],
+  [9, 11, 'D'],
 ];
 const DAZED: Mood = [
-  [3, 6, 'Y'],
-  [5, 6, 'Y'],
-  [4, 7, 'Y'],
-  [3, 8, 'Y'],
-  [5, 8, 'Y'],
+  [7, 10, 'Y'],
+  [9, 10, 'Y'],
+  [8, 11, 'Y'],
+  [7, 12, 'Y'],
+  [9, 12, 'Y'],
 ];
 
-/** The jaw dropped from its hinge, the tusk going down with it (it grows from the lower jaw): squealing, panting. */
+/** The jaw dropped from its hinge, the tusk going down with it: squealing, panting. */
 const HEAD_OPEN: Grid = [
-  ...HEAD.slice(0, 16),
-  'dmmmmddmmmmmmmmlD',
-  'ddmmmmmdddddddmll',
-  'dddddddDPPPPPPdl.',
-  '.DDDDDDdDPPPPPT..',
-  '......DmdDPPPTt..',
-  '......DmmmmmTmD..',
-  '.......DDDDDSDD..',
+  ...HEAD.slice(0, 19),
+  'DDDDddddddddddddddmmmmmSKS',
+  'DDDDdddddddddddddddmmmmSSS',
+  'DDDDDdddddddddddPPPPPPPSS.',
+  '.DDDDDddddddddPPPPPPPPD...',
+  '..DDDDDDDDDDdPPPPPPPPTt...',
+  '...DDDDDDDDdddPPPPPtTD....',
+  '....DDDDDDDdddmmmmtTDD....',
+  '.....DDDDDDDDDDDDDDD......',
 ];
 
 /** Where the head is turned about: the middle of the neck. */
-const NECK = [3, 12] as const;
+const NECK = [3, 17] as const;
 /** Room round the turned head, so nothing of it is cut off. */
-const HEAD_ROOM = 6;
+const HEAD_ROOM = 8;
+const HEAD_W = 26;
+const HEAD_H = 28;
 
 /**
  * The head in a mood, the jaw dropped or not, the tongue out or not, turned
@@ -235,29 +304,34 @@ const HEAD_ROOM = 6;
  * down. Its (0, 0) ends up at (HEAD_ROOM, HEAD_ROOM).
  */
 function head(nod: number, mood: Mood, mouth: boolean, tongue: boolean): string[] {
-  let g = pad(edit(mouth ? HEAD_OPEN : HEAD, mood), 0, 0, 19, 24);
+  // The neck a tone lighter than the jowl, so it runs on into the hide of the shoulders.
+  const neck = (mouth ? HEAD_OPEN : HEAD).map((r) =>
+    [...r].map((l, x) => (x >= 7 ? l : l === 'D' ? 'd' : l === 'd' ? 'm' : l)).join(''),
+  );
+  let g = pad(edit(neck, mood), 0, 0, HEAD_W, HEAD_H);
   if (tongue) {
     g = edit(
       g,
       mouth
         ? [
-            [10, 19, 'p'],
-            [11, 19, 'p'],
-            [12, 19, 'p'],
-            [11, 20, 'p'],
-            [12, 20, 'P'],
+            [15, 22, 'p'],
+            [16, 22, 'p'],
+            [17, 22, 'p'],
+            [16, 23, 'p'],
+            [17, 23, 'P'],
           ]
         : [
-            [9, 20, 'p'],
-            [10, 20, 'p'],
-            [9, 21, 'p'],
-            [10, 21, 'P'],
-            [9, 22, 'P'],
+            [20, 24, 'p'],
+            [21, 24, 'p'],
+            [20, 25, 'p'],
+            [21, 25, 'P'],
+            [20, 26, 'P'],
           ],
     );
   }
-  const deg = (Math.atan(nod) * 180) / Math.PI;
-  return rotSprite(g, deg, NECK[0], NECK[1], 19 + HEAD_ROOM * 2, 24 + HEAD_ROOM * 2, HEAD_ROOM, HEAD_ROOM);
+  // Hung from the hump, the head is carried a little down even at rest.
+  const deg = (Math.atan(nod + 0.24) * 180) / Math.PI;
+  return rotSprite(g, deg, NECK[0], NECK[1], HEAD_W + HEAD_ROOM * 2, HEAD_H + HEAD_ROOM * 2, HEAD_ROOM, HEAD_ROOM);
 }
 
 /* ------------------------------------------------------------------ legs */
@@ -268,27 +342,30 @@ type Leg = readonly [number, number, number, number];
 type Legs = readonly [Leg, Leg, Leg, Leg];
 
 const NEAR = { lit: 'm', body: 'm', back: 'd', foot: 'K', heel: 'D' };
-const FAR = { lit: 'D', body: 'D', back: 'd', foot: 'K', heel: 'K' };
-const HIP_FAR = [5, 17] as const;
-const HIP_NEAR = [9, 17] as const;
-const SHOULDER_FAR = [26, 19] as const;
-const SHOULDER_NEAR = [29, 19] as const;
+const FAR = { lit: 'd', body: 'd', back: 'D', foot: 'K', heel: 'K' };
+/** Joints in the box: the hind legs from inside the ham, the front ones from inside the chest. */
+const HIP_FAR = [8, GROUND - 12] as const;
+const HIP_NEAR = [12, GROUND - 12] as const;
+const SHOULDER_FAR = [42, GROUND - 14] as const;
+const SHOULDER_NEAR = [46, GROUND - 14] as const;
 
 function legLayers(legs: Legs, dy: number, k: number): { far: string[]; near: string[] } {
-  const at = (p: readonly [number, number]): [number, number] => [p[0], p[1] + dy + (k ? Math.round((p[0] - 10) * k) : 0)];
+  const at = (p: readonly [number, number]): [number, number] => [p[0], p[1] + dy + (k ? Math.round((p[0] - 16) * k) : 0)];
   const [hf, hn, ff, fn] = legs;
-  const far = cellsFrom([limb(...at(HIP_FAR), ...hf, FAR), limb(...at(SHOULDER_FAR), ...ff, FAR)], 50, 32);
-  const near = cellsFrom([limb(...at(HIP_NEAR), ...hn, NEAR), limb(...at(SHOULDER_NEAR), ...fn, NEAR)], 50, 32);
+  const far = cellsFrom([limb(...at(HIP_FAR), ...hf, FAR, 4, 3, 4), limb(...at(SHOULDER_FAR), ...ff, FAR, 4, 3, 4)], FW, FH);
+  const near = cellsFrom([limb(...at(HIP_NEAR), ...hn, NEAR, 5, 3, 4), limb(...at(SHOULDER_NEAR), ...fn, NEAR, 5, 3, 4)], FW, FH);
   return { far, near };
 }
 
 /* ---------------------------------------------------------------- frames */
 
-/** Every frame: 52 × 36, he stands on the bottom row; the box he stands in has its (0, 0) at (2, 8). */
-const FW = 52;
-const FH = 36;
-const OX = 2;
-const OY = 8;
+/** Every frame: 90 × 86 (room for him reared), he stands on the bottom row; the box he stands in has its (0, 0) at (OX, OY). */
+const FW = 90;
+const FH = 86;
+const OX = 4;
+const OY = FH - BOX_H;
+/** The hitbox's middle line, in the box: the left edge of this column. 32 art pixels wide, so columns 22-53. */
+const HIT_MID = 38;
 
 interface Pose {
   legs?: Legs;
@@ -307,30 +384,34 @@ interface Pose {
   hy?: number;
 }
 
+/** Legs: hind far, hind near, front far, front near - [upper angle, length, lower angle, length]. */
 const STAND: Legs = [
-  [0, 4, 8, 5],
-  [0, 4, 8, 5],
-  [0, 3, 0, 4],
-  [0, 3, 0, 4],
+  [-4, 6, 10, 5],
+  [-4, 6, 10, 5],
+  [0, 6, 2, 6],
+  [0, 6, 2, 6],
 ];
 
+const TAIL_AT: readonly [Grid, number, number] = [TAIL, 0, GROUND - 24];
+const UP_TAIL: readonly [Grid, number, number] = [TAIL_UP, 0, GROUND - 26];
+
 function torso(crestRows: Grid, tail: readonly [Grid, number, number], pitch: number): { rows: string[]; dy: number } {
-  const body = compose(50, 30, [
+  const body = compose(BOX_W, BOX_H, [
     [tail[0], tail[1], tail[2]],
     [BODY, 0, 0],
     [crestRows, 0, 0],
   ]);
   if (!pitch) return { rows: body, dy: 0 };
-  return { rows: shear(body, pitch, 10, 10), dy: -10 };
+  return { rows: shear(body, pitch, 16, 10), dy: -10 };
 }
 
 function pose(p: Pose): string[] {
   const dy = p.dy ?? 0;
   const pitch = p.pitch ?? 0;
   const { far, near } = legLayers(p.legs ?? STAND, dy, pitch);
-  const body = torso(p.crest ?? CREST, p.tail ?? [TAIL, 1, 10], pitch);
+  const body = torso(p.crest ?? CREST, p.tail ?? TAIL_AT, pitch);
   const h = head(p.nod ?? 0, p.mood ?? [], !!p.mouth, !!p.tongue);
-  const neck = pitch ? Math.round((HEAD_AT[0] + 2 - 10) * pitch) : 0;
+  const neck = pitch ? Math.round((HEAD_AT[0] + 2 - 16) * pitch) : 0;
   return compose(FW, FH, [
     [far, OX, OY],
     [body.rows, OX, OY + body.dy + dy],
@@ -341,122 +422,120 @@ function pose(p: Pose): string[] {
 
 /** Up on his hind legs: body, crest and head turned about the hind hip, the front legs pawing the air. */
 function rearing(deg: number, front: readonly [Leg, Leg], hind: readonly [Leg, Leg]): string[] {
-  const body = torso(CREST_UP, [TAIL_UP, 1, 9], 0);
+  const body = torso(CREST_UP, UP_TAIL, 0);
   const h = head(-0.05, [], false, false);
-  const whole = compose(50, 34, [
-    [body.rows, 0, 4],
-    [h, HEAD_AT[0] - HEAD_ROOM, HEAD_AT[1] - HEAD_ROOM + 4],
+  const whole = compose(BOX_W + 26, BOX_H, [
+    [body.rows, 0, 0],
+    [h, HEAD_AT[0] - HEAD_ROOM, HEAD_AT[1] - HEAD_ROOM],
   ]);
-  const hip = [8, 21] as const;
-  const turned = rotSprite(whole, -deg, hip[0], hip[1], 50, 44, 0, 8);
+  const hip = [HIP_NEAR[0], HIP_NEAR[1]] as const;
+  const turned = rotSprite(whole, -deg, hip[0], hip[1], FW, FH, OX, OY);
   const a = (-deg * Math.PI) / 180;
   const sx = SHOULDER_NEAR[0] - hip[0];
-  const sy = SHOULDER_NEAR[1] + 4 - hip[1];
+  const sy = SHOULDER_NEAR[1] - hip[1];
   const fx = hip[0] + sx * Math.cos(a) - sy * Math.sin(a);
-  const fy = hip[1] + sx * Math.sin(a) + sy * Math.cos(a) - 4;
-  const far = cellsFrom([limb(HIP_FAR[0], HIP_FAR[1], ...hind[0], FAR), limb(fx - 3, fy, ...front[0], FAR)], 50, 32);
-  const near = cellsFrom([limb(fx, fy, ...front[1], NEAR), limb(HIP_NEAR[0], HIP_NEAR[1], ...hind[1], NEAR)], 50, 32);
+  const fy = hip[1] + sx * Math.sin(a) + sy * Math.cos(a);
+  const far = cellsFrom([limb(HIP_FAR[0], HIP_FAR[1], ...hind[0], FAR, 4, 3, 4), limb(fx - 4, fy, ...front[0], FAR, 4, 3, 4)], FW, FH);
+  const near = cellsFrom([limb(fx, fy, ...front[1], NEAR, 5, 3, 4), limb(HIP_NEAR[0], HIP_NEAR[1], ...hind[1], NEAR, 5, 3, 4)], FW, FH);
   return compose(FW, FH, [
     [far, OX, OY],
-    [turned, OX, OY - 12],
+    [turned, 0, 0],
     [near, OX, OY],
   ]);
 }
 
 const TROT: readonly Legs[] = [
   [
-    [-14, 4, 6, 5],
-    [16, 4, 4, 5],
-    [14, 3, 10, 4],
-    [-12, 3, -4, 4],
+    [-20, 6, 4, 5],
+    [12, 6, 14, 5],
+    [16, 6, 10, 6],
+    [-14, 6, -6, 6],
   ],
   [
-    [0, 4, 18, 4],
-    [0, 4, 4, 5],
-    [0, 3, 30, 3],
-    [0, 3, -2, 4],
+    [-4, 6, 22, 5],
+    [-4, 6, 8, 5],
+    [0, 6, 34, 5],
+    [0, 6, -2, 6],
   ],
   [
-    [16, 4, 4, 5],
-    [-14, 4, 6, 5],
-    [-12, 3, -4, 4],
-    [14, 3, 10, 4],
+    [12, 6, 14, 5],
+    [-20, 6, 4, 5],
+    [-14, 6, -6, 6],
+    [16, 6, 10, 6],
   ],
   [
-    [0, 4, 4, 5],
-    [0, 4, 18, 4],
-    [0, 3, -2, 4],
-    [0, 3, 30, 3],
+    [-4, 6, 8, 5],
+    [-4, 6, 22, 5],
+    [0, 6, -2, 6],
+    [0, 6, 34, 5],
   ],
 ];
 const GALLOP: readonly Legs[] = [
   [
-    [-50, 4, -40, 4],
-    [-40, 4, -30, 4],
-    [55, 3, 50, 4],
-    [45, 3, 35, 4],
+    [-55, 6, -40, 5],
+    [-45, 6, -30, 5],
+    [55, 6, 50, 5],
+    [45, 6, 35, 5],
   ],
   [
-    [-15, 4, 25, 3],
-    [-25, 4, 15, 4],
-    [25, 3, -5, 3],
-    [15, 3, -15, 3],
+    [-20, 6, 25, 5],
+    [-30, 6, 15, 5],
+    [25, 6, -5, 5],
+    [15, 6, -15, 5],
   ],
   [
-    [35, 4, 15, 4],
-    [25, 4, 35, 3],
-    [-25, 3, -45, 3],
-    [-15, 3, -35, 3],
+    [35, 6, 15, 5],
+    [25, 6, 35, 5],
+    [-25, 6, -45, 5],
+    [-15, 6, -35, 5],
   ],
   [
-    [5, 4, -25, 4],
-    [-5, 4, -15, 4],
-    [-40, 3, 25, 3],
-    [-30, 3, 45, 3],
+    [5, 6, -25, 5],
+    [-5, 6, -15, 5],
+    [-40, 6, 25, 5],
+    [-30, 6, 45, 5],
   ],
 ];
 /** The near front hoof going back, up and down again: the scrape. */
 const SCRAPE: readonly Leg[] = [
-  [-40, 3, -15, 4],
-  [10, 3, 70, 3],
-  [30, 3, 10, 4],
+  [-40, 6, -15, 6],
+  [10, 6, 70, 5],
+  [30, 6, 10, 6],
 ];
 const SPLAY: Legs = [
-  [-12, 4, 0, 5],
-  [12, 4, 6, 5],
-  [-14, 3, -6, 4],
-  [16, 3, 8, 4],
+  [-16, 6, 0, 5],
+  [12, 6, 8, 5],
+  [-14, 6, -6, 6],
+  [16, 6, 8, 6],
 ];
 const BRACE: Legs = [
-  [18, 4, 6, 5],
-  [24, 4, 8, 5],
-  [-18, 3, -10, 4],
-  [-10, 3, -6, 4],
+  [20, 6, 6, 5],
+  [26, 6, 8, 5],
+  [-20, 6, -10, 6],
+  [-12, 6, -6, 6],
 ];
 const BUCKLE: Legs = [
-  [-30, 4, 60, 3],
-  [30, 4, -50, 3],
-  [-40, 3, 70, 2],
-  [40, 3, -60, 2],
+  [-30, 6, 60, 4],
+  [30, 6, -50, 4],
+  [-40, 6, 70, 4],
+  [40, 6, -60, 4],
 ];
 const FOLD: Legs = [
-  [-80, 4, 100, 3],
-  [-80, 4, 100, 3],
-  [80, 3, -100, 3],
-  [80, 3, -100, 3],
+  [-80, 5, 100, 4],
+  [-80, 5, 100, 4],
+  [80, 5, -100, 4],
+  [80, 5, -100, 4],
 ];
 const SLAM: Legs = [
-  [0, 4, 8, 5],
-  [0, 4, 8, 5],
-  [-30, 3, -20, 4],
-  [35, 3, 25, 4],
+  [-4, 6, 10, 5],
+  [-4, 6, 10, 5],
+  [-30, 6, -20, 6],
+  [35, 6, 25, 6],
 ];
-
-const UP_TAIL = [TAIL_UP, 1, 9] as const;
 
 function frames(): Record<BoarFrame, () => string[]> {
   const scrape = (leg: Leg): string[] =>
-    pose({ legs: [STAND[0], STAND[1], [5, 3, 0, 4], leg], dy: 1, pitch: 0.06, nod: 0.18, crest: CREST_UP, tail: UP_TAIL });
+    pose({ legs: [STAND[0], STAND[1], [5, 6, 0, 6], leg], dy: 1, pitch: 0.06, nod: 0.18, crest: CREST_UP, tail: UP_TAIL });
   return {
     stand0: () => pose({}),
     stand1: () => pose({ dy: 1 }),
@@ -464,46 +543,49 @@ function frames(): Record<BoarFrame, () => string[]> {
     trot1: () => pose({ legs: TROT[1], dy: 1 }),
     trot2: () => pose({ legs: TROT[2] }),
     trot3: () => pose({ legs: TROT[3], dy: 1 }),
-    gallop0: () => pose({ legs: GALLOP[0], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop1: () => pose({ legs: GALLOP[1], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop2: () => pose({ legs: GALLOP[2], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
-    gallop3: () => pose({ legs: GALLOP[3], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_FLAT }),
+    gallop0: () => pose({ legs: GALLOP[0], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_UP }),
+    gallop1: () => pose({ legs: GALLOP[1], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_UP }),
+    gallop2: () => pose({ legs: GALLOP[2], dy: 1, pitch: 0.05, nod: 0.14, crest: CREST_UP }),
+    gallop3: () => pose({ legs: GALLOP[3], dy: 2, pitch: 0.05, nod: 0.14, crest: CREST_UP }),
     scrape0: () => scrape(SCRAPE[0]),
     scrape1: () => scrape(SCRAPE[1]),
     scrape2: () => scrape(SCRAPE[2]),
-    rear0: () => rearing(
-      16,
-      [
-        [20, 3, 30, 4],
-        [30, 3, 40, 4],
-      ],
-      [
-        [-12, 4, 14, 5],
-        [-8, 4, 18, 5],
-      ],
-    ),
-    rear1: () => rearing(
-      32,
-      [
-        [50, 3, 90, 4],
-        [70, 3, 110, 4],
-      ],
-      [
-        [-25, 4, 20, 5],
-        [-20, 4, 25, 5],
-      ],
-    ),
-    rear2: () => rearing(
-      32,
-      [
-        [80, 3, 120, 4],
-        [40, 3, 70, 4],
-      ],
-      [
-        [-25, 4, 20, 5],
-        [-20, 4, 25, 5],
-      ],
-    ),
+    rear0: () =>
+      rearing(
+        14,
+        [
+          [20, 6, 30, 5],
+          [30, 6, 40, 5],
+        ],
+        [
+          [-12, 6, 14, 5],
+          [-8, 6, 18, 5],
+        ],
+      ),
+    rear1: () =>
+      rearing(
+        28,
+        [
+          [50, 6, 90, 5],
+          [70, 6, 110, 5],
+        ],
+        [
+          [-25, 6, 20, 5],
+          [-20, 6, 25, 5],
+        ],
+      ),
+    rear2: () =>
+      rearing(
+        28,
+        [
+          [80, 6, 120, 5],
+          [40, 6, 70, 5],
+        ],
+        [
+          [-25, 6, 20, 5],
+          [-20, 6, 25, 5],
+        ],
+      ),
     slam: () => pose({ legs: SLAM, dy: 2, pitch: 0.07, nod: 0.2, crest: CREST_UP }),
     dig0: () => pose({ dy: 1, pitch: 0.06, nod: 0.3 }),
     dig1: () => pose({ dy: 2, pitch: 0.08, nod: 0.36 }),
@@ -516,12 +598,12 @@ function frames(): Record<BoarFrame, () => string[]> {
     shake0: () => pose({ nod: -0.08, hx: -1, crest: CREST_UP, tail: UP_TAIL }),
     shake1: () => pose({ nod: 0.12, hx: 1, hy: 1, crest: CREST_UP }),
     roar: () => pose({ nod: -0.22, hy: -1, mouth: true, crest: CREST_UP, tail: UP_TAIL }),
-    sleep0: () => pose({ legs: FOLD, dy: 6, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
-    sleep1: () => pose({ legs: FOLD, dy: 7, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
-    wake: () => pose({ legs: BUCKLE, dy: 3, nod: 0.1 }),
-    fall0: () => pose({ legs: BUCKLE, dy: 3, nod: 0.2, mood: SHUT, mouth: true }),
-    fall1: () => pose({ legs: BUCKLE, dy: 5, pitch: 0.08, nod: 0.35, mood: SHUT, tongue: true, crest: CREST_FLAT }),
-    fall2: () => pose({ legs: FOLD, dy: 7, pitch: 0.04, nod: 0.4, mood: SHUT, tongue: true, crest: CREST_FLAT }),
+    sleep0: () => pose({ legs: FOLD, dy: 9, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
+    sleep1: () => pose({ legs: FOLD, dy: 10, nod: 0.3, mood: SHUT, crest: CREST_FLAT }),
+    wake: () => pose({ legs: BUCKLE, dy: 4, nod: 0.1 }),
+    fall0: () => pose({ legs: BUCKLE, dy: 4, nod: 0.2, mood: SHUT, mouth: true }),
+    fall1: () => pose({ legs: BUCKLE, dy: 7, pitch: 0.08, nod: 0.35, mood: SHUT, tongue: true, crest: CREST_FLAT }),
+    fall2: () => pose({ legs: FOLD, dy: 10, pitch: 0.04, nod: 0.4, mood: SHUT, tongue: true, crest: CREST_FLAT }),
   };
 }
 
@@ -572,7 +654,7 @@ const at = {} as Record<BoarFrame, { x: number; y: number }>;
 /** A frame, worked out the first time it is wanted (see warmBoar). */
 function ensureBoar(name: BoarFrame): void {
   if (cut[name]) return;
-  const c = crop(MAKE[name]());
+  const c = crop(despeckle(MAKE[name]()));
   cut[name] = c.rows;
   at[name] = { x: c.x, y: c.y };
 }
@@ -599,12 +681,20 @@ export function warmBoar(budget: number): boolean {
 /**
  * Draws a frame with the middle of his hitbox at logical x `cx` and his
  * hooves on `bottom`. The hitbox (32 art pixels wide) runs over columns
- * 11-42 of the uncropped frame; its middle line is the left edge of column 27.
+ * HIT_MID - 16 .. HIT_MID + 15 of the box; its middle line is the left edge
+ * of column HIT_MID. His head and rump reach past it, his hump and mane rise
+ * over it: the hitbox is the hide a sword finds at the height it swings.
  */
 export function drawBoar(ctx: CanvasRenderingContext2D, frame: BoarFrame, cx: number, bottom: number, facing: 1 | -1, hot: boolean): void {
   ensureBoar(frame);
   const o = at[frame];
-  BOAR.draw(ctx, frame, cx, bottom, 27 - o.x, FH - o.y, facing, hot ? 'hot' : '');
+  BOAR.draw(ctx, frame, cx, bottom, OX + HIT_MID - o.x, FH - o.y, facing, hot ? 'hot' : '');
+}
+
+/** Everything as rows, for looking at outside the game. */
+export function boarDebug(): { key: Record<string, string>; palettes: typeof PALETTES; frames: Record<string, string[]> } {
+  for (const n of Object.keys(MAKE) as BoarFrame[]) ensureBoar(n);
+  return { key: KEY, palettes: PALETTES, frames: { ...cut, body: BODY, crest: CREST, head: HEAD.slice(), headOpen: HEAD_OPEN.slice() } };
 }
 
 /* ----------------------------------------------------------- what he makes */

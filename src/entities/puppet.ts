@@ -227,6 +227,8 @@ export function limb(
   l2: number,
   paint: { lit: string; body: string; back: string; foot: string; heel: string },
   w1 = 3,
+  w2 = 2,
+  footW = 3,
 ): Map<string, string> {
   const px = new Map<string, string>();
   const seg = (x0: number, y0: number, a: number, length: number, width: number): [number, number] => {
@@ -245,10 +247,11 @@ export function limb(
     return [x0 + dx * n, y0 + dy * n];
   };
   const [kx, ky] = seg(jx, jy, a1, l1, w1);
-  const [fx, fy] = seg(kx, ky, a2, l2, 2);
+  const [fx, fy] = seg(kx, ky, a2, l2, w2);
   const hx = Math.round(fx);
   const hy = Math.round(fy) + 1;
-  for (let x = hx - 1; x <= hx + 1; x++) px.set(`${x},${hy}`, paint.foot);
+  const f0 = hx - (footW >> 1);
+  for (let x = f0; x < f0 + footW; x++) px.set(`${x},${hy}`, paint.foot);
   px.set(`${hx},${hy - 1}`, paint.heel);
   return px;
 }
