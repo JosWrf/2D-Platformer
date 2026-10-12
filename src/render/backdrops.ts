@@ -75,6 +75,8 @@ export interface Strip {
   sparks?: Spark[];
   /** Drops falling down the strip. */
   drips?: Drip[];
+  /** Rows that waver sideways by a pixel in the heat, [first row, rows]. */
+  shimmer?: readonly [number, number];
 }
 
 /** A pixel that shows `hex` for `on` seconds of every `period`. */
@@ -985,7 +987,16 @@ function caveWall(look: Look, ink: Ink, rng: Rng, plan: CavePlan): Strip {
       if (rng.next() < 0.5) sparks.push({ x, y: y - 1, hex: cr.glint, period: rng.range(2, 5), on: 0.2, phase: rng.range(0, 5) });
     }
   }
-  return { pix: p, k: 0.05, y: -12, below: look.horizon, above: look.top, sparks: look.calm ? [] : sparks };
+  return {
+    pix: p,
+    k: 0.05,
+    y: -12,
+    below: look.horizon,
+    above: look.top,
+    sparks: look.calm ? [] : sparks,
+    // Over the lava falls the air wavers.
+    shimmer: plan.falls && !look.calm ? [120, 150] : undefined,
+  };
 }
 
 /** A strip of roof: solid rock along the top with stalactites hanging from it. */

@@ -1647,7 +1647,7 @@ export class Game implements World {
     a.globalCompositeOperation = 'source-over';
     a.fillStyle = '#000000';
     a.fillRect(0, 0, VIEW_W, VIEW_H);
-    this.background.draw(a, this.camera, this.time);
+    this.background.draw(a, this.camera, this.time, this.camera.motion <= 0);
 
     // The ground and everything on it, on a layer of its own over the painted
     // backdrop: the darkness falls on it - as steps down the palette, see

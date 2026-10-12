@@ -17,6 +17,7 @@ interface Layer {
   drift: number;
   sparks: { x: number; y: number; css: string; period: number; on: number; phase: number }[];
   drips: { x: number; top: number; bottom: number; period: number; phase: number; css: string }[];
+  shimmer: readonly [number, number] | null;
 }
 
 interface Built {
@@ -62,7 +63,8 @@ export class Background {
     private readonly viewH: number,
   ) {}
 
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number): void {
+  /** `still`: the player has asked for less movement (B) - no heat shimmer. */
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, still = false): void {
     const focusX = camera.x + this.viewW / 2;
     const { from, to, t } = zoneBlend(focusX);
     const camX = camera.renderX / ART;
@@ -86,15 +88,15 @@ export class Background {
     // Each backdrop is laid out from where its zone begins, so a set piece -
     // a moon, a clock face - is where it was placed whichever way the hero
     // came in.
-    if (level < 16) this.paint(ctx, going.layers, camX - from.start / ART, camY, restY, time);
+    if (level < 16) this.paint(ctx, going.layers, camX - from.start / ART, camY, restY, time, still);
     if (level >= 16) {
-      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time);
+      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time, still);
     } else if (level > 0) {
       // Painted straight over the going backdrop, clipped to its rows: no
       // second canvas, no mask pass.
       ctx.save();
       ctx.clip(this.rowsAt(level));
-      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time);
+      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time, still);
       ctx.restore();
     }
     ctx.restore();
@@ -125,7 +127,7 @@ export class Background {
   }
 
   /** Strips, far to near; camX is measured from where their zone begins. */
-  private paint(ctx: CanvasRenderingContext2D, layers: readonly Layer[], camX: number, camY: number, restY: number, time: number): void {
+  private paint(ctx: CanvasRenderingContext2D, layers: readonly Layer[], camX: number, camY: number, restY: number, time: number, still = false): void {
     for (const layer of layers) {
       const shift = Math.round(camX * layer.k + time * layer.drift);
       const ox = ((shift % layer.w) + layer.w) % layer.w;
@@ -134,7 +136,23 @@ export class Background {
         ctx.fillStyle = layer.above;
         ctx.fillRect(0, 0, ART_W, y);
       }
-      for (let x = -ox; x < ART_W; x += layer.w) ctx.drawImage(layer.canvas, x, y);
+      if (layer.shimmer && !still) {
+        // The heat: the band drawn in slices of two rows, each pushed a pixel
+        // either way on its own slow beat - a waver of whole pixels, not a blur.
+        const [from, rows] = layer.shimmer;
+        // From a tile further left, so a slice pushed right leaves no gap.
+        for (let x = -ox - layer.w; x < ART_W; x += layer.w) {
+          ctx.drawImage(layer.canvas, 0, 0, layer.w, from, x, y, layer.w, from);
+          for (let r = from; r < from + rows; r += 2) {
+            const dx = Math.round(Math.sin(time * 2.6 + r * 0.55) * 0.9);
+            ctx.drawImage(layer.canvas, 0, r, layer.w, 2, x + dx, y + r, layer.w, 2);
+          }
+          const rest = layer.h - from - rows;
+          if (rest > 0) ctx.drawImage(layer.canvas, 0, from + rows, layer.w, rest, x, y + from + rows, layer.w, rest);
+        }
+      } else {
+        for (let x = -ox; x < ART_W; x += layer.w) ctx.drawImage(layer.canvas, x, y);
+      }
       if (layer.below && y + layer.h < ART_H) {
         ctx.fillStyle = layer.below;
         ctx.fillRect(0, y + layer.h, ART_W, ART_H - (y + layer.h));
@@ -292,6 +310,7 @@ function layerOf(s: Strip, ink: Ink): Layer {
     drift: s.drift ?? 0,
     sparks: (s.sparks ?? []).map((sp) => ({ ...sp, css: css(ink(sp.hex)) })),
     drips: (s.drips ?? []).map((d) => ({ ...d, css: css(ink(d.hex)) })),
+    shimmer: s.shimmer ?? null,
   };
 }
 
