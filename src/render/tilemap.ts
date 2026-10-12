@@ -292,11 +292,12 @@ const RUNE_CELLS: readonly (readonly [number, number])[] = RUNE_ROWS.flatMap((ro
 );
 
 /**
- * The curtain's columns, left to right across its ten pixels: the bright
- * edges, the deep beside them, the dark, and the bright middle - which widens
- * by a pixel each way when the ward breathes in.
+ * The curtain's columns, left to right across its ten pixels: a dark edge
+ * each side, the deep of it, and one bright pixel down the middle with a step
+ * of its colour either side when the ward breathes in. Full of bright colour
+ * from edge to edge it was the loudest thing on the screen.
  */
-const CURTAIN: readonly (keyof WardInk)[] = ['edge', 'deep', 'dark', 'dark', 'mid', 'mid', 'dark', 'dark', 'deep', 'edge'];
+const CURTAIN: readonly (keyof WardInk)[] = ['dark', 'deep', 'deep', 'deep', 'deep', 'edge', 'deep', 'deep', 'deep', 'dark'];
 
 /**
  * A boss arena's ward, standing: a curtain of light hung between the floor and
@@ -305,9 +306,11 @@ const CURTAIN: readonly (keyof WardInk)[] = ['edge', 'deep', 'dark', 'dark', 'mi
  * else - every pixel of it solid, so there is no translucent sheet for the
  * pass to turn into a sprinkle of dots round it - and the light it throws on
  * the floor is a light of the frame's (wardLights), stepping the floor up its
- * ramps. It moves slowly on purpose: a column of flicker is the last thing a
- * fight needs next to it. Strands climb it a whole pixel at a time, and its
- * middle and its runes brighten in three steps.
+ * ramps. Dark in its body, with one bright line down its middle and its
+ * brightest at its foot: a wall of light, not a bar of colour. It moves
+ * slowly on purpose: a column of flicker is the last thing a fight needs next
+ * to it. Strands climb it a whole pixel at a time, and its runes brighten in
+ * three steps.
  */
 function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: number, time: number): void {
   const ink = wardInk(tx * TILE);
@@ -318,12 +321,12 @@ function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: n
   const y = ty * TPX;
   for (let i = 0; i < CURTAIN.length; i++) {
     let key = CURTAIN[i];
-    if (breath === 2 && (i === 3 || i === 6)) key = 'mid';
+    if (breath === 2 && (i === 4 || i === 6)) key = 'dark';
     ctx.fillStyle = ink[key];
     px(ctx, x + 3 + i, y, 1, TPX);
   }
   // Strands of light running up the curtain, a pixel at a time.
-  ctx.fillStyle = ink.edge;
+  ctx.fillStyle = ink.mid;
   for (let i = 0; i < 3; i++) {
     const sx = x + 5 + i * 2 + (i === 2 ? 1 : 0);
     const run = Math.floor(time * (9 + i * 2.5) + i * 7 + ty * 5) % TPX;
@@ -334,13 +337,14 @@ function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: n
   }
   // A rune every third tile, and one where it meets the floor.
   if (ty % 3 === 1 || floorBelow) {
-    ctx.fillStyle = breath === 0 ? ink.edge : ink.rune;
+    ctx.fillStyle = breath === 2 ? ink.edge : ink.mid;
     for (const [rx, ry] of RUNE_CELLS) px(ctx, x + 5 + rx, y + 4 + ry, 1, 1);
   }
   // Where it ends in the air, a bar of light across it; where it meets the
   // floor, a foot that spreads a pixel each way.
-  ctx.fillStyle = ink.edge;
+  ctx.fillStyle = ink.mid;
   if (topCap) px(ctx, x + 3, y, 10, 1);
+  ctx.fillStyle = ink.edge;
   if (floorBelow) {
     px(ctx, x + 1, y + TPX - 1, 14, 1);
     px(ctx, x + 2, y + TPX - 2, 1, 1);

@@ -320,6 +320,14 @@ export class PaletteMap {
                 }
               }
               j = best >= 0 ? best : this.alongRamp(i, band);
+              // A coloured step may leave its ramp only for one of its own hue:
+              // otherwise a candle lit dark moss into pale slate, and the
+              // hero's own light turned the throne's slate a dead grey. Then it
+              // climbs its own ramp instead.
+              if (!neutral && j !== i && this.rampOf[j] !== this.rampOf[i]) {
+                const cj = Math.hypot(this.A[j], this.B[j]);
+                if (cj < 12 || hueGap(hueOf(this.A[i], this.B[i]), hueOf(this.A[j], this.B[j])) > 45) j = this.alongRamp(i, band);
+              }
             }
           }
           out[(f * 3 + band) * n + i] = j;

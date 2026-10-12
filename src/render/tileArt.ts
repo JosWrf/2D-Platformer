@@ -1040,6 +1040,8 @@ function shapeFrom(n: number, s: number, w: number, e: number, tx: number, ty: n
 /** Region round a chunk, in tiles and pixels. */
 const RT_W = CHUNK + MARGIN * 2;
 const RW = RT_W * TPX;
+/** How far to either side masonry looks for the top of its wall: one tile, two (see wallDepth). */
+const WALL_REACH = [-2 * TPX, -TPX, TPX, 2 * TPX];
 
 interface Chunk {
   canvas: HTMLCanvasElement;
@@ -1394,7 +1396,7 @@ export class TerrainArt {
         // for every tile further in, two at most, so a mass of brick sinks
         // into the dark - its joints with it - instead of running at full
         // brightness to the edge of the screen.
-        const d = dist[i] + (BAYER[brow + (wx & 3)] - 7.5) * 0.7;
+        const d = (m.sinks ? this.wallDepth(i, x) : dist[i]) + (BAYER[brow + (wx & 3)] - 7.5) * 0.7;
         const band = d < 22 ? 0 : d < 54 ? 1 : 2;
         const deeper = !m.sinks || d < 40 ? 0 : d < 56 ? 16 : 32;
         const fc = featColor[i];
@@ -1495,6 +1497,25 @@ export class TerrainArt {
    * of two neighbours on the ramp between steps: a wall that faded out as a
    * pattern of itself and the void behind it was a band of salt.
    */
+  /**
+   * In laid masonry, how deep a pixel lies under the top of its wall: rows
+   * down from the open pixel above - the least of its own column's and those
+   * one and two tiles to either side, in the same row - in dist's units (two
+   * a row). A merlon or a step is lit like the top of the wall it stands on,
+   * and the dark comes down a façade in level courses. Measured from every
+   * open pixel, as rock is, a raised block went dark from its middle out: a
+   * wedge in every merlon.
+   */
+  private wallDepth(i: number, x: number): number {
+    const { up, mask } = this;
+    let u = up[i];
+    for (const dx of WALL_REACH) {
+      const k = i + dx;
+      if (x + dx >= 0 && x + dx < RW && mask[k] && up[k] < u) u = up[k];
+    }
+    return u * 2;
+  }
+
   private pitPixel(x: number, y: number, wx: number, wy: number, bayer: number): number {
     const depth = y - this.pitRim[(y >> 4) * RT_W + (x >> 4)];
     if (depth < 0 || depth >= 22) return 0;
