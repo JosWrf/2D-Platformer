@@ -1,3 +1,4 @@
+import { ART, makeCanvas, snap } from '../render/pixel';
 import { type Grid } from '../render/sheet';
 
 /**
@@ -278,4 +279,234 @@ export function cellsFrom(maps: readonly Map<string, string>[], w: number, h: nu
     }
   }
   return rowsOf(c);
+}
+
+/**
+ * A 4-connected line of cells - Bresenham's, with the corner cell taken
+ * wherever it would step diagonally - so a one-cell bone or seam laid
+ * across a fill stays a joined stroke instead of a string of single dots.
+ */
+export function strokeCells4(c: Cells, x0: number, y0: number, x1: number, y1: number, letter: string): [number, number][] {
+  let ax = Math.round(x0);
+  let ay = Math.round(y0);
+  const bx = Math.round(x1);
+  const by = Math.round(y1);
+  const dx = Math.abs(bx - ax);
+  const dy = -Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1;
+  const sy = ay < by ? 1 : -1;
+  let err = dx + dy;
+  const out: [number, number][] = [];
+  const set = (x: number, y: number): void => {
+    const row = c[y];
+    if (row && x >= 0 && x < row.length) row[x] = letter;
+    out.push([x, y]);
+  };
+  for (let guard = 0; guard < 1024; guard++) {
+    set(ax, ay);
+    if (ax === bx && ay === by) break;
+    const e2 = 2 * err;
+    const stepX = e2 >= dy;
+    const stepY = e2 <= dx;
+    if (stepX && stepY) set(ax + sx, ay);
+    if (stepX) {
+      err += dy;
+      ax += sx;
+    }
+    if (stepY) {
+      err += dx;
+      ay += sy;
+    }
+  }
+  return out;
+}
+
+/**
+ * A polygon filled into cells by scanlines through the cells' middles
+ * (even-odd), `letter` everywhere inside it.
+ */
+export function fillPoly(c: Cells, pts: readonly (readonly [number, number])[], letter: string): void {
+  const h = c.length;
+  const w = c[0]?.length ?? 0;
+  for (let y = 0; y < h; y++) {
+    const yc = y + 0.5;
+    const xs: number[] = [];
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i];
+      const [xj, yj] = pts[j];
+      if (yi > yc !== yj > yc) xs.push(xi + ((yc - yi) / (yj - yi)) * (xj - xi));
+    }
+    xs.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const from = Math.max(0, Math.ceil(xs[k] - 0.5));
+      const to = Math.min(w - 1, Math.floor(xs[k + 1] - 0.5));
+      for (let x = from; x <= to; x++) c[y][x] = letter;
+    }
+  }
+}
+
+/**
+ * A frame breaking up in chunks of 2 × 2 cells: `gone` (0..1) of them
+ * cleared, the same ones every time and more of them each step - a figure
+ * coming apart in whole blocks, never in a salt of single dots.
+ */
+export function crumble(g: Grid, gone: number, seed = 7): string[] {
+  const c = cellsOf(g);
+  for (let y = 0; y < c.length; y++) {
+    for (let x = 0; x < c[y].length; x++) {
+      let k = ((x >> 1) * 374761393 + (y >> 1) * 668265263 + seed * 1274126177) | 0;
+      k = Math.imul(k ^ (k >>> 13), 1274126177);
+      const r = ((k ^ (k >>> 16)) >>> 0) / 4294967296;
+      if (r < gone) c[y][x] = '.';
+    }
+  }
+  return rowsOf(c);
+}
+
+/** '#rrggbb' as one pixel of an ImageData seen as 32-bit words (little-endian: a, b, g, r from the top). */
+function word(hex: string): number {
+  const v = parseInt(hex.slice(1), 16);
+  return ((0xff << 24) | ((v & 0xff) << 16) | (((v >> 8) & 0xff) << 8) | ((v >> 16) & 0xff)) >>> 0;
+}
+
+interface Baked {
+  img: HTMLCanvasElement;
+  flip: HTMLCanvasElement | null;
+  w: number;
+  h: number;
+}
+
+/**
+ * Frames too big to build a pixel at a time - a wing as wide as half the
+ * screen - written into their canvases in one putImageData each, and from
+ * then on drawn by a pivot exactly like a Sheet's frames.
+ */
+export class BigSheet<F extends string> {
+  private readonly built = new Map<string, Baked>();
+
+  constructor(
+    readonly frames: Readonly<Record<F, Grid>>,
+    readonly key: Readonly<Record<string, string>>,
+    readonly palettes: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
+  ) {}
+
+  private sprite(frame: F, palette: string): Baked {
+    const id = `${frame}|${palette}`;
+    let s = this.built.get(id);
+    if (!s) {
+      const key = palette && this.palettes[palette] ? { ...this.key, ...this.palettes[palette] } : this.key;
+      const words = new Map<string, number>();
+      for (const k in key) words.set(k, word(key[k]));
+      const rows = this.frames[frame];
+      const h = rows.length;
+      const w = Math.max(1, ...rows.map((r) => r.length));
+      const { canvas, ctx } = makeCanvas(w, h);
+      const data = ctx.createImageData(w, h);
+      const px = new Uint32Array(data.data.buffer);
+      for (let y = 0; y < h; y++) {
+        const row = rows[y];
+        for (let x = 0; x < row.length; x++) {
+          const v = words.get(row[x]);
+          if (v !== undefined) px[y * w + x] = v;
+        }
+      }
+      ctx.putImageData(data, 0, 0);
+      s = { img: canvas, flip: null, w, h };
+      this.built.set(id, s);
+    }
+    return s;
+  }
+
+  /** As Sheet.draw: the pivot column (px) on x, the pivot row line (py) on y, mirrored about that column for facing -1. */
+  draw(ctx: CanvasRenderingContext2D, frame: F, x: number, y: number, px: number, py: number, facing: 1 | -1 = 1, palette = ''): void {
+    const s = this.sprite(frame, palette);
+    let img = s.img;
+    if (facing < 0) {
+      if (!s.flip) {
+        const { canvas, ctx: f } = makeCanvas(s.w, s.h);
+        f.translate(s.w, 0);
+        f.scale(-1, 1);
+        f.drawImage(s.img, 0, 0);
+        s.flip = canvas;
+      }
+      img = s.flip;
+    }
+    const col = facing < 0 ? s.w - 1 - px : px;
+    ctx.drawImage(img, snap(x - ART / 2) - col * ART, snap(y) - py * ART, s.w * ART, s.h * ART);
+  }
+}
+
+/**
+ * A ring flat on the floor, `thick` art pixels wide, in whole art pixels -
+ * the mark of where something will come down.
+ */
+export function floorRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, thick: number, color: string): void {
+  const ax = snap(cx) / ART;
+  const ay = snap(cy) / ART;
+  const rxa = Math.max(1, Math.round(rx / ART));
+  const rya = Math.max(1, Math.round(ry / ART));
+  ctx.fillStyle = color;
+  for (let row = -rya; row <= rya; row++) {
+    const v = (row + 0.5) / (rya + 0.5);
+    const outer = Math.floor(rxa * Math.sqrt(Math.max(0, 1 - v * v)));
+    const iv = (row + 0.5) / Math.max(0.5, rya - thick + 0.5);
+    const inner = Math.abs(iv) >= 1 ? -1 : Math.floor((rxa - thick) * Math.sqrt(Math.max(0, 1 - iv * iv)));
+    if (outer < 0) continue;
+    if (inner < 0) {
+      ctx.fillRect((ax - outer) * ART, (ay + row) * ART, (outer * 2 + 1) * ART, ART);
+    } else {
+      ctx.fillRect((ax - outer) * ART, (ay + row) * ART, (outer - inner) * ART, ART);
+      ctx.fillRect((ax + inner + 1) * ART, (ay + row) * ART, (outer - inner) * ART, ART);
+    }
+  }
+}
+
+/**
+ * A 4-connected line on the canvas like line4, in dashes of `on` art pixels
+ * with `off` left out between them (off 0: solid); `thick` 2 doubles it one
+ * pixel down.
+ */
+export function dashLine4(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: string,
+  on: number,
+  off: number,
+  thick = 1,
+): void {
+  let ax = Math.floor(x0 / ART);
+  let ay = Math.floor(y0 / ART);
+  const bx = Math.floor(x1 / ART);
+  const by = Math.floor(y1 / ART);
+  const dx = Math.abs(bx - ax);
+  const dy = -Math.abs(by - ay);
+  const sx = ax < bx ? 1 : -1;
+  const sy = ay < by ? 1 : -1;
+  let err = dx + dy;
+  let n = 0;
+  ctx.fillStyle = color;
+  const put = (x: number, y: number): void => {
+    if (off > 0 && n % (on + off) >= on) return;
+    ctx.fillRect(x * ART, y * ART, ART, ART * thick);
+  };
+  for (let guard = 0; guard < 4096; guard++) {
+    put(ax, ay);
+    if (ax === bx && ay === by) break;
+    const e2 = 2 * err;
+    const stepX = e2 >= dy;
+    const stepY = e2 <= dx;
+    if (stepX && stepY) put(ax + sx, ay);
+    if (stepX) {
+      err += dy;
+      ax += sx;
+    }
+    if (stepY) {
+      err += dx;
+      ay += sy;
+    }
+    n++;
+  }
 }

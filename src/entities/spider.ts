@@ -8,8 +8,8 @@ import { TILE } from '../world/tiles';
 import type { World } from '../world/context';
 import { Enemy, type GlowLight } from './enemy';
 import { Projectile } from './projectile';
-import { line4 } from './puppet';
-import { EGG, SILK, type SpiderFrame, YOUNG, drawArachna, floorRing } from './spider-art';
+import { floorRing, line4 } from './puppet';
+import { EGG, SILK, type SpiderFrame, YOUNG, drawArachna } from './spider-art';
 
 /** Health before the hero is sized up. Between Ankhor and Ignivor. */
 const SPIDER_HP = 48;

@@ -1,5 +1,4 @@
 import { RAMP } from '../render/palette';
-import { ART, snap } from '../render/pixel';
 import { Sheet, type Grid } from '../render/sheet';
 import { type Cells, cellsOf, crop, rowsOf, strokeCells } from './puppet';
 
@@ -298,27 +297,5 @@ export const YOUNG = new Sheet<'w0' | 'w1' | 'w2'>(
   },
   KEY,
 );
-
-/** A flat ring on the floor, on whole art pixels: the rows of an ellipse's outline between two radii. */
-export function floorRing(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, thick: number, color: string): void {
-  const ax = snap(cx) / ART;
-  const ay = snap(cy) / ART;
-  const rxa = Math.max(1, Math.round(rx / ART));
-  const rya = Math.max(1, Math.round(ry / ART));
-  ctx.fillStyle = color;
-  for (let row = -rya; row <= rya; row++) {
-    const v = (row + 0.5) / (rya + 0.5);
-    const outer = Math.floor(rxa * Math.sqrt(Math.max(0, 1 - v * v)));
-    const iv = (row + 0.5) / Math.max(0.5, rya - thick + 0.5);
-    const inner = Math.abs(iv) >= 1 ? -1 : Math.floor((rxa - thick) * Math.sqrt(Math.max(0, 1 - iv * iv)));
-    if (outer < 0) continue;
-    if (inner < 0) {
-      ctx.fillRect((ax - outer) * ART, (ay + row) * ART, (outer * 2 + 1) * ART, ART);
-    } else {
-      ctx.fillRect((ax - outer) * ART, (ay + row) * ART, (outer - inner) * ART, ART);
-      ctx.fillRect((ax + inner + 1) * ART, (ay + row) * ART, (outer - inner) * ART, ART);
-    }
-  }
-}
 
 export const SPIDER_PAINT = KEY;
