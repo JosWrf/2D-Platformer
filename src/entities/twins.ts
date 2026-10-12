@@ -7,7 +7,7 @@ import { shadow, withHitFlash } from '../render/sprites';
 import type { World } from '../world/context';
 import { capHeight, drawText } from '../ui/pixelfont';
 import { TILE } from '../world/tiles';
-import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
+import { angleStep, blit, ovalRing, quad, solidFlash } from './boss-art';
 import { Enemy, type GlowLight } from './enemy';
 import {
   FROST,
@@ -24,6 +24,7 @@ import {
   glaivePart,
   icicleSprite,
   lunaHead,
+  lunaHaloPart,
   lunaPart,
   solDrop,
   solHead,
@@ -1819,7 +1820,7 @@ export class Twins extends Enemy {
         ovalRing(ctx, this.mark.x, F - 2, LEAP_RADIUS * (0.3 + u * 0.6), 3 + u * 5, 1, SUN[2]);
       } else {
         const k = clamp(1 - s.timer / LEAP_TELL, 0, 1);
-        dashedOval(ctx, this.mark.x, F - 2, LEAP_RADIUS, 9, 3, 2, k > 0.5 ? SUN[3] : SUN[2], this.anim * 2);
+        ovalRing(ctx, this.mark.x, F - 2, LEAP_RADIUS, 9, 1, k > 0.5 ? SUN[2] : SUN[1]);
       }
     }
     if (s.state === 'dashWind') {
@@ -1864,7 +1865,7 @@ export class Twins extends Enemy {
       const r = f.radius * (0.4 + u * 0.7);
       const tones = FLARE[f.rgb] ?? [SUN[4], SUN[2]];
       const color = u < 0.45 ? tones[0] : tones[1];
-      const thick = u < 0.3 ? 2 : 1;
+      const thick = 2;
       if (f.round) ring(ctx, f.x, f.y, r, color, thick);
       else ovalRing(ctx, f.x, f.y, r, Math.max(4, r * 0.14), thick, color);
     }
@@ -1994,21 +1995,22 @@ export class Twins extends Enemy {
     const f = s.facing;
     const bx = Math.floor(s.x / ART) * ART + ART / 2;
     const by = Math.floor((s.y - 1) / ART) * ART + ART / 2;
-    // The halo, a ring with a crown of rays: short and dim at rest, long and
-    // white-hot as he winds up - twinkling, the long ones and the short by turns.
-    const [ox, oy] = solHead(look);
+    // The halo is the sun behind him: a ring as wide as he is tall, standing
+    // where his head is when he stands, with a crown of rays round its upper
+    // half - short and dim at rest, long and white-hot as he winds up,
+    // twinkling, the long ones and the short by turns.
+    const [ox] = solHead(look);
     const cx = bx + f * ox;
-    const cy = by + oy;
-    if (!look.lit) ring(ctx, cx, cy, 18, SUN[0], 1);
-    else {
-      ring(ctx, cx, cy, 18, SUN[2 + look.heat], look.heat === 2 ? 2 : 1);
-      const twinkle = Math.floor(this.anim * 10) & 1;
-      for (const i of [0, 4, 5, 6, 7]) {
-        const a = (i / 8) * Math.PI * 2;
-        const len = [2, 4, 6][look.heat] * ART - (look.heat > 0 ? ((i + twinkle) % 2) * ART * 2 : 0);
-        const r0 = 20;
-        line(ctx, cx + Math.cos(a) * r0, cy + Math.sin(a) * r0, cx + Math.cos(a) * (r0 + len), cy + Math.sin(a) * (r0 + len), SUN[[1, 3, 4][look.heat]], i % 2 ? 2 : 1);
-      }
+    const cy = by - 41;
+    ring(ctx, cx, cy, 36, look.lit ? SUN[2 + look.heat] : SUN[0], look.lit && look.heat === 2 ? 3 : 2);
+    const twinkle = look.lit ? Math.floor(this.anim * 10) & 1 : 0;
+    for (let i = 0; i <= 8; i++) {
+      const a = -Math.PI + (i * Math.PI) / 8;
+      const top = Math.sin(-a);
+      const len = 6 + 12 * top + look.heat * 4 - ((i + twinkle) % 2) * 3;
+      const thick = i % 4 === 0 ? 1 : 2;
+      const color = look.lit ? SUN[[2, 3, 4][look.heat]] : SUN[0];
+      line(ctx, cx + Math.cos(a) * 40, cy + Math.sin(a) * 40, cx + Math.cos(a) * (40 + len), cy + Math.sin(a) * (40 + len), color, thick);
     }
     blit(ctx, solPart(look), bx, by, f < 0);
     // The working arm, and the glaive in its hand.
@@ -2035,13 +2037,9 @@ export class Twins extends Enemy {
     const f = l.facing;
     const bx = Math.floor(l.x / ART) * ART + ART / 2;
     const by = Math.floor((l.y - 1) / ART) * ART + ART / 2;
+    // Her halo is the moon behind her: a crescent as tall as she is.
     const [ox, oy] = lunaHead(look);
-    const cx = bx + f * ox;
-    const cy = by + oy;
-    // Her halo ring: slate at rest, pale as she winds up, frost-bright and
-    // doubled in weight just before the move.
-    if (!look.lit) ring(ctx, cx, cy, 16, MOONLIGHT[0], 1);
-    else ring(ctx, cx, cy, 16, look.heat === 2 ? FROST[2] : MOONLIGHT[1 + look.heat * 2], look.heat === 2 ? 2 : 1);
+    blit(ctx, lunaHaloPart(look.heat, look.lit), bx + f * ox, by + oy, f < 0);
     blit(ctx, lunaPart(look), bx, by, f < 0);
     // Her working arm: the sleeve from the shoulder to the hand.
     const [hx, hy] = this.handOf(l);
@@ -2070,7 +2068,7 @@ export class Twins extends Enemy {
     const dying = this.state === 'dying' ? clamp(1 - this.timer / DYING, 0, 1) : 0;
     const sp = starSprite(t.who, Math.floor(this.anim * (t.who === 'sol' ? 0.9 : 0.7)), bright || dying > 0.5);
     sp.draw(ctx, x - (sp.w * ART) / 2, y - (sp.h * ART) / 2);
-    if (dying > 0.05) ring(ctx, x, y, 12 + dying * 22, t.who === 'sol' ? SUN[3] : MOONLIGHT[3], dying > 0.6 ? 2 : 1);
+    if (dying > 0.05) ring(ctx, x, y, 12 + dying * 22, t.who === 'sol' ? SUN[3] : MOONLIGHT[3], 2);
   }
 
   /**

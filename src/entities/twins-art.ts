@@ -2,13 +2,15 @@ import { ART, PixelSprite } from '../render/pixel';
 import { type Decal, type Mat, PartCache, type PartSprite, buildPart, buildUpright, cell, inOval, inPoly, segDist, stepAngle } from './boss-art';
 
 /**
- * Sol und Luna, drawn for the grid: two figures half again the hero's height
- * with a halo ring behind each head, built the way the other bosses are -
+ * Sol und Luna, drawn for the grid: two figures half again the hero's height,
+ * each with its heavenly body behind it as a halo - Sol a ring of sun with a
+ * crown of rays, Luna a crescent moon as tall as she is - built the way the
+ * other bosses are -
  * a body sprite per pose and frame, the working arm and what it holds laid on
  * over it - in two ramps that never meet: Sol in the fire ramp from rust to a
  * white core, a knight in gold plate over a red tabard with a sun on his
  * breast and a crown of rays round his halo; Luna in slate and blue, a
- * priestess in a bell of a robe with a crescent behind her head, floating.
+ * priestess in a bell of a robe that never settles, floating.
  * Everything they throw and leave on the floor is drawn here too: crescents
  * at sixteen turns, stars, flames, icicles, and the tether of the call.
  */
@@ -25,9 +27,9 @@ const BLADE = 6;
 const SOL_MATS: Mat[] = [
   { tones: ['#c64524', '#ed7614', '#ffa214', '#ffc825', '#ffeb57'] },
   { tones: ['#571c27', '#891e2b', '#c42430'] },
-  { tones: ['#391f21', '#5d2c28'], flat: true },
+  { tones: ['#571c27', '#5d2c28'], flat: true },
   { tones: ['#5d2c28', '#ed7614', '#ffa214', '#ffc825', '#ffeb57', '#ffffff'], flat: true },
-  { tones: ['#391f21', '#5d2c28', '#8a4836'] },
+  { tones: ['#5d2c28', '#5d2c28', '#8a4836'] },
   { tones: ['#ffa214', '#ffc825', '#ffeb57', '#ffffff'] },
 ];
 
@@ -160,8 +162,9 @@ export function solPart(look: SolLook): PartSprite {
       if (inOval(ux, uy, -7.5, -31, 5.2, 4)) return cell(PLATE, 1);
       // The belt and its buckle, the tabard with its gold stripe.
       if (uy >= -19 && uy < -17 && Math.abs(ux) <= 9) return ux >= -1 && ux <= 2 ? cell(GLOW, 3) : cell(DARK, 0);
-      if (uy >= -17 && uy <= -8 && Math.abs(ux) <= 9 + (uy + 17) * 0.28) {
-        if (Math.abs(ux - 0.5) <= 1.3) return cell(PLATE, 3);
+      const swing = [0, 1.2, 0, -1.2][look.cape & 3] * Math.max(0, (uy + 14) / 6);
+      if (uy >= -17 && uy <= -8 && Math.abs(ux - swing) <= 9 + (uy + 17) * 0.28) {
+        if (Math.abs(ux - swing * 0.5 - 0.5) <= 1.3) return cell(PLATE, 3);
         if (uy > -9.5) return cell(CLOTH, 0);
         return cell(CLOTH, 2);
       }
@@ -211,7 +214,7 @@ export function glaivePart(k: number, heat: 0 | 1 | 2): PartSprite {
         const edge = 2.5 + 6.5 * Math.sin(Math.PI * Math.min(1, u * 1.04)) * (1 - 0.3 * u) - u;
         if (y >= back - 0.3 && y <= edge) return cell(BLADE, y > edge - 1.6 ? 3 : heat === 2 ? 2 : 1);
       }
-      if (x >= -14 && x <= 24 && Math.abs(y) <= 1.1) return cell(x < -11 || (x > 20 && x <= 24) ? GLOW : LEATHER, x < -11 || x > 20 ? 3 : 2);
+      if (x >= -14 && x <= 24 && Math.abs(y) <= 1.7) return cell(x < -11 || (x > 20 && x <= 24) ? GLOW : LEATHER, x < -11 || x > 20 ? 3 : 2);
       return 0;
     };
     return buildPart(44, stepAngle(k, GLAIVE_STEPS), 1, SOL_MATS, paint);
@@ -230,15 +233,15 @@ const MOON = 6;
 const LUNA_MATS: Mat[] = [
   { tones: ['#2a2f4e', '#424c6e', '#657392', '#92a1b9', '#c7cfdd'] },
   { tones: ['#92a1b9', '#c7cfdd', '#ffffff'] },
-  { tones: ['#0e071b', '#1a1932', '#00396d', '#0069aa'] },
+  { tones: ['#0e071b', '#1a1932', '#2a2f4e', '#424c6e'] },
   { tones: ['#92a1b9', '#c7cfdd', '#ffffff'] },
-  { tones: ['#00396d', '#0069aa', '#0098dc', '#00cdf9', '#94fdff'], flat: true },
+  { tones: ['#0098dc', '#0098dc', '#0098dc', '#00cdf9', '#94fdff'], flat: true },
   { tones: ['#424c6e', '#657392', '#92a1b9', '#c7cfdd', '#ffffff'], flat: true },
 ];
 
 /** The colours of Luna's light, dim to white: halo, frost, crescents, her star. */
 export const MOONLIGHT = ['#424c6e', '#657392', '#92a1b9', '#c7cfdd', '#ffffff'] as const;
-export const FROST = ['#0069aa', '#0098dc', '#00cdf9', '#94fdff'] as const;
+export const FROST = ['#0098dc', '#0098dc', '#00cdf9', '#94fdff'] as const;
 
 export interface LunaLook {
   /** The hem's frame, 0..3: it never settles. */
@@ -252,9 +255,47 @@ export interface LunaLook {
 /** Where her working shoulder is, in her own frame (facing right, hem on the origin). */
 export const LUNA_SHOULDER: readonly [number, number] = [4, -33];
 
-/** The middle of the crescent behind her head - and of her halo ring. */
+/** The middle of her halo, a little above her head. */
 export function lunaHead(look: LunaLook): [number, number] {
-  return [-2, -44 + look.bow * 2];
+  return [-4, -50 + look.bow * 2];
+}
+
+const haloCache = new PartCache();
+
+/**
+ * Luna's halo: the moon itself behind her, a crescent as tall as she is with
+ * its lit limb over her head and down her back, opening towards the way she
+ * faces - slate at rest, pale as she winds up, white with a rim of frost just
+ * before she moves. Its horns end where the band would be thinner than two
+ * pixels, so they never come out as single dots.
+ */
+export function lunaHaloPart(heat: 0 | 1 | 2, lit: boolean): PartSprite {
+  return haloCache.get(`${heat}|${lit ? 1 : 0}`, () => {
+    const R = 42;
+    const ri = 37;
+    const cx = 10;
+    const cy = 3;
+    const tones = !lit
+      ? [MOONLIGHT[0], MOONLIGHT[1], MOONLIGHT[1]]
+      : heat === 2
+        ? [MOONLIGHT[3], MOONLIGHT[4], '#94fdff']
+        : heat === 1
+          ? [MOONLIGHT[2], MOONLIGHT[3], MOONLIGHT[4]]
+          : [MOONLIGHT[1], MOONLIGHT[2], MOONLIGHT[3]];
+    const mats: Mat[] = [{ tones, flat: true }];
+    const paint = (x: number, y: number): number => {
+      const d = Math.hypot(x, y);
+      if (d > R || d < 1) return 0;
+      const di = Math.hypot(x - cx, y - cy);
+      if (di <= ri) return 0;
+      const proj = (cx * x + cy * y) / d;
+      const disc = ri * ri - (cx * cx + cy * cy - proj * proj);
+      const inner = disc > 0 ? proj + Math.sqrt(disc) : 0;
+      if (R - inner < 6) return 0;
+      return cell(1, R - d < 2.2 ? 2 : di - ri < 2.2 ? 0 : 1);
+    };
+    return buildPart(R + 1, 0, 1, mats, paint);
+  });
 }
 
 const lunaCache = new PartCache();
@@ -264,7 +305,8 @@ export function lunaPart(look: LunaLook): PartSprite {
   const key = `${look.frame & 3}|${look.bow}|${look.heat}|${look.lit ? 1 : 0}`;
   return lunaCache.get(key, () => {
     const f = look.frame & 3;
-    const sway = [0, 2, 0, -2][f];
+    const sway = [0, 3, 1, -3][f];
+    const flare = [1, 1.06, 1.02, 0.95][f];
     const b = look.bow * 2;
     const hair = [-1, -48 + b, -6, -45 + b, -9, -36, -11 + sway * 0.5, -24, -10 + sway, -15, -6 + sway, -17, -4, -30, -1, -38 + b];
     const sash = look.lit ? 1 + look.heat : 0;
@@ -278,7 +320,7 @@ export function lunaPart(look: LunaLook): PartSprite {
       if (y >= -36 + b * 0.5 && y <= 0) {
         const v = Math.max(0, (y + 36) / 36);
         const c = sway * v;
-        let hw = 6 + 7.5 * Math.pow(v, 0.9);
+        let hw = 6 + 7.5 * Math.pow(v, 0.9) * (v > 0.5 ? flare : 1);
         if (y < -33) hw *= Math.sqrt(Math.max(0, 1 - ((-33 - y) / 3.5) ** 2));
         const hem = -1.6 * (1 + Math.cos((x - c) * (Math.PI / 5) + f * (Math.PI / 2))) * 0.5;
         if (Math.abs(x - c) <= hw && y <= hem + 0.6) {
@@ -293,15 +335,6 @@ export function lunaPart(look: LunaLook): PartSprite {
       }
       // Her hair, long down her back.
       if (inPoly(x, y, hair)) return cell(HAIR, y < -40 + b ? 2 : 1);
-      // The crescent behind her head.
-      const ox = -2.5;
-      const oy = -44 + b;
-      const r = Math.hypot(x - ox, y - oy);
-      const ir = Math.hypot(x - (ox + 4.1), y - (oy - 2.8));
-      if (r <= 10.2 && ir > 8.2) {
-        if (!look.lit) return cell(MOON, r > 8.6 ? 2 : ir < 9.6 ? 0 : 1);
-        return cell(MOON, r > 8.6 ? 4 : ir < 9.6 ? 2 : 3);
-      }
       return 0;
     };
     const eye = look.lit ? cell(TRIM, look.heat > 0 ? 3 : 2) : cell(MOON, 0);
