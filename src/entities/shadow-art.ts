@@ -93,7 +93,7 @@ const SHADOW_OF: Readonly<Record<string, string>> = {
   '#03193f': RAMP.plum[0],
   '#00396d': RAMP.plum[1],
   '#0069aa': RAMP.plum[2],
-  '#0098dc': RAMP.plum[4],
+  '#0098dc': RAMP.plum[3],
   '#00cdf9': RAMP.violet[4],
   '#0cf1ff': RAMP.violet[4],
   '#94fdff': RAMP.violet[5],
