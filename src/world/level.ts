@@ -1,5 +1,5 @@
 import { Rng, clamp } from '../core/math';
-import { CHUNK_H, LEVEL_CHUNKS } from './levelData';
+import { CHUNK_H, LEVEL_CHUNKS, ZONE_START } from './levelData';
 import { CHAR_TO_SPAWN, CHAR_TO_TILE, Spawn, TILE, Tile, isHazard, isPlatform, isSolid } from './tiles';
 
 /**
@@ -19,6 +19,15 @@ export interface Arena {
   fighting: boolean;
   /** Its boss has fallen: both wards are down for good. */
   cleared: boolean;
+}
+
+/**
+ * A stretch of the world a fight is fought in, walls and all: no crossing
+ * between two zones' looks may run into it (render/palette.ts, zoneBlend).
+ */
+export interface Room {
+  readonly left: number;
+  readonly right: number;
 }
 
 export interface TileDecor {
@@ -44,6 +53,8 @@ export class Level {
   exitSealed = true;
   /** Every warded boss arena, left to right. */
   readonly arenas: Arena[] = [];
+  /** Every arena from ward to ward, the throne room and the lair, left to right. */
+  readonly rooms: Room[] = [];
   /** Which arena a ward column belongs to, or -1. */
   private readonly wardArena: Int16Array;
   /**
@@ -104,6 +115,9 @@ export class Level {
     }
     for (let i = 0; i < this.decorNoise.length; i++) this.decorNoise[i] = rng.next();
     this.arenaLeft = (gateTx + 1) * TILE;
+    for (const arena of this.arenas) this.rooms.push({ left: arena.left - TILE, right: arena.right + TILE });
+    this.rooms.push({ left: ZONE_START.throne, right: ZONE_START.rift }, { left: ZONE_START.lair, right: ZONE_START.riftend });
+    this.rooms.sort((a, b) => a.left - b.left);
   }
 
   tileAt(tx: number, ty: number): Tile {

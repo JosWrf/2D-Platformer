@@ -203,6 +203,19 @@ const report = await page.evaluate(() => {
   const portal = L.spawns.find((s) => s.kind === 'portal');
   const portalReachable = portal ? maxX >= portal.tx - 2 : false;
 
+  // No fight is seen against two zones' backdrops: every room - an arena from
+  // ward to ward, the throne room, the lair - lies outside every crossing.
+  const mixedRooms = [];
+  for (const room of L.rooms) {
+    for (let x = room.left; x < room.right; x += 4) {
+      const b = window.zoneBlend(x, L.rooms);
+      if (b.t > 0 || b.from !== b.to) {
+        mixedRooms.push({ room: [room.left, room.right], x, from: b.from.label, to: b.to.label });
+        break;
+      }
+    }
+  }
+
   return {
     width: W,
     nodes: nodes.length,
@@ -216,6 +229,8 @@ const report = await page.evaluate(() => {
     portalTile: portal ? portal.tx : null,
     portalReachable,
     unreachableRanges: ranges.slice(0, 20),
+    rooms: L.rooms.length,
+    mixedRooms,
   };
 });
 
@@ -233,7 +248,11 @@ if (!report.bonusHallSealed) {
 if (report.strandedPlatforms.length) {
   console.error(`FAIL: ${report.strandedPlatforms.length} platform(s) hang out of reach - [fromTile, toTile, row].`);
 }
+if (report.mixedRooms.length) {
+  console.error(`FAIL: ${report.mixedRooms.length} room(s) lie in a crossing between two zones' backdrops.`);
+}
 process.exit(
+  !report.mixedRooms.length &&
   report.bossReachable &&
   report.portalReachable &&
   report.bonusHallSealed &&

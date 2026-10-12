@@ -339,7 +339,7 @@ export class Game implements World {
   readonly checkpoints: Checkpoint[] = [];
   readonly platforms: MovingPlatform[] = [];
   readonly decor: Decor[] = [];
-  readonly background = new Background(VIEW_W, VIEW_H);
+  readonly background = new Background(VIEW_W, VIEW_H, this.level.rooms);
   private readonly lightPass = new LightPass(VIEW_W, VIEW_H);
   private readonly spores = new Spores(VIEW_W, VIEW_H);
   private readonly scatter = new Scatter(this.level);
@@ -1652,7 +1652,7 @@ export class Game implements World {
     a.globalCompositeOperation = 'source-over';
     a.fillStyle = '#000000';
     a.fillRect(0, 0, VIEW_W, VIEW_H);
-    this.background.draw(a, this.camera, this.time, this.camera.motion <= 0);
+    this.background.draw(a, this.camera, this.time, this.camera.motion <= 0, this.player.cx);
 
     // The ground and everything on it, on a layer of its own over the painted
     // backdrop: the darkness falls on it - as steps down the palette, see
@@ -1677,7 +1677,7 @@ export class Game implements World {
       if (this.isVisible(platform.x, platform.y, 200)) platform.draw(g);
     }
 
-    const blend = zoneBlend(this.player.cx);
+    const blend = zoneBlend(this.player.cx, this.level.rooms);
     // A crossing between two zones' darkness in four steps, so each step's
     // tables are made once and kept.
     const bt = Math.round(blend.t * 4) / 4;
@@ -1701,7 +1701,7 @@ export class Game implements World {
     this.drawActors(a);
     // The backdrop's sparse foreground strip, in front of the actors and below
     // the floor's surface: it frames the play without hiding any of it.
-    this.background.drawFront(a, this.camera);
+    this.background.drawFront(a, this.camera, this.player.cx);
 
     a.save();
     a.translate(-this.camera.renderX, -this.camera.renderY);

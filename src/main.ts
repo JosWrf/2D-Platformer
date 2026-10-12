@@ -2,7 +2,7 @@ import { audio } from './core/audio';
 import { Input } from './core/input';
 import { Loop } from './core/loop';
 import { Game, VIEW_H, VIEW_W } from './game';
-import { ZONES } from './render/palette';
+import { ZONES, zoneBlend } from './render/palette';
 import { ART_H, ART_W } from './render/pixel';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
@@ -101,6 +101,7 @@ declare global {
     loop: Loop;
     audio: typeof audio;
     zones: typeof ZONES;
+    zoneBlend: typeof zoneBlend;
   }
 }
 window.game = game;
@@ -108,3 +109,4 @@ window.input = input;
 window.loop = loop;
 window.audio = audio;
 window.zones = ZONES;
+window.zoneBlend = zoneBlend;

@@ -1,8 +1,9 @@
 import { Camera } from '../core/camera';
 import { type Art, type Ink, type Look, type Painting, type Strip, paintBackdrop } from './backdrops';
+import type { Room } from '../world/level';
 import { ZONES, type Zone, zoneBlend } from './palette';
-import { ART, ART_H, ART_W } from './pixel';
-import type { Abgr } from './pixpaint';
+import { ART, ART_H, ART_W, makeCanvas } from './pixel';
+import { type Abgr, bayerOn } from './pixpaint';
 
 /** A strip of a built backdrop, ready to blit. */
 interface Layer {
@@ -30,11 +31,8 @@ interface Built {
 const KEEP = 5;
 /** How fast a drop falls, in art pixels a second squared. */
 const GRAVITY = 260;
-/** Where in a zone blend (0-1) the backdrops' dissolve starts, and how long it takes. */
-const DISSOLVE_FROM = 0.35;
-const DISSOLVE_SPAN = 0.3;
-/** The order rows join the dissolve in, sixteen to a cycle, spread as evenly as can be. */
-const ROW_ORDER = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
+/** How much walking the dissolve between two backdrops takes, in pixels: the middle of a crossing. */
+const DISSOLVE = 210;
 
 /**
  * The parallax backdrop: a sky (or a hall's far wall) and five or more strips
@@ -43,30 +41,39 @@ const ROW_ORDER = [0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15];
  * handful of blits a frame instead of the gradients and paths it used to
  * redraw every time.
  *
- * Two zones meet over the last 700 pixels before the next one starts. In the
- * middle of that stretch the coming backdrop is laid over the going one a row
- * at a time - one row in sixteen, then two, then every other row, in an
- * ordered sequence - so every pixel on screen is still one backdrop's own
- * colour, never a blend of two, and the rows stay put on the screen while
- * the layers slide past behind them.
+ * Two zones meet over a crossing (render/palette.ts, zoneBlend): the last 700
+ * pixels before the next one starts, or a short stretch beyond a boss's room,
+ * so that no fight is ever seen against two backdrops. In the middle of it the
+ * coming backdrop is laid over the going one through an ordered 4x4 pattern -
+ * one pixel in sixteen, then two, then every other one - so every pixel on
+ * screen is still one backdrop's own colour, never a blend of two, and the
+ * pattern stays put on the screen while the layers slide past behind it.
  */
 export class Background {
   private readonly cache = new Map<string, Built>();
   private readonly keys = new Map<Zone, string>();
   /** Backdrops being painted ahead of time, a step a frame. */
   private readonly jobs = new Map<string, { ink: Ink; painting: Painting; art: Art | null; layers: Layer[] }>();
-  /** The rows of the dissolve at each of its levels, made once. */
-  private readonly rows: Path2D[] = [];
+  /** The dissolve's pattern at each of its levels, made once. */
+  private readonly patterns: CanvasPattern[] = [];
+  /** The coming backdrop, painted whole before the pattern cuts it down. */
+  private dissolve: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null = null;
 
   constructor(
     private readonly viewW: number,
     private readonly viewH: number,
+    /** Where no crossing may run (Level.rooms). */
+    private readonly rooms: readonly Room[] = [],
   ) {}
 
-  /** `still`: the player has asked for less movement (B) - no heat shimmer. */
-  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, still = false): void {
-    const focusX = camera.x + this.viewW / 2;
-    const { from, to, t } = zoneBlend(focusX);
+  /**
+   * `still`: the player has asked for less movement (B) - no heat shimmer.
+   * `focusX`: whose place in the world decides the backdrop - the hero's, in
+   * play, the same as for the darkness, so that a camera running ahead of him
+   * never shows the next zone's backdrop behind a fight he is still in.
+   */
+  draw(ctx: CanvasRenderingContext2D, camera: Camera, time: number, still = false, focusX = camera.x + this.viewW / 2): void {
+    const { from, to, t, span } = zoneBlend(focusX, this.rooms);
     const camX = camera.renderX / ART;
     const camY = camera.renderY / ART;
     // Where the camera rests on the main floor: every strip is placed for that
@@ -81,9 +88,11 @@ export class Background {
 
     const going = this.built(from);
     const coming = t > 0 ? this.built(to) : going;
-    // The dissolve takes the middle of the blend, about two hundred pixels
-    // of walking: a crossing, not a long stretch of two backdrops at once.
-    const d = Math.min(1, Math.max(0, (t - DISSOLVE_FROM) / DISSOLVE_SPAN));
+    // The dissolve takes the middle of the crossing, about two hundred pixels
+    // of walking (all of a short one): a crossing, not a long stretch of two
+    // backdrops at once.
+    const s = span > 0 ? Math.min(1, DISSOLVE / span) : 1;
+    const d = Math.min(1, Math.max(0, (t - (1 - s) / 2) / s));
     const level = coming === going ? 0 : Math.round(d * 16);
     // Each backdrop is laid out from where its zone begins, so a set piece -
     // a moon, a clock face - is where it was placed whichever way the hero
@@ -92,12 +101,17 @@ export class Background {
     if (level >= 16) {
       this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time, still);
     } else if (level > 0) {
-      // Painted straight over the going backdrop, clipped to its rows: no
-      // second canvas, no mask pass.
-      ctx.save();
-      ctx.clip(this.rowsAt(level));
-      this.paint(ctx, coming.layers, camX - to.start / ART, camY, restY, time, still);
-      ctx.restore();
+      // Painted whole on a canvas of its own, cut down to the pattern's
+      // pixels and laid over the going backdrop.
+      const m = (this.dissolve ??= makeCanvas(ART_W, ART_H));
+      m.ctx.globalCompositeOperation = 'source-over';
+      m.ctx.clearRect(0, 0, ART_W, ART_H);
+      this.paint(m.ctx, coming.layers, camX - to.start / ART, camY, restY, time, still);
+      m.ctx.globalCompositeOperation = 'destination-in';
+      m.ctx.fillStyle = this.patternAt(m.ctx, level);
+      m.ctx.fillRect(0, 0, ART_W, ART_H);
+      m.ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(m.canvas, 0, 0);
     }
     ctx.restore();
 
@@ -110,9 +124,8 @@ export class Background {
    * is painted in the palette's own colours. Between two zones each shows
    * the clumps of whichever zone is nearer.
    */
-  drawFront(ctx: CanvasRenderingContext2D, camera: Camera): void {
-    const focusX = camera.x + this.viewW / 2;
-    const { from, to, t } = zoneBlend(focusX);
+  drawFront(ctx: CanvasRenderingContext2D, camera: Camera, focusX = camera.x + this.viewW / 2): void {
+    const { from, to, t } = zoneBlend(focusX, this.rooms);
     const zone = t > 0.5 ? to : from;
     const front = this.built(zone).front;
     if (front.length === 0) return;
@@ -181,15 +194,16 @@ export class Background {
     }
   }
 
-  /** The rows the coming backdrop shows through at a level of 0-16. */
-  private rowsAt(level: number): Path2D {
-    let path = this.rows[level];
-    if (!path) {
-      path = new Path2D();
-      for (let y = 0; y < ART_H; y++) if (ROW_ORDER[y & 15] < level) path.rect(0, y, ART_W, 1);
-      this.rows[level] = path;
+  /** The pixels the coming backdrop shows through at a level of 0-16, as a pattern of 4x4. */
+  private patternAt(ctx: CanvasRenderingContext2D, level: number): CanvasPattern {
+    let pattern = this.patterns[level];
+    if (!pattern) {
+      const cell = makeCanvas(4, 4);
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (bayerOn(x, y, level)) cell.ctx.fillRect(x, y, 1, 1);
+      pattern = ctx.createPattern(cell.canvas, 'repeat') as CanvasPattern;
+      this.patterns[level] = pattern;
     }
-    return path;
+    return pattern;
   }
 
   /**

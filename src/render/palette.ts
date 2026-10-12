@@ -1,3 +1,4 @@
+import type { Room } from '../world/level';
 import { ZONE_START } from '../world/levelData';
 import type { BackdropKind } from './backdrops';
 
@@ -652,18 +653,76 @@ export function zoneAt(x: number): Zone {
   return current;
 }
 
-export function zoneBlend(x: number): { from: Zone; to: Zone; t: number } {
-  for (let i = 0; i < ZONES.length - 1; i++) {
-    const a = ZONES[i];
-    const b = ZONES[i + 1];
-    if (x >= a.start && x < b.start) {
-      const fadeStart = b.start - 700;
-      const t = x <= fadeStart ? 0 : (x - fadeStart) / 700;
-      return { from: a, to: b, t };
+/** Which zones' looks a world x sees, and how far it is from one to the other (0-1). */
+export interface ZoneBlend {
+  from: Zone;
+  to: Zone;
+  t: number;
+  /** How long the crossing it is in is, in pixels; 0 away from one. */
+  span: number;
+}
+
+/** Where one zone's look gives way to the next one's, in world x. */
+interface Crossing {
+  readonly from: Zone;
+  readonly to: Zone;
+  readonly lo: number;
+  readonly hi: number;
+}
+
+/** How long a crossing is, ending where the next zone begins. */
+const CROSSING = 700;
+/** How long a crossing out of a room is, from its far wall on. */
+const CROSSING_OUT = 240;
+const NO_ROOMS: readonly Room[] = [];
+const crossingsOf = new WeakMap<readonly Room[], readonly Crossing[]>();
+
+/**
+ * The crossings between the zones, worked out once for a level's rooms. Each
+ * runs over the last 700 pixels before the next zone begins - unless a room is
+ * in the way. Then it waits for the room's far wall and is over within 240
+ * pixels of it; and it is over before the next room's near wall, whatever
+ * else. A fight is seen against one backdrop under one darkness, from wall to
+ * wall: two zones' backdrops dissolving into each other behind it looked like a
+ * signal breaking up.
+ */
+function crossings(rooms: readonly Room[]): readonly Crossing[] {
+  let list = crossingsOf.get(rooms);
+  if (list) return list;
+  const made: Crossing[] = [];
+  let floor = -Infinity;
+  for (let i = 0; i + 1 < ZONES.length; i++) {
+    const to = ZONES[i + 1];
+    let lo = Math.max(floor, to.start - CROSSING);
+    let hi = to.start;
+    for (const room of rooms) {
+      if (room.left < to.start && room.right > lo) {
+        lo = Math.max(lo, room.right);
+        hi = Math.max(hi, lo + CROSSING_OUT);
+      }
     }
+    for (const room of rooms) {
+      if (room.left >= to.start && room.left < hi) hi = Math.max(lo, room.left);
+    }
+    made.push({ from: ZONES[i], to, lo, hi });
+    floor = hi;
+  }
+  list = made;
+  crossingsOf.set(rooms, list);
+  return list;
+}
+
+/**
+ * The zones a world x sees: the one it is in, or the two it is crossing
+ * between. `rooms` are the stretches no crossing may run into (Level.rooms).
+ */
+export function zoneBlend(x: number, rooms: readonly Room[] = NO_ROOMS): ZoneBlend {
+  for (const c of crossings(rooms)) {
+    if (x < c.lo) return { from: c.from, to: c.from, t: 0, span: 0 };
+    if (x < c.hi) return { from: c.from, to: c.to, t: (x - c.lo) / (c.hi - c.lo), span: c.hi - c.lo };
   }
   const last = ZONES[ZONES.length - 1];
-  return { from: last, to: last, t: 0 };
+  return { from: last, to: last, t: 0, span: 0 };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
