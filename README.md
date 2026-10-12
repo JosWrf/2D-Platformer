@@ -46,6 +46,7 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `B` | Bildwackeln aus/an |
 | `M` | Musik aus/an |
 | `N` | Ton aus/an (alles) |
+| `H` | Im Titelbild: alle Tasten auf einer eigenen Seite |
 
 Die Belegung wird mit **echten Tastendrücken** geprüft, nicht über die
 Eingabeschicht: `verify:combat` fährt Parade, Ladeschlag und das Durchfallen
@@ -1705,6 +1706,90 @@ nur gegen Angriffe; Stacheln und Lava lassen sich nicht wegparieren.
 | ![Boss erscheint](screenshots/13-boss-erscheint.png) | ![Phase 2](screenshots/15-bosskampf-phase-2.png) |
 | ![Phase 3](screenshots/16-bosskampf-phase-3.png) | ![Der Riss](screenshots/17-der-riss.png) |
 | ![Das Tor](screenshots/18-das-tor.png) | ![Sieg](screenshots/19-sieg.png) |
+
+## Grafik: Pixelkunst auf einem Raster
+
+Die ganze Grafik ist neu gemacht – nicht über einen Filter gezogen, sondern
+gezeichnet: jedes Bild aus ganzen Pixeln in Farben einer festen Palette. Geprüft
+hat das in jeder Runde ein eigener Kritiker (siehe unten).
+
+**Ein Raster.** Gezeichnet wird in einen Puffer von 480×270 Kunstpixeln; die
+Spielwelt rechnet weiter in 960×540 logischen Pixeln, ein Kunstpixel sind zwei
+mal zwei davon. Der Puffer kommt in einem ganzzahligen Vielfachen auf den
+Bildschirm und wird dort auf ganze Gerätepixel geschoben – so ist jedes Pixel
+gleich groß, auch bei 125 % und 150 % Bildschirmskalierung unter Windows, wo die
+Leinwand vorher einen halben Gerätepixel versetzt stand und jede zweite Zeile
+dicker war. Ein Fenster, das für ein ganzes Gerätepixel je Kunstpixel zu klein
+ist, verkleinert das Bild um den nötigen Bruchteil, statt es abzuschneiden.
+
+**Eine Palette.** Alle Farben stammen aus 64 Tönen in Rampen – Schiefer, Erde,
+Rost, Feuer, Grün, Blau, Violett, Pflaume, Rose, Grau –, jede vom Schatten zum
+Licht im Farbton verschoben (Schatten nach Blau und Violett, Licht warm). Am
+Ende jedes Bildes läuft ein Pass über alle Pixel: Farben der Palette bleiben
+exakt, was dazwischen fällt, wird nur zwischen Nachbarn derselben Rampe
+gerastert, sonst auf die nächste Farbe gesetzt. Die grellen Ultramarin- und
+Neontöne erscheinen nur, wo ein Bild sie ausdrücklich malt – die Risse des
+Risses, die Bannwand der Ertrunkenen Halle.
+
+**Licht in Rampenstufen.** Die Dunkelheit einer Zone liegt als Tabelle über dem
+Boden: eine Decke, die nur abdunkelt, was heller ist als die Nacht der Zone, und
+nichts, was schon dunkler gemalt ist. Licht hebt, was es trifft, um eine oder
+zwei Stufen auf seiner Rampe zu seiner Farbe hin – in harten Bändern mit
+gerastertem Saum, ohne weichen Verlauf. Die gemalte Kulisse dahinter wird nie
+abgedunkelt. Pause, Dialog, Tod und der weiße Blitz eines fallenden Bosses sind
+ebenfalls Tabellen über der Palette statt halbdurchsichtiger Schleier, die der
+Raster in ein graues Schachbrett verwandelt hätte.
+
+**Figuren.** Der Held hat 60 von Hand gesetzte Bilder: Atmen, acht Laufbilder,
+Sprung und Fall, sieben Schwunghaltungen am Boden und in der Luft, Parade,
+Rolle, Treffer, Ladehaltungen. Ein roter Schal ist seine einzige warme Farbe,
+das Schwert hängt mit Parierstange und Knauf auf dem Rücken, der Umhang in
+Marine und violettem Schiefer folgt dem Lauf ein Bild später. Die sieben
+Gegnerarten sind Zeichen-Sprites mit eigenen Farben in jeder Zone, jede im
+Median mindestens 18 L* heller als das, was um sie herum liegt. Die achtzehn
+Bosse sind wie zu 16-Bit-Zeiten aus Teilen gebaut – Kopf, Kiefer, Rumpf,
+Gliedmaßen, Halssegmente –, jedes in den Winkeln vorgezeichnet, die es annehmen
+kann, und nur noch auf ganze Pixel gesetzt. Die Ebene der Darsteller erhält
+automatisch eine Kontur von einem Pixel; was halbdurchsichtig gemeint ist, wird
+zu einem geordneten Raster statt zu einer weichen Kante.
+
+**Kulissen und Gelände.** Jede Zone hat ihre gemalten Parallaxstreifen und einen
+Schauplatz – Mond, Aquädukt, Theatervorhang mit Schattenspiel, Uhrwerk,
+Rosenfenster, Blutmond, Kristallspitzen. Ferne Wände zeichnen ihre Fugen nur in
+den Rampennachbarn ihrer Grundfarbe und mit halber Liniendichte und treten so
+hinter die Spielebene zurück; über den Lavafällen der Glutkammer flimmert die
+Luft um ganze Pixel. Die Kacheln setzen sich selbst zusammen, mit Grasrand,
+Mauerkronen und Tiefenbändern; gemauerte Massen versinken nach unten im Dunkel,
+ein Abgrund zeigt seine ferne Grubenwand, jede Höhle hat ihr eigenes Gestein.
+Plattformen hängen nur unter einer Decke an Seilen, im Freien stehen sie auf
+Pfosten, im Riss treiben sie frei.
+
+**Schrift und Menüs.** Eine eigene Pixelschrift in drei Größen, Rahmen aus neun
+Teilen, Symbole für jedes Relikt und jeden Boss-Angriff, Tastenkappen. Der Titel
+ist eine eigene Szene – der Held auf einem Felsvorsprung vor Burg Nachtfall –,
+alle Tasten stehen auf einer eigenen Seite hinter `H`.
+
+### Der Kritiker
+
+Die Überarbeitung lief gegen einen eigenen Kritiker mit den höchsten Ansprüchen
+an Retro-Grafik. Er nimmt in jeder Runde das ganze Spiel auf – alle 30
+Abschnitte, alle 18 Bossarenen, die Menüs, verschiedene Skalierungen – und misst,
+statt nur hinzusehen:
+
+- Farben je Bild (alle aus der Palette), Helligkeitsverteilung, Anteil fast
+  schwarzer Pixel (Runde 0: drei von vier Pixeln unter L* 10);
+- vereinzelte Rasterpunkte, höchstens 4 % eines Bildes (Runde 1: im Mittel
+  6,1 %, bis 19 % im Pausenbild; jetzt im Mittel 2,2 %, keine Zone über 3,5 %);
+- den Kontrast jeder Gegnerart zu ihrer Umgebung, mindestens 18 L* (Fledermaus,
+  Magier und Zunder lagen bei 14–15, jetzt 27–37);
+- verbotene Vektorgrafik im Zeichencode – Bögen, Ellipsen, Kurven, Drehungen,
+  Verläufe, Filter –, die ein Bild nur unter das Raster rechnen statt es darauf
+  zu zeichnen;
+- gleich große Pixel bei gebrochener Skalierung.
+
+Runde 0 gab 3 von 10 Punkten, Runde 1 nach Raster, Palette, Held, Gelände und
+Kulissen 6 von 10 – mit einer Liste von dreizehn Fehlern außerhalb der Bosse und
+einem Regelwerk für die Bosse, die alle neu gezeichnet wurden.
 
 ## Ton und Musik
 
