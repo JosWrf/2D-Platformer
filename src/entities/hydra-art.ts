@@ -297,6 +297,34 @@ export function headPart(kind: HeadKind, jaw: 0 | 1 | 2, tone: Tone): PartSprite
 
 /* --------------------------------------------------------- stumps and seals */
 
+/**
+ * Every part she can be drawn with, made a few at a time while she is in view
+ * until all are made. Made the first time each is asked for, a head turning
+ * white-hot or a neck reaching an angle it had not had yet cost the frame it
+ * happened in ten milliseconds and more, in the middle of the fight. Heads
+ * first: they are the dearest to make and the first she shows.
+ */
+const warm: (() => unknown)[] = [];
+let warmAt = -1;
+export function warmHydra(budgetMs: number): void {
+  if (warmAt < 0) {
+    warmAt = 0;
+    const tones: Tone[] = ['plain', 'hot', 'struck', 'sealed'];
+    const kinds: HeadKind[] = ['venom', 'flame', 'storm', 'stone', 'crown'];
+    for (const tone of tones) for (const kind of kinds) for (const jaw of [0, 1, 2] as const) warm.push(() => headPart(kind, jaw, tone));
+    for (const tone of tones) for (const beat of [0, 1] as const) warm.push(() => stumpPart(beat, tone));
+    for (const flicker of [0, 1] as const) warm.push(() => sealPart(flicker));
+    for (const breath of [0, 1] as const) warm.push(() => bodyPart(breath));
+    for (const tone of tones) {
+      for (let rq = 2; rq <= 9; rq++) {
+        for (let step = 0; step < 16; step++) for (const belly of [1, -1] as const) warm.push(() => segmentPart(rq, step, belly, tone));
+      }
+    }
+  }
+  const t0 = performance.now();
+  while (warmAt < warm.length && performance.now() - t0 < budgetMs) warm[warmAt++]();
+}
+
 /** A cut neck's end: a ring of pale bone round the raw wound, beating. */
 export function stumpPart(beat: 0 | 1, tone: Tone): PartSprite {
   return cache.get(`stump|${beat}|${tone}`, () =>

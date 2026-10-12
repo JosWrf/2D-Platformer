@@ -10,7 +10,7 @@ import type { World } from '../world/context';
 import { angleStep, blit, dashedOval, ovalRing, quad, solidFlash } from './boss-art';
 import { Body } from './entity';
 import { gallertPart } from './gallert-art';
-import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart } from './hydra-art';
+import { BULK_H, type Tone, bodyPart, headPart, sealPart, segmentPart, stumpPart, warmHydra } from './hydra-art';
 import { clusterPart, heartAt, heartPart, shardPart } from './prism-art';
 import { type Pose as QueenPose, columnPart, mantlePart, queenPart } from './thalassa-art';
 import { wardenPart } from './warden-art';
@@ -3772,6 +3772,8 @@ export class Hydra extends Enemy {
    * white for a moment, and only they.
    */
   override draw(ctx: CanvasRenderingContext2D): void {
+    // What she has not been drawn with yet, made ahead a little a frame.
+    warmHydra(1.5);
     this.drawPools(ctx);
     this.drawDrops(ctx);
     this.drawBreath(ctx);
