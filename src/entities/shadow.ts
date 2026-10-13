@@ -266,7 +266,7 @@ export class Shadow extends Enemy {
     b.chargeReady = false;
     b.vx = fromDir * 200;
     b.vy = -180;
-    audio.play('screech', 1.8);
+    audio.play('voiceShadow', 1.8);
     world.particles.text(b.cx, b.y - 18, 'ER WANKT!', '#d9ccff');
   }
 
@@ -315,7 +315,7 @@ export class Shadow extends Enemy {
           this.state = 'duel';
           this.presence = 1;
           this.setPlan('stalk', 0.5);
-          audio.play('bossRoar', 1.6);
+          audio.play('voiceShadow', 1.6);
         }
         this.sync();
         return;

@@ -312,7 +312,7 @@ export class Colossus extends Enemy {
     this.state = 'slumped';
     this.timer = 3.3;
     audio.play('crumble');
-    audio.play('bossRoar', 0.62);
+    audio.play('voiceStone', 0.62);
     world.camera.addShake(8);
     world.hitStop(0.09);
     world.particles.burst(hand.x, hand.y, 26, '#d8c49a', { speed: 260, gravity: 520, size: 4 });
@@ -322,7 +322,7 @@ export class Colossus extends Enemy {
   private enterPhaseTwo(world: World): void {
     this.phaseTwo = true;
     audio.play('phase', 0.8);
-    audio.play('bossRoar', 0.7);
+    audio.play('voiceStone', 0.7);
     world.camera.addShake(7);
     world.particles.burst(this.headX, this.headY, 30, '#fff1c8', { speed: 240, gravity: -40, shape: 'spark' });
   }
@@ -347,7 +347,7 @@ export class Colossus extends Enemy {
         }));
       }
     }
-    audio.play('bossRoar', 0.55);
+    audio.play('voiceStone', 0.55);
     audio.play('crumble', 0.7);
     world.camera.addShake(10);
     world.hitStop(0.14);
@@ -409,7 +409,7 @@ export class Colossus extends Enemy {
         this.state = 'intro';
         this.timer = 1.9;
         audio.play('rumble', 0.7);
-        audio.play('bossRoar', 0.6);
+        audio.play('voiceStone', 0.6);
         world.camera.addShake(6);
       }
       return;

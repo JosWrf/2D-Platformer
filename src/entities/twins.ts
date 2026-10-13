@@ -655,7 +655,7 @@ export class Twins extends Enemy {
     this.state = 'intro';
     this.timer = INTRO;
     audio.play('magic', 0.7);
-    audio.play('bossRoar', 1.25);
+    audio.play('voiceSol', 1.25);
     world.camera.addShake(4);
   }
 
@@ -1336,7 +1336,7 @@ export class Twins extends Enemy {
     this.revive = { fallen: t, channeler: o, left: REVIVE, pulse: CALL_FIRST, told: false };
     this.acting = null;
     audio.play('crumble', 1.2);
-    audio.play(t.who === 'sol' ? 'bossRoar' : 'screech', 1.5);
+    audio.play(t.who === 'sol' ? 'voiceSol' : 'voiceLuna', 1.5);
     audio.play('magic', 0.65);
     world.camera.addShake(6);
     world.hitStop(0.1);
@@ -1446,7 +1446,7 @@ export class Twins extends Enemy {
     }
     this.syncHp();
     this.deathX = clamp((this.sol.x + this.luna.x) / 2, this.arenaLeft + 40, this.arenaRight - 40);
-    audio.play('bossRoar', 1.3);
+    audio.play('voiceLuna', 1.3);
     audio.play('magic', 0.5);
     world.camera.addShake(9);
     world.hitStop(0.14);

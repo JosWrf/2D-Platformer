@@ -188,7 +188,7 @@ export class Boss extends Body {
     }
     this.state = 'intro';
     this.timer = 2.2;
-    audio.play('bossRoar');
+    audio.play('voiceKnight');
     world.camera.addShake(9);
     world.onBossEngaged();
   }
@@ -268,7 +268,7 @@ export class Boss extends Body {
     this.deathTimer = 2.6;
     this.vulnerable = false;
     this.vx = 0;
-    audio.play('bossRoar');
+    audio.play('voiceKnight');
     world.camera.addShake(12);
     world.hitStop(0.35);
   }
@@ -692,7 +692,7 @@ export class Boss extends Body {
     const room = MAX_MINIONS - this.livingMinions();
     if (room <= 0) return;
 
-    audio.play('bossRoar', 1.6);
+    audio.play('voiceKnight', 1.6);
     // With only one slot left the knight raises it on the side he faces.
     const dirs = room >= 2 ? [-1, 1] : [this.facing];
     for (const dir of dirs) {

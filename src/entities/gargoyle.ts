@@ -464,7 +464,7 @@ export class Gargoyle extends Enemy {
       this.phaseTwo = true;
       this.bag = [];
       audio.play('phase', 0.9);
-      audio.play('bossRoar', 0.85);
+      audio.play('voiceGargoyle', 0.85);
       world.camera.addShake(6);
       world.particles.burst(this.cx, this.bottom - 40, 16, '#b8c0cc', { speed: 180, gravity: 500, size: 3 });
     }
@@ -484,7 +484,7 @@ export class Gargoyle extends Enemy {
     if (this.cracks.length === 0) this.makeCracks(9);
     this.crackGlow = 1;
     audio.play('crumble', 0.7);
-    audio.play('bossRoar', 0.55);
+    audio.play('voiceGargoyle', 0.55);
     audio.play('impactGargoyle', 0.7);
     world.camera.addShake(8);
     world.hitStop(0.14);
@@ -571,8 +571,7 @@ export class Gargoyle extends Enemy {
         this.timer -= dt;
         if (world.time % 0.09 < dt) this.flake(world, 1);
         if (before > 0.9 && this.timer <= 0.9) {
-          audio.play('screech', 0.7);
-          audio.play('bossRoar', 1.15);
+          audio.play('voiceGargoyle', 0.9);
           world.camera.addShake(5);
           this.flake(world, 14);
         }
@@ -627,7 +626,7 @@ export class Gargoyle extends Enemy {
           this.vx = this.facing * CLAW_LUNGE;
           this.hitThisMove = false;
           audio.play('swing', 0.62);
-          audio.play('screech', 1.5);
+          audio.play('voiceGargoyle', 1.5);
         }
         break;
 
@@ -1025,7 +1024,7 @@ export class Gargoyle extends Enemy {
     this.facing = world.player.cx > this.cx ? 1 : -1;
     this.hitThisMove = true;
     audio.play('tellSlam', 0.8);
-    audio.play('screech', 0.85);
+    audio.play('voiceGargoyle', 0.85);
     audio.play('wing', 0.75);
     this.kickDust(world, 6);
   }

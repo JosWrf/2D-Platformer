@@ -186,8 +186,8 @@ export const SKETCHES: Record<TrackName, Sketch> = {
     ],
     parts: [
       { name: 'lute', role: 'melody', inst: inst('lute', 0.9, ENV.pluck, { echo: true, gate: 1 }), oct: 2, rhythms: [[4, 4, 8], [2, 2, 4, 8], [6, 2, 4, 4], [8, 4, 4]], range: [-2, 7], motif: HERO },
-      { name: 'arp', role: 'arp', inst: inst('lute', 0.5, ENV.pluckShort, { pan: 0.3 }), oct: 1, tones: [0, 2, 3, 1, 2, 3, 4, 3], rhythm: 'x.xxx.xxx.xxx.xx' },
-      { name: 'pad', role: 'chord', inst: inst('strings', 0.36, ENV.padSlow, { echo: true, pan: -0.2 }), oct: 1, tone: 1 },
+      { name: 'arp', role: 'arp', inst: inst('lute', 0.32, ENV.pluckShort, { pan: 0.3 }), oct: 1, tones: [0, 2, 3, 1, 2, 3, 4, 3], rhythm: 'x.xxx.xxx.xxx.xx' },
+      { name: 'pad', role: 'chord', inst: inst('strings', 0.28, ENV.padSlow, { echo: true, pan: -0.2 }), oct: 1, tone: 1 },
       { name: 'bell', role: 'counter', inst: inst('bell', 0.42, ENV.bell, { echo: true, pan: 0.35 }), oct: 3, per: 2 },
       { name: 'bass', role: 'bass', inst: BASS, oct: 0, patterns: ['r.......r.......', 'r.......f.......', 'r...r...f...r...', 'r.......a...a...'] },
       { name: 'toms', role: 'drums', inst: TOM, kit: { t: TOM }, patterns: ['........t.......', '................', 't.......t...t...'], fill: '........t...t.tt' },
@@ -566,8 +566,8 @@ export const SKETCHES: Record<TrackName, Sketch> = {
     ],
     parts: [
 
-      // Two blasts, a flicker on the flat second, and a flare to the fifth.
-      { name: 'brass', role: 'melody', inst: inst('brassGrit', 0.72, ENV.brass, { echo: true, gate: 0.85 }), oct: 1, rhythms: DRIVE, range: [0, 8], motif: [[[0, 3], [0, 3], [1, 2], [0, 2], [4, 6]]] },
+      // A flare: up the octave and back to the fifth, a flicker, and the flat second burning.
+      { name: 'brass', role: 'melody', inst: inst('brassGrit', 0.72, ENV.brass, { echo: true, gate: 0.85 }), oct: 1, rhythms: DRIVE, range: [0, 8], motif: [[[0, 2], [7, 2], [4, 2], [5, 1], [4, 1], [1, 4], [0, 4]]] },
       { name: 'anvil', role: 'drums', inst: inst('anvil', 0.55, ENV.bell), kit: { a: inst('anvil', 0.55, ENV.bell, { pan: 0.3 }), b: inst('anvil', 0.46, ENV.bell, { rate: 1.19, pan: 0.3 }) }, patterns: ['....a.......a...', '....a.......a.b.', '..a.a...b.a.a.b.'] },
       { name: 'brass2', role: 'chord', inst: inst('brassGrit', 0.42, ENV.stab, { pan: -0.25 }), oct: 1, tone: 1, rhythm: 'x.......x...x...' },
       { name: 'bass', role: 'bass', inst: BASS, oct: 0, patterns: ['rrrrrrrrrrrrrrrr', 'rrrRrrrRrrrRrrrR', 'rrRrrrRrrrRrfrRr', 'rrrrrrrraaaaaaaa'] },
@@ -704,15 +704,16 @@ export const SKETCHES: Record<TrackName, Sketch> = {
     seed: 331,
     intro: { chords: [0, 4], energy: 2, rest: ['brass'] },
     sections: [
-      { chords: [0, 0, 5, 4, 0, 0, 3, 4], energy: 1, motif: [0, 4] },
-      { chords: [5, 3, 0, 4, 5, 1, 4, 4], energy: 2 },
-      { chords: [0, 5, 3, 4, 0, 5, 1, 4], energy: 2, vary: 9 },
+      { chords: [0, 0, 5, 4, 0, 0, 3, 4], energy: 1, motif: [0] },
+      { chords: [5, 3, 0, 4, 5, 1, 4, 4], energy: 2, motif: [2] },
+      { chords: [0, 4, 3, 4, 0, 5, 1, 4], energy: 2, vary: 9, motif: [0] },
     ],
     parts: [
 
       { name: 'ostinato', role: 'arp', inst: inst('stringsStacc', 0.55, ENV.pluckShort, { pan: -0.25 }), oct: 2, tones: [0, 0, 2, 0, 1, 0, 2, 0], rhythm: 'xxxxxxxxxxxxxxxx' },
-      // A knight's call: the fifth twice, the octave, and down to the fifth again.
-      { name: 'brass', role: 'melody', inst: inst('brassStab', 0.7, ENV.brass, { echo: true, gate: 0.88 }), oct: 1, rhythms: DRIVE, range: [2, 10], motif: [[[4, 3], [4, 1], [7, 4], [6, 2], [5, 2], [4, 4]], [[5, 4], [4, 2], [3, 2], [4, 8]]] },
+      // A knight's call: the fifth twice, the octave, and down to the fifth again -
+      // an octave over the strings' ostinato, so it carries.
+      { name: 'brass', role: 'melody', inst: inst('brassStab', 0.7, ENV.brass, { echo: true, gate: 0.88 }), oct: 2, rhythms: DRIVE, range: [-2, 6], motif: [[[4, 3], [4, 1], [7, 4], [6, 2], [5, 2], [4, 4]], [[5, 4], [4, 2], [3, 2], [4, 8]]] },
       { name: 'hits', role: 'drums', inst: inst('orchHit', 0.85, ENV.drum), kit: { o: inst('orchHit', 0.85, ENV.drum, { echo: true }) }, patterns: ['o.....o...o.....', 'o.....o...o.....', 'o.....o...o...o.'], phrase: 4 },
       { name: 'bass', role: 'bass', inst: BASS, oct: 0, patterns: ['r.r.r.r.r.r.r.r.', 'rrrRrrrRrrrRrrrR', 'rrRrrrRrrrRrfrRr', 'r.r.r.r.aaaaaaaa'] },
       { name: 'kit', role: 'drums', inst: KICK, kit: { k: KICK, s: SNARE, g: inst('snare', 0.32, ENV.drum) }, patterns: ['k...s.g.k...s...', 'k..gs...k..gs.g.', 'k.ggs.g.k.ggs.gg'], fill: 'sgsgsgsgSgsgSSSS' },
@@ -729,13 +730,14 @@ export const SKETCHES: Record<TrackName, Sketch> = {
     seed: 341,
     intro: { chords: [0], energy: 2, rest: ['rev', 'counter'] },
     sections: [
-      { chords: [0, 1, 0, 1, 6, 5, 1, 0], energy: 1, motif: [0] },
-      { chords: [3, 1, 0, 6, 3, 1, 0, 0], energy: 2, motif: [4] },
+      { chords: [0, 3, 2, 0, 3, 0, 1, 5], energy: 1, quote: [0], motif: [4] },
+      { chords: [3, 1, 0, 6, 3, 0, 1, 5], energy: 2, motif: [4] },
     ],
     parts: [
 
-      // The hero's figure from the title, upside down, every note swelling backwards.
-      { name: 'rev', role: 'melody', inst: inst('revLead', 0.7, ENV.drum, { echo: true }), oct: 2, rhythms: [[8, 8], [8, 4, 4], [4, 4, 8], [16]], range: [0, 7], motif: stretch(mirror(HERO, 3.5), 2, 16) },
+      // The hero's figure from the title, as it is and then upside down, every note
+      // swelling backwards.
+      { name: 'rev', role: 'melody', inst: inst('revLead', 0.7, ENV.drum, { echo: true }), oct: 2, rhythms: [[8, 8], [8, 4, 4], [4, 4, 8], [16]], range: [0, 7], motif: stretch(mirror(HERO, 3.5), 2, 16), quote: stretch(HERO, 2, 16) },
       { name: 'counter', role: 'counter', inst: inst('pulse', 0.42, ENV.lead, { echo: true, pan: 0.3 }), oct: 0, per: 4 },
       { name: 'swell', role: 'drums', inst: inst('revCymbal', 0.42, ENV.drum), kit: { r: inst('revCymbal', 0.42, ENV.drum, { pan: -0.3 }) }, patterns: ['................', '................', '........r.......'], phrase: 4, fill: '........r.......' },
       { name: 'bass', role: 'bass', inst: inst('bass', 1, ENV.bass, { gate: 0.92 }), oct: 0, patterns: ['rrrrrrrrrrrrrrrr', 'rrRrrrRrrrRrrrRr', 'rrRrrrRrfrRrfrRr', 'rrrrrrrraaaaaaaa'] },
@@ -825,11 +827,11 @@ export const SKETCHES: Record<TrackName, Sketch> = {
  */
 const PART_GAIN: Partial<Record<TrackName, number[]>> = {
   bossMire: [1.8, 1.59, 0.5, 0.55, 0.552],
-  bossBoar: [1.21, 0.614, 1.532, 1.253, 0.757],
+  bossBoar: [1.45, 0.614, 1.532, 1.253, 0.757],
   bossGold: [1.198, 0.584, 1.298, 0.5, 0.894],
   bossJester: [1.8, 0.788, 0.714, 1.62, 0.5, 1.044],
   bossStone: [1.285, 0.983, 0.5, 1.184, 0.65, 0.903],
-  bossGloom: [1.8, 1.8, 1.263, 0.577, 0.5, 0.5],
+  bossGloom: [2.5, 1.0, 1.263, 0.577, 0.5, 0.5],
   bossWeb: [0.5, 1.8, 1.625, 0.605, 0.5],
   bossFire: [0.78, 0.5, 0.5, 1.209, 0.72, 0.527],
   bossTwins: [0.78, 1.435, 1.8, 0.614, 0.578],
@@ -837,7 +839,7 @@ const PART_GAIN: Partial<Record<TrackName, number[]>> = {
   bossGargoyle: [1.26, 1.322, 0.523, 0.4, 0.7],
   bossClock: [1.298, 1.532, 0.552, 0.5, 0.5, 1.643],
   bossBlood: [0.45, 2.0, 0.566, 0.519, 0.4, 0.612],
-  bossKnight: [0.85, 0.78, 0.5, 1.331, 1.8, 1.383],
+  bossKnight: [0.64, 1.17, 0.5, 1.331, 1.8, 1.383],
   bossShadow: [1.678, 1.519, 0.654, 1.781, 0.7, 1.145],
   bossShard: [1.0, 1.18, 1.0, 1.1, 1.0, 0.9],
   bossHydra: [0.986, 0.727, 1.8, 1.362, 0.5, 0.833],
@@ -866,7 +868,7 @@ for (const [name, gains] of Object.entries(PART_GAIN) as [TrackName, number[]][]
  * checks them).
  */
 export const TRACK_LEVEL: Record<TrackName, number> = {
-  title: 0.296,
+  title: 0.317,
   forest: 0.134,
   ruins: 0.131,
   caverns: 0.214,
@@ -882,17 +884,17 @@ export const TRACK_LEVEL: Record<TrackName, number> = {
   bossFire: 0.211,
   bossTide: 0.162,
   bossBlood: 0.161,
-  bossKnight: 0.168,
+  bossKnight: 0.155,
   bossHydra: 0.136,
   bossCrystal: 0.161,
   bossGold: 0.28,
   bossWeb: 0.339,
   bossShadow: 0.118,
-  bossBoar: 0.158,
+  bossBoar: 0.146,
   bossTwins: 0.131,
   bossClock: 0.169,
   bossJester: 0.139,
-  bossGloom: 0.118,
+  bossGloom: 0.11,
   bossGargoyle: 0.186,
 };
 

@@ -33,7 +33,6 @@ export type Sfx =
   | 'heal'
   | 'enemyDie'
   | 'bossHit'
-  | 'bossRoar'
   | 'slam'
   | 'shoot'
   | 'checkpoint'
@@ -102,7 +101,22 @@ export type Sfx =
   | 'impactShadow'
   | 'impactShard'
   | 'impactHydra'
-  | 'impactCrystal';
+  | 'impactCrystal'
+  | 'voiceBoar'
+  | 'voiceKnight'
+  | 'voiceClock'
+  | 'voiceStone'
+  | 'voiceHydra'
+  | 'voiceGargoyle'
+  | 'voiceGloom'
+  | 'voiceJester'
+  | 'voiceMimic'
+  | 'voiceShadow'
+  | 'voiceSpider'
+  | 'voiceSol'
+  | 'voiceLuna'
+  | 'voiceVesper'
+  | 'voiceWyrm';
 
 /** One note of an effect. */
 export interface Hit {
@@ -368,16 +382,7 @@ export const SFX: Record<Sfx, SfxDef> = {
       { s: 'noiseHi', r: 0.5, to: 1.4, dur: 0.42, env: E.swell, v: 0.4, ch: 1 },
     ],
   },
-  bossRoar: {
-    cls: 'tell',
-    pri: 8,
-    echo: true,
-    gap: 0.2,
-    hits: [
-      { s: 'growl', hz: 92, to: 0.72, dur: 0.6, env: E.hold, vib: [7, 0.6, 0.05] },
-      { s: 'noiseLo', r: 1.2, to: 0.6, dur: 0.6, env: E.hold, v: 0.8, ch: 1 },
-    ],
-  },
+  // A bat's shriek: a thin tone shaking and falling. (The bosses each have a voice of their own.)
   screech: {
     cls: 'tell',
     pri: 7,
@@ -1008,6 +1013,199 @@ export const SFX: Record<Sfx, SfxDef> = {
       { s: 'celesta', hz: hz('A5'), dur: 0.2, env: E.ring, ch: 1 },
     ],
   },
+
+  /* ------------------------------------------------- each boss's own voice */
+  // A boss roars, shrieks or laughs with its own instruments too, the ones
+  // its fight and its blows are made of - not one growl for all of them.
+  // Grimmzahn: a grunt through the low horn, the growl under it.
+  voiceBoar: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'growl', hz: 82, to: 0.7, dur: 0.5, env: E.hold, vib: [6, 0.7, 0.04] },
+      { s: 'lowHorn', hz: hz('D2'), to: 0.75, dur: 0.45, env: E.hold, ch: 1 },
+    ],
+  },
+  // Morvain: a war cry, brass over the orchestra's blow.
+  voiceKnight: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'orchHit', r: 0.7, dur: 0.45, env: E.drum },
+      { s: 'brassStab', hz: hz('A2'), to: 0.85, dur: 0.5, env: E.hold, vib: [5, 0.4, 0.12], ch: 1 },
+    ],
+  },
+  // Tickmar: the works grinding, a music box running down.
+  voiceClock: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'tick', r: 0.8, dur: 0.05, env: E.drum },
+      { s: 'tick', r: 0.7, at: 0.09, dur: 0.05, env: E.drum },
+      { s: 'tick', r: 0.6, at: 0.18, dur: 0.05, env: E.drum },
+      { s: 'musicBox', hz: hz('A5'), to: 0.5, dur: 0.5, env: E.hold, vib: [9, 0.5, 0.05], ch: 1 },
+    ],
+  },
+  // Ankhor: stone on stone, the low brass groaning.
+  voiceStone: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'lowBrass', hz: hz('E2'), to: 0.7, dur: 0.6, env: E.hold, vib: [4, 0.5, 0.1] },
+      { s: 'gong', hz: 75, dur: 0.6, env: E.ring, ch: 1 },
+    ],
+  },
+  // The Fünfkronige: a horn call from five throats, the war drum under it.
+  voiceHydra: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'horn', hz: hz('C3'), to: 0.8, dur: 0.55, env: E.hold, vib: [6, 0.5, 0.08] },
+      { s: 'warDrum', r: 0.8, dur: 0.45, env: E.drum, ch: 1 },
+    ],
+  },
+  // Grauwacht: a stone throat with the choir's moan in it.
+  voiceGargoyle: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'choirOoh', hz: hz('E3'), to: 0.7, dur: 0.5, env: E.hold, vib: [7, 0.6, 0.04] },
+      { s: 'timpani', hz: 65, dur: 0.45, env: E.ring, ch: 1 },
+    ],
+  },
+  // Nyktos: the low choir sinking, the drone under it.
+  voiceGloom: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'choirLow', hz: hz('C#3'), to: 0.6, dur: 0.6, env: E.hold, vib: [5, 0.5, 0.1] },
+      { s: 'drone', hz: hz('C#2'), to: 0.8, dur: 0.6, env: E.hold, ch: 1 },
+    ],
+  },
+  // Maskarill: a laugh down the calliope, the woodblock clacking.
+  voiceJester: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'calliope', hz: hz('A5'), dur: 0.07, env: E.short },
+      { s: 'calliope', hz: hz('F5'), at: 0.09, dur: 0.07, env: E.short },
+      { s: 'calliope', hz: hz('D5'), at: 0.18, dur: 0.07, env: E.short },
+      { s: 'calliope', hz: hz('A4'), at: 0.27, dur: 0.14, env: E.short },
+      { s: 'woodblock', r: 1.2, dur: 0.05, env: E.drum, ch: 1 },
+      { s: 'woodblock', r: 1.0, at: 0.18, dur: 0.05, env: E.drum, ch: 1 },
+    ],
+  },
+  // Gierschlund: a greedy snarl with the gold rattling in it.
+  voiceMimic: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'growl', hz: 100, to: 0.8, dur: 0.45, env: E.hold, vib: [9, 0.8, 0.02] },
+      { s: 'coins', r: 0.55, dur: 0.35, env: E.drum, ch: 1 },
+    ],
+  },
+  // Umbra: a roar run backwards - it swells, and stops dead.
+  voiceShadow: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'revLead', hz: hz('B2'), from: 0.34, dur: 0.5, env: E.drum },
+      { s: 'revCymbal', r: 0.8, from: 0.11, dur: 0.5, env: E.drum, ch: 1 },
+    ],
+  },
+  // Arachna: a hiss, the koto's string scraped down.
+  voiceSpider: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'noiseHi', r: 0.9, to: 0.7, dur: 0.35, env: E.hold, v: 0.6 },
+      { s: 'koto', hz: hz('E5'), to: 0.55, dur: 0.3, env: E.hold, vib: [20, 0.6, 0.01], ch: 1 },
+    ],
+  },
+  // Sol: a bright cry on the flute.
+  voiceSol: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'flute', hz: hz('D6'), to: 0.75, dur: 0.4, env: E.hold, vib: [12, 0.6, 0.02] },
+      { s: 'noiseMid', r: 1.1, to: 0.8, dur: 0.25, env: E.noise, v: 0.4, ch: 1 },
+    ],
+  },
+  // Luna: a cold shriek on the glass harmonica, rising.
+  voiceLuna: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'glassHarp', hz: hz('A5'), to: 1.25, dur: 0.4, env: E.hold, vib: [14, 0.5, 0.02] },
+      { s: 'noiseHi', r: 1.0, to: 1.1, dur: 0.25, env: E.noise, v: 0.3, ch: 1 },
+    ],
+  },
+  // Vesperon: his bats' shriek over a harpsichord's trill.
+  voiceVesper: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'pulseHi', hz: 1600, to: 0.75, dur: 0.3, env: E.hold, vib: [24, 0.8, 0.01] },
+      { s: 'harpsichord', hz: hz('D5'), dur: 0.06, env: E.short, ch: 1 },
+      { s: 'harpsichord', hz: hz('C#5'), at: 0.07, dur: 0.06, env: E.short, ch: 1 },
+      { s: 'harpsichord', hz: hz('D5'), at: 0.14, dur: 0.06, env: E.short, ch: 1 },
+      { s: 'harpsichord', hz: hz('C#5'), at: 0.21, dur: 0.06, env: E.short, ch: 1 },
+    ],
+  },
+  // Ignivor: a roar of ground brass, fire rushing under it.
+  voiceWyrm: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.12,
+    hits: [
+      { s: 'brassGrit', hz: hz('E2'), to: 0.7, dur: 0.6, env: E.hold, vib: [7, 0.6, 0.05] },
+      { s: 'noiseLo', r: 1.3, to: 0.6, dur: 0.6, env: E.hold, v: 0.8, ch: 1 },
+    ],
+  },
 };
 
 export const SFX_NAMES = Object.keys(SFX) as Sfx[];
@@ -1052,7 +1250,6 @@ const TRIM: Partial<Record<Sfx, number>> = {
   tellVolley: 0.741,
   tellSlam: 0.501,
   tellBeam: 0.519,
-  bossRoar: 0.617,
   screech: 0.452,
   victory: 0.989,
   bossDown: 0.966,
@@ -1113,5 +1310,20 @@ const TRIM: Partial<Record<Sfx, number>> = {
   impactShard: 1.087,
   impactHydra: 0.795,
   impactCrystal: 0.644,
+  voiceBoar: 0.724,
+  voiceKnight: 0.997,
+  voiceClock: 0.598,
+  voiceStone: 0.815,
+  voiceHydra: 0.658,
+  voiceGargoyle: 0.67,
+  voiceGloom: 0.894,
+  voiceJester: 0.925,
+  voiceMimic: 0.867,
+  voiceShadow: 0.72,
+  voiceSpider: 0.721,
+  voiceSol: 0.583,
+  voiceLuna: 0.6,
+  voiceVesper: 0.648,
+  voiceWyrm: 0.563,
 };
 for (const [name, level] of Object.entries(TRIM) as [Sfx, number][]) SFX[name].level = (SFX[name].level ?? 1) * level;

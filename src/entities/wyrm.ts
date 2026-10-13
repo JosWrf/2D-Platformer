@@ -304,7 +304,7 @@ export class Wyrm extends Enemy {
     if (!this.phaseTwo && this.hp <= this.maxHp / 2) {
       this.phaseTwo = true;
       audio.play('phase', 0.85);
-      audio.play('bossRoar', 0.9);
+      audio.play('voiceWyrm', 0.9);
       world.camera.addShake(6);
     }
     // The breach's landing is its own window and does not chain into the long
@@ -337,7 +337,7 @@ export class Wyrm extends Enemy {
     this.hole = this.hx;
     this.slumpX = clamp(this.hx + toward * clamp(Math.abs(p.cx - this.hx) - 52, 0, 64), this.arenaLeft + 40, this.arenaRight - 40);
     audio.play('slam', 0.9);
-    audio.play('bossRoar', 1.3);
+    audio.play('voiceWyrm', 1.3);
     world.camera.addShake(7);
     world.hitStop(0.08);
     world.particles.text(this.hx, this.hy - 50, 'ER LIEGT!', '#ffd08a');
@@ -350,7 +350,7 @@ export class Wyrm extends Enemy {
     this.hvx = 0;
     this.hvy = 0;
     this.pillars.length = 0;
-    audio.play('bossRoar', 0.75);
+    audio.play('voiceWyrm', 0.75);
     world.camera.addShake(9);
     world.hitStop(0.14);
   }
@@ -453,7 +453,7 @@ export class Wyrm extends Enemy {
           this.rained = true;
           // Showing himself, not attacking: he goes straight back under.
           this.landing = false;
-          audio.play('bossRoar', 0.85);
+          audio.play('voiceWyrm', 0.85);
         }
         break;
 
@@ -483,7 +483,7 @@ export class Wyrm extends Enemy {
           // to hunt again; the last breach of a move always comes down on
           // the floor.
           this.landing = !(this.phaseTwo && this.breaches === 0);
-          audio.play('bossRoar', 1.05);
+          audio.play('voiceWyrm', 1.05);
         }
         break;
       }
@@ -754,7 +754,7 @@ export class Wyrm extends Enemy {
     this.jaw = 1;
     this.throat = 0;
     audio.play('fireball', 0.7);
-    audio.play('bossRoar', 1.5);
+    audio.play('voiceWyrm', 1.5);
     this.state = 'exposed';
     this.timer = EXPOSED * this.haste;
   }

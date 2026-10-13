@@ -878,7 +878,7 @@ export class Clockwork extends Enemy {
     for (const q of this.parts) q.dead = true;
     this.parts.length = 0;
     this.spears = [];
-    audio.play('bossRoar', 1.4);
+    audio.play('voiceClock', 1.4);
     audio.play('clank', 0.5);
     world.camera.addShake(9);
     world.hitStop(0.14);

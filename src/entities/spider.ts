@@ -263,7 +263,7 @@ export class Spider extends Enemy {
     if (!this.phaseTwo && this.hp <= this.maxHp / 2) {
       this.phaseTwo = true;
       audio.play('phase', 1.3);
-      audio.play('screech', 0.8);
+      audio.play('voiceSpider', 0.8);
       world.camera.addShake(5);
     }
     if (this.aloft) {
@@ -296,7 +296,7 @@ export class Spider extends Enemy {
     this.threadHp = THREAD_HP;
     this.bvy = 60;
     this.poseTarget = 2;
-    audio.play('screech', 1.1);
+    audio.play('voiceSpider', 1.1);
     world.camera.addShake(4);
   }
 
@@ -308,7 +308,7 @@ export class Spider extends Enemy {
     this.poseTarget = 2;
     this.patches.length = 0;
     this.eggs.length = 0;
-    audio.play('screech', 0.6);
+    audio.play('voiceSpider', 0.6);
     audio.play('bossDown', 1.1);
     world.camera.addShake(8);
     world.hitStop(0.14);
@@ -346,7 +346,7 @@ export class Spider extends Enemy {
           this.poise = this.poiseMax = this.sizeUpFor(world, SPIDER_POISE);
           this.state = 'descend';
           this.timer = 1.5;
-          audio.play('screech', 0.7);
+          audio.play('voiceSpider', 0.7);
           world.camera.addShake(3);
         }
         break;
@@ -668,14 +668,14 @@ export class Spider extends Enemy {
         this.timer = LASH_WIND;
         this.lashDir = player.cx > this.bx ? 1 : -1;
         audio.play('tellLunge', 1.05);
-        audio.play('screech', 1.5);
+        audio.play('voiceSpider', 1.5);
         break;
       case 'swing':
         this.state = 'swingWind';
         this.timer = 0.75;
         this.anchorX = clamp((this.arenaLeft + this.arenaRight) / 2 + (player.cx - (this.arenaLeft + this.arenaRight) / 2) * 0.3, this.arenaLeft + 200, this.arenaRight - 200);
         audio.play('tellLunge', 0.6);
-        audio.play('screech', 1.3);
+        audio.play('voiceSpider', 1.3);
         break;
     }
   }
@@ -782,7 +782,7 @@ export class Spider extends Enemy {
         young.active = true;
         world.spawnEnemy(young);
         world.particles.burst(egg.x, egg.y, 12, '#cfe8d8', { speed: 130, gravity: 400 });
-        audio.play('screech', 2.2);
+        audio.play('voiceSpider', 2.2);
       }
     }
   }

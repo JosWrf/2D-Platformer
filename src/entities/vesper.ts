@@ -161,7 +161,7 @@ export class Vesper extends Enemy {
     if (!this.phaseTwo && this.hp <= this.maxHp / 2) {
       this.phaseTwo = true;
       audio.play('phase', 1.1);
-      audio.play('screech', 0.7);
+      audio.play('voiceVesper', 0.7);
       world.camera.addShake(6);
     }
     const inAir = this.state === 'hover' || this.state === 'slashWind' || this.state === 'swarmWind';
@@ -191,7 +191,7 @@ export class Vesper extends Enemy {
     this.vx = 0;
     this.vy = 120;
     this.spread = 0.2;
-    audio.play('screech', 0.6);
+    audio.play('voiceVesper', 0.6);
     world.particles.text(this.cx, this.y - 16, 'ABGESTÜRZT!', '#ff9fb4');
     world.camera.addShake(5);
   }
@@ -201,7 +201,7 @@ export class Vesper extends Enemy {
     this.state = 'dying';
     this.timer = 2.2;
     this.marks = [];
-    audio.play('screech', 0.5);
+    audio.play('voiceVesper', 0.5);
     audio.play('bossDown', 1.2);
     world.camera.addShake(8);
     world.hitStop(0.14);
@@ -264,7 +264,7 @@ export class Vesper extends Enemy {
           this.poise = this.poiseMax = this.sizeUpFor(world, VESPER_POISE);
           this.state = 'intro';
           this.timer = 1.6;
-          audio.play('screech', 0.55);
+          audio.play('voiceVesper', 0.55);
           audio.play('wing', 0.7);
           world.camera.addShake(4);
         }
@@ -430,7 +430,7 @@ export class Vesper extends Enemy {
             world.spawnEnemy(bat);
             world.particles.burst(bat.cx, bat.cy, 8, '#8a2040', { speed: 120, gravity: 0 });
           }
-          audio.play('screech', 1.2);
+          audio.play('voiceVesper', 1.2);
           this.state = 'hover';
           this.timer = 1.1 * this.haste;
         }
@@ -553,7 +553,7 @@ export class Vesper extends Enemy {
       case 'moon':
         this.state = 'moonWind';
         this.timer = 1.1;
-        audio.play('screech', 0.5);
+        audio.play('voiceVesper', 0.5);
         break;
     }
   }
@@ -568,7 +568,7 @@ export class Vesper extends Enemy {
       y: this.floorY - HOVER - 40,
     };
     this.target = { x: heroX, y: this.floorY - this.h / 2 };
-    audio.play('screech');
+    audio.play('voiceVesper');
   }
 
   private land(world: World): void {

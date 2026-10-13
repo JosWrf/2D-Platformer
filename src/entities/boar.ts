@@ -305,7 +305,7 @@ export class Boar extends Enemy {
     if (!this.phaseTwo && this.hp <= this.maxHp / 2) {
       this.phaseTwo = true;
       audio.play('phase', 0.8);
-      audio.play('bossRoar', 0.75);
+      audio.play('voiceBoar', 0.75);
       world.camera.addShake(6);
       world.particles.burst(this.snout().x, this.snout().y, 18, 'rgba(230,236,240,0.7)', { speed: 160, gravity: -60, size: 4 });
     }
@@ -337,7 +337,7 @@ export class Boar extends Enemy {
     this.timer = seconds;
     this.speed = 0;
     this.poise = this.poiseMax;
-    audio.play('screech', 1.35);
+    audio.play('voiceBoar', 1.35);
     world.particles.text(this.cx, this.y - 26, 'BENOMMEN!', '#ffe27a');
   }
 
@@ -349,7 +349,7 @@ export class Boar extends Enemy {
     this.vx = fromDir * 80;
     this.rearUp = 0;
     this.dig = 0;
-    audio.play('screech', 1.6);
+    audio.play('voiceBoar', 1.6);
     world.particles.burst(this.cx, this.bottom - 4, 12, '#7a6248', { speed: 140, gravity: 500, angle: -Math.PI / 2, spread: 2.2 });
   }
 
@@ -375,8 +375,7 @@ export class Boar extends Enemy {
     this.lobs.length = 0;
     this.rearUp = 0;
     this.dig = 0;
-    audio.play('screech', 0.8);
-    audio.play('bossRoar', 0.6);
+    audio.play('voiceBoar', 0.7);
     world.camera.addShake(8);
     world.hitStop(0.14);
   }
@@ -446,7 +445,7 @@ export class Boar extends Enemy {
         const before = this.timer;
         this.timer -= dt;
         if (before > 0.7 && this.timer <= 0.7) {
-          audio.play('bossRoar', 0.7);
+          audio.play('voiceBoar', 0.7);
           world.camera.addShake(5);
           this.breathe(world, 6);
           this.bristle = 1;
@@ -684,7 +683,7 @@ export class Boar extends Enemy {
     this.state = 'rear';
     this.timer = REAR;
     audio.play('tellSlam', 1.1);
-    audio.play('bossRoar', 1.35);
+    audio.play('voiceBoar', 1.35);
   }
 
   private beginDig(world: World): void {
@@ -713,7 +712,7 @@ export class Boar extends Enemy {
     this.hitThisCharge = false;
     this.vx = this.facing * this.speed;
     audio.play('dash', 0.5);
-    audio.play('bossRoar', 1.2);
+    audio.play('voiceBoar', 1.2);
     world.camera.addShake(2);
   }
 
@@ -735,7 +734,7 @@ export class Boar extends Enemy {
       this.turned = false;
       this.vx = -this.facing * 90;
       audio.play('tellLunge', 0.65);
-      audio.play('bossRoar', 1.05);
+      audio.play('voiceBoar', 1.05);
       return;
     }
     this.bounced = false;

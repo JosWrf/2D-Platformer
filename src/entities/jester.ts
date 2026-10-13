@@ -708,7 +708,7 @@ export class Jester extends Enemy {
     this.me.vx = fromDir * 90;
     this.me.knives = 0;
     this.me.act = 'stagger';
-    audio.play('screech', 1.7);
+    audio.play('voiceJester', 1.7);
     audio.play('coin', 1.2);
     world.particles.burst(this.me.x, this.me.y - 4, 10, '#7a6a8a', { speed: 120, gravity: 500, angle: -Math.PI / 2, spread: 2.2 });
   }
@@ -739,7 +739,7 @@ export class Jester extends Enemy {
     me.act = 'collapse';
     me.k = 0;
     this.maskOff = 0;
-    audio.play('bossRoar', 1.45);
+    audio.play('voiceJester', 1.45);
     audio.play('coin', 0.75);
     world.camera.addShake(8);
     world.hitStop(0.14);
@@ -1526,7 +1526,7 @@ export class Jester extends Enemy {
     this.hp -= amount * 2;
     this.flash = 1;
     audio.play('impactJester', 1.75);
-    audio.play('screech', 1.3);
+    audio.play('voiceJester', 1.3);
     audio.play('bossHit', 0.85);
     world.hitStop(0.12);
     world.camera.addShake(7);

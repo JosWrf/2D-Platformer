@@ -253,7 +253,7 @@ export class Mimic extends Enemy {
     if (part === 'tongue') {
       // A cut tongue goes home at once.
       this.tongueHit = true;
-      audio.play('screech', 1.6);
+      audio.play('voiceMimic', 1.6);
     }
     if (this.hp <= 0) {
       this.beginDying(world);
@@ -306,7 +306,7 @@ export class Mimic extends Enemy {
     this.timer = 2.1;
     this.tongue = 0;
     this.lidTarget = 1;
-    audio.play('screech', 0.9);
+    audio.play('voiceMimic', 0.9);
     audio.play('bossDown', 1.3);
     world.camera.addShake(8);
     world.hitStop(0.14);
@@ -368,7 +368,7 @@ export class Mimic extends Enemy {
         this.eye = 1;
         if (this.timer < 0.5) this.tongue = approach(this.tongue, 60, dt * 300);
         if (this.timer <= 0) {
-          audio.play('bossRoar', 1.5);
+          audio.play('voiceMimic', 1.5);
           this.toHop();
         }
         break;

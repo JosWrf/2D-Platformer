@@ -484,7 +484,7 @@ export class Gloom extends Enemy {
     if (!this.phaseTwo && this.hp <= this.maxHp / 2) {
       this.phaseTwo = true;
       audio.play('phase', 0.75);
-      audio.play('bossRoar', 0.62);
+      audio.play('voiceGloom', 0.62);
       world.camera.addShake(6);
       for (const c of this.crystals) if (c.lit > LIT_TIME_P2) c.lit = LIT_TIME_P2;
       world.particles.burst(this.cx, this.cy, 22, 'rgba(20,10,34,0.8)', { speed: 200, gravity: -80, size: 5, shape: 'circle' });
@@ -523,8 +523,7 @@ export class Gloom extends Enemy {
     this.orbs.length = 0;
     this.target = -1;
     for (const c of this.crystals) c.eaten = false;
-    audio.play('screech', 0.6);
-    audio.play('bossRoar', 0.5);
+    audio.play('voiceGloom', 0.55);
     world.camera.addShake(8);
     world.hitStop(0.14);
   }
@@ -611,8 +610,7 @@ export class Gloom extends Enemy {
         this.timer -= dt;
         this.wakeT = clamp(1 - this.timer / INTRO, 0, 1);
         if (before > 0.8 && this.timer <= 0.8) {
-          audio.play('bossRoar', 0.55);
-          audio.play('screech', 0.7);
+          audio.play('voiceGloom', 0.6);
           world.camera.addShake(5);
           this.heat = 1;
         }
@@ -702,7 +700,7 @@ export class Gloom extends Enemy {
           this.toDrift(0.5);
           this.vy = -170;
           audio.play('wing', 0.55);
-          audio.play('bossRoar', 1.2);
+          audio.play('voiceGloom', 1.2);
         }
         break;
       }
@@ -1111,7 +1109,7 @@ export class Gloom extends Enemy {
       this.timer = SWIPE_TELL;
       this.faceTo(p.cx);
       audio.play('tellLunge', 1.15);
-      audio.play('screech', 1.25);
+      audio.play('voiceGloom', 1.25);
     } else {
       this.beginEat(world);
     }
@@ -1202,8 +1200,7 @@ export class Gloom extends Enemy {
     this.vx = 0;
     this.vy = 0;
     this.reach = 0;
-    audio.play('screech', 0.8);
-    audio.play('bossRoar', 1.45);
+    audio.play('voiceGloom', 1.1);
     world.camera.addShake(6);
     world.hitStop(0.1);
     world.particles.text(this.cx, this.bottom - 84, 'GEBLENDET!', '#fff0b0');
@@ -1263,7 +1260,7 @@ export class Gloom extends Enemy {
     this.riseFrom = this.bottom;
     this.heat = 1;
     audio.play('tellSlam', 0.58);
-    audio.play('bossRoar', 1.5);
+    audio.play('voiceGloom', 1.5);
   }
 
   /** The dark pulled up into him: a breath drawn in before the slam. */

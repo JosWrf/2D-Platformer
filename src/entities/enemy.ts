@@ -3309,7 +3309,7 @@ export class Hydra extends Enemy {
     const c = this.headCentre(neck);
     world.particles.burst(c.x, c.y, 26, '#8fe07a', { speed: 240, gravity: -60 });
     world.camera.addShake(6);
-    audio.play('bossRoar', 1.1);
+    audio.play('voiceHydra', 1.1);
   }
 
   protected override die(world: World): void {
@@ -3352,7 +3352,7 @@ export class Hydra extends Enemy {
         this.state = 'rise';
         this.timer = 1.6;
         world.camera.addShake(7);
-        audio.play('bossRoar');
+        audio.play('voiceHydra');
       }
       this.vy += 1400 * dt;
       this.moveAndCollide(world.level, dt);
@@ -3406,7 +3406,7 @@ export class Hydra extends Enemy {
         if (this.timer <= 0) {
           this.state = 'recover';
           this.timer = 0.9;
-          audio.play('bossRoar', 1.2);
+          audio.play('voiceHydra', 1.2);
           world.camera.addShake(5);
         }
         break;

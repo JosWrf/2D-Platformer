@@ -42,7 +42,7 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `Q` / `O` / `V` | Boss-Angriff wechseln — **antippen**: der nächste; **halten**: die Auswahl über dem Helden, mit den Richtungstasten wählen, loslassen nimmt (siehe [Einen Angriff wählen](#einen-angriff-wählen)) |
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen (auf festem Boden springt er normal) |
 | `P` / `Esc` | Pause — auf der Seite *Angriffe* wählt `↑` `↓` einen Angriff |
-| `R` halten | Neustart nach 0,8 s, mit einem Balken über dem Helden; in der Pause, nach dem Fall und am Ende genügt ein Tippen |
+| `R` halten | Neustart nach 0,8 s, mit einem Balken über dem Helden; in der Pause zweimal tippen (das erste fragt nach), nach dem Fall und am Ende genügt ein Tippen |
 | `B` | Bildwackeln aus/an |
 | `M` | Musik aus/an |
 | `N` | Effekte aus/an — die Musik spielt weiter |
@@ -278,22 +278,31 @@ Jetzt:
   auseinanderliegen: bei achtzehn 6 × 3, höchstens fünf Eingaben (das Halten
   mitgezählt), im Mittel 3,2; bei sechs 3 × 2, höchstens drei. Den einen zurück,
   wenn man einmal zu weit getippt hat: halten und `←`, zwei Eingaben.
+- Solange das Raster offen ist, **steht der Held**: kein Schlag, keine Parade,
+  keine Rolle, kein Boss-Angriff, und ein gehaltener Ladeschlag verfällt. Die
+  Zeitlupe ist ein Moment zum Wählen, kein Moment zum Kämpfen — vorher ließ sich
+  mit gehaltenem `Q` eine Parade von 0,2 s auf 0,62 s strecken.
 - Jeder Wechsel zeigt sich **am Helden**, nicht in der Ecke: ein Schild über
   seinem Kopf mit dem gewählten Zeichen zwischen dem davor und dem danach, dem
   Namen und „bereit“ oder den Sekunden, die fehlen — eines, wie schnell man
   auch tippt, 1,3 s ganz zu sehen und dem Helden folgend, auch im Lauf und in
-  der Rolle.
+  der Rolle. Fliegt etwas von oben auf ihn zu oder steht ein kämpfender Gegner
+  über ihm, rücken Schild und Raster neben ihn oder unter seine Füße.
 - Wird der gewählte Angriff wieder bereit, klingt ein kurzer Dreiklang, und sein
   Zeichen unten links leuchtet 0,3 s weiß auf. Wer ihn zu früh drückt, hört ein
   tiefes Brummen statt des alten, kaum hörbaren Klicks.
 - Die Tastenkappen im Bild folgen den Tasten, mit denen man spielt: wer `C` und
   `V` drückt, sieht `C` und `V`, wer mit den Pfeilen läuft, sieht Pfeile.
 - `R` sitzt zwischen Parade und Boss-Angriff. Ein Tippen darauf löschte bisher
-  den ganzen Lauf; jetzt muss es im Spiel 0,8 s gehalten werden.
+  den ganzen Lauf; jetzt muss es im Spiel 0,8 s gehalten werden. In der Pause
+  fragt das erste `R` nach („NOCHMAL: NEUSTART“), erst ein zweites binnen
+  2,5 s beginnt von vorn.
 
 `verify:picker` spielt das mit echten Eingaben durch: alle 306 Paare aus
-achtzehn Angriffen, die Zeitlupe, das Schild im Lauf, den Bereit-Klang, das
-gehaltene `R`, die Auswahl in der Pause und die Tastenkappen.
+achtzehn Angriffen, die Zeitlupe, dass Schlag, Parade, Rolle und Angriff bei
+offenem Raster nichts tun und die Parade danach wieder ihre eigene Länge hat,
+das Schild im Lauf, den Bereit-Klang, das gehaltene `R`, das doppelte `R` in
+der Pause, die Auswahl in der Pause und die Tastenkappen.
 
 | | |
 | --- | --- |
@@ -1888,7 +1897,7 @@ Rückkopplung und ein Filter mit acht Abgriffen —, eingestellt je Zone: im Wal
 ein kurzes, leises Echo von 48 ms, in Höhle, Thronsaal und Schlund 112 ms, im
 Riss 160 ms und leise, in der Ertrunkenen Halle 208 ms mit langem Nachhall.
 Kein Kompressor: Die Pegel lassen den Platz, gemessen in fünf Bosskämpfen
-höchstens −2,4 dBFS.
+höchstens −3,3 dBFS.
 
 **Die Musik** (`src/core/compose.ts`, `tracks.ts`, `music.ts`) ist als Skizze
 geschrieben — Tonart, Tempo, ein Akkord pro Takt, Abschnitte, bis zu sechs
@@ -1896,11 +1905,19 @@ Stimmen — und wird daraus ausgeschrieben: Melodien in Phrasen von vier Takten
 nach Regeln, die ein Songschreiber kennt (ein Rhythmus wird gestellt und
 beantwortet, die schweren Zeiten auf dem Akkord, Schritte dazwischen, eine
 Frage endet offen, die Antwort kommt heim), dazu Gegenstimmen, gebrochene
-Akkorde, Bass und Schlagzeug mit Wirbeln am Phrasenende. Die Zonenstücke
-wiederholen sich erst nach 16 bis 24 Takten (42 bis 69 Sekunden), die Kämpfe
-nach 16 bis 24 Takten (24 bis 40 Sekunden, Bosse mit einem Vorspiel von ein, zwei
-Takten). Jede Zone hat ihr eigenes Instrument und jeder Boss **zwei, die kein
-anderer Kampf benutzt**:
+Akkorde, Bass und Schlagzeug mit Wirbeln am Phrasenende. Jeder Kampf hat dazu
+**ein eigenes Motiv**, von Hand geschrieben, ein, zwei Takte, das in jedem
+Durchlauf mindestens zweimal unverändert wiederkehrt: Gallerts zwei Tropfen und
+ein Hüpfer, Grimmzahns Scharren auf der kleinen Sekunde, Tickmars Spieluhr,
+Vesperons Orgel-Mordent. Das Titelstück trägt das Motiv des Helden — eine
+Quinte hinauf, eine Wendung, zurück zum Grundton —, und Umbra, sein Schatten,
+zitiert es erst, wie es ist, und spielt es dann auf dem Kopf, jede Note
+rückwärts anschwellend; Sol ruft, und Luna antwortet mit demselben Ruf,
+gespiegelt. Jedes Motiv hebt sich um mindestens 6 dB von der übrigen Musik ab.
+Die Zonenstücke wiederholen sich erst nach 16 bis 24 Takten (42 bis 69
+Sekunden), die Kämpfe nach 16 bis 24 Takten (24 bis 40 Sekunden, Bosse mit einem
+Vorspiel von ein, zwei Takten). Jede Zone hat ihr eigenes Instrument und jeder
+Boss **zwei, die kein anderer Kampf benutzt**:
 
 | | eigene Instrumente | | eigene Instrumente |
 | --- | --- | --- | --- |
@@ -1914,7 +1931,7 @@ anderer Kampf benutzt**:
 | Riss | gestrichenes Glas | Ignivor | heiseres Blech, Amboss |
 | Schlund | Holztrommel | Sol und Luna | Flöte gegen Glasharfe |
 | Kristallhort | Celesta | Thalassa | Harfe, Chor |
-| | | Grauwacht | Kirchenglocke, Pauke |
+| | | Grauwacht | Kirchenglocke, Pauke, Chor „ooh“ |
 | | | Tickmar | Uhrticken, Spieluhr |
 | | | Vesperon | Cembalo, Orgel |
 | | | Morvain | Orchesterschlag, Streicher-Ostinato |
@@ -1923,13 +1940,20 @@ anderer Kampf benutzt**:
 | | | Fünfkronige | Hörner, Kriegstrommel |
 | | | Prismarch | Glasglocke, Celesta |
 
-Gallert und der Splitterwächter teilen sich kein Stück mehr. Damit keine zwei
-Kämpfe gleich klingen, wurde jede Stimme jedes Kampfes einzeln gerendert und die
-Balance so gesetzt, dass die mittleren Spektren aller 18 Kämpfe mindestens
-4,8 dB auseinanderliegen (vorher lagen 15 von 17 Kämpfen innerhalb von 3 dB von
-einem anderen). Ein Stückwechsel ist der der Zeit: das alte in acht Stufen über
-0,6 s aus, dann beginnt das neue — zwei Stücke klingen nie gleichzeitig. Alle
-Zonenstücke sitzen bei −24 LUFS, alle Kämpfe bei −22.
+Gallert und der Splitterwächter teilen sich kein Stück mehr; Grauwacht,
+Vesperon, der Splitterwächter und Prismarch, vorher aus nur drei Samples gebaut,
+haben Chor, Violinen, Bass und Schlagzeug dazubekommen. Zwei Kämpfe teilen sich
+höchstens 44 % ihrer Samples. Damit keine zwei gleich klingen, wurde außerdem
+jede Stimme jedes Kampfes einzeln gerendert und die Balance so gesetzt, dass die
+mittleren Spektren aller 18 Kämpfe mehr als 3 dB auseinanderliegen (vorher lagen
+15 von 17 Kämpfen innerhalb von 3 dB von einem anderen), wobei keine Melodie
+mehr als 2 dB leiser wurde. Ein Stückwechsel ist der der Zeit: das alte in acht
+Stufen über 0,6 s aus, dann beginnt das neue — zwei Stücke klingen nie
+gleichzeitig. Eine neue Zone übernimmt die Musik erst, wenn der Held 1,5 s in
+ihr ist — wer an einer Grenze hin- und herläuft, hört nicht zweimal in der
+Sekunde einen Neuanfang —, und wer binnen 10 s zurückkehrt, hört das alte Stück
+ab dem Takt weiter, in dem er es verlassen hat. Alle Zonenstücke sitzen bei
+−24 LUFS, alle Kämpfe bei −22.
 
 **Die Effekte** (`src/core/sfx.ts`) sind dasselbe wie die Musik, nur kürzer:
 ein paar Noten auf einem oder zwei Kanälen. Ein Schwerthieb ist ein Stoß
@@ -1938,10 +1962,19 @@ Rechteck-Noten, ein Boss, der ausholt, ein aufsteigendes Knurren. Vier
 **Ankündigungen** nach Art des Angriffs — Ansturm, Salve, Stampfer, Strahl —
 statt einer für alle 51 Stellen; und die 18 Boss-Angriffe des Helden haben je
 einen eigenen Klang aus den beiden Instrumenten ihres Bosses: Felswurf ist
-Grimmzahns Taiko und Horn, Goldregen Gierschlunds Münzen und Glockenspiel. Jeder
+Grimmzahns Taiko und Horn, Goldregen Gierschlunds Münzen und Glockenspiel.
+Ebenso klingt jeder **Treffer eines Bosses** nach ihm selbst — 18 Trefferklänge
+an 46 Stellen statt desselben Dumpfschlags für alle: Gallerts Blubberbass und
+Blasen, Tickmars Ticken und Spieluhr, Umbras rückwärts laufendes Becken, das
+genau im Treffer abreißt. Und jeder Boss hat seine eigene **Stimme** statt eines
+gemeinsamen Brüllens: Maskarill lacht auf der Dampforgel die Tonleiter hinab,
+Tickmars Spieluhr läuft ab, Vesperons Fledermäuse kreischen über einem
+Cembalo-Triller, Umbras Brüllen läuft rückwärts. Boss-Klänge spielen in fester
+Tonhöhe, wie die Treiber der Zeit ihre Effekte spielten; so treffen sie die Töne
+ihrer Musik statt ein paar Cent daneben. Jeder
 Effekt sitzt in einer Lautheitsklasse — Bedienung um −30 LUFS, die Bewegungen
 des Helden um −27, Treffer um −22, Ankündigungen um −19, die großen Momente
-um −15 —, und in fünf Bosskämpfen geht keiner der 1 458 Effekte unter der Musik
+um −15 —, und in fünf Bosskämpfen geht keiner der 1 499 Effekte unter der Musik
 unter. Im Wald klingt ein Effekt im Mittel nach 0,33 s aus, und nur die vier
 großen Momente (Sieg, Bossfall, Tod, Upgrade) länger als eine Sekunde.
 
@@ -1957,6 +1990,40 @@ eigene je Kampf, eines je Zone, Schleifenlängen) und spielt dann mit echten
 Tastendrücken: Titelmusik, Übergabe an den Wald, in jeder Bossarena der richtige
 Kampf und danach wieder die Zone, sechzehn Bosse mit sechzehn verschiedenen
 Stücken, `M` und `N` samt Neuladen.
+
+### Der Kritiker für Bedienung und Klang
+
+Umschalten, Stummschalten und Ton liefen gegen einen eigenen Kritiker, der nicht
+hinhört, sondern misst: Er baut das Mischpult des Spiels in einem
+`OfflineAudioContext` nach, lässt einen Bot mit echten Tastendrücken Bosskämpfe
+spielen, protokolliert jeden Knoten, jede Note und jeden Puffer und rechnet
+daraus Lautheit, Verdeckung, Stimmenzahl und Nachhall aus; die Angriffsauswahl
+spielt er mit allen 306 Paaren durch.
+
+Runde a0 gab 3 von 10. Runde a1 gab 8 und eine Bedingung: Das Auswahlraster war
+eine Zeitlupen-Taste — eine Parade von 0,2 s dauerte mit gehaltenem `Q` 0,62 s.
+Runde a2 hat **abgezeichnet, mit 9 von 10**:
+
+| | Runde a0 | Runde a2 |
+|---|---|---|
+| Eingaben von jedem zu jedem der 18 Angriffe | höchstens 17, im Mittel 9,0 | höchstens 5, im Mittel 3,06 |
+| Hinweis am Helden | drei Schilder, 70–91 px hinter ihm, 0,58 s | eines, ≤ 4 px über dem Kopf, 1,32 s, weicht Gefahren aus |
+| Neustart | ein Tippen löscht den Lauf | 0,8 s halten; in der Pause fragt das erste `R` nach |
+| Musik und Effekte getrennt | nur Musik und „alles“ | `M` und `N` je für sich, gespeichert, überall richtig angezeigt |
+| Musik nach `M` weg | nach 1,3 s | −46 dB nach 0,2 s |
+| Stimmen gleichzeitig | 41–45 | höchstens 8 |
+| Klangmaterial | ein Puffer und Oszillatoren | 58 Samples, 420 708 Frames |
+| Effekte, die die Musik ganz verdeckt | 13,0 % | 0,0 % von 1 499 |
+| Klang über 12 kHz | 22 von 42 Effekten, 12 von 27 Stücken | keiner |
+| Die Musik wiederholt sich | nach 4 Takten (6–17 s) | nach 16–24 Takten (24–69 s) |
+| Stücke mit eigenen Instrumenten | 2 von 27 | alle, jeder Kampf mit eigenem Motiv |
+
+Seine Empfehlungen aus der letzten Runde sind ebenfalls umgesetzt: Morvains
+Fanfare lag 2,5 dB über der Musik und kommt jetzt eine Oktave höher dreimal im
+Durchlauf, Nyktos' Chor ist freigestellt, Ignivors Motiv beginnt mit einem
+Oktavsprung, den die ausgeschriebene Melodie nie macht, Umbra zitiert das
+Heldenmotiv, bevor er es spiegelt, und die Bosse brüllen und kreischen mit
+eigenen Stimmen.
 
 ## Aufbau des Codes
 

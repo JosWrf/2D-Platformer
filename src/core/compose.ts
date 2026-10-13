@@ -97,6 +97,8 @@ export interface Section {
   vary?: number;
   /** The bars (of this section) where the melody states its motif. */
   motif?: number[];
+  /** The bars where it quotes its quote instead. */
+  quote?: number[];
 }
 
 interface PartBase {
@@ -119,6 +121,8 @@ export interface MelodyPart extends PartBase {
   bars?: (bar: number) => boolean;
   /** The piece's own figure, stated where a section asks for it. */
   motif?: Motif;
+  /** Another piece's figure, quoted where a section asks for it. */
+  quote?: Motif;
 }
 
 /** A slower line under the melody, on the chord's tones. */
@@ -253,17 +257,22 @@ interface Bar {
   vary: number;
   /** The last bar of a phrase. */
   phraseEnd: boolean;
-  /** Where in the section the melody's motif starts. */
+  /** Where in the section the melody's motif starts, and where its quote. */
   motif: readonly number[];
+  quote: readonly number[];
 }
 
-/** The bar of the motif this bar plays, if a statement of it covers this bar. */
+/** The bar of the motif (or the quote) this bar plays, if a statement of it covers this bar. */
 function motifBar(part: MelodyPart, bar: Bar): readonly (readonly [number, number])[] | null {
-  const m = part.motif;
-  if (!m) return null;
-  for (const start of bar.motif) {
-    const k = bar.inSection - start;
-    if (k >= 0 && k < m.length) return m[k];
+  for (const [m, starts] of [
+    [part.motif, bar.motif],
+    [part.quote, bar.quote],
+  ] as const) {
+    if (!m) continue;
+    for (const start of starts) {
+      const k = bar.inSection - start;
+      if (k >= 0 && k < m.length) return m[k];
+    }
   }
   return null;
 }
@@ -493,6 +502,7 @@ export function compose(sk: Sketch): Score {
       vary: f.sec.vary ?? 0,
       phraseEnd: (f.inSection + 1) % 4 === 0,
       motif: f.sec.motif ?? [],
+      quote: f.sec.quote ?? [],
     });
   });
   const events: Ev[] = [];
