@@ -1,6 +1,6 @@
 import { compose, type Ev, type Score } from './compose';
 import { type Dsp, MUSIC_CHANNELS, type Outlet, stepGain } from './dsp';
-import { SKETCHES, TRACK_LEVEL, TRACK_NAMES, type TrackName } from './tracks';
+import { SKETCHES, TRACK_LEVEL, type TrackName } from './tracks';
 
 export { TRACK_NAMES, type TrackName } from './tracks';
 
@@ -177,5 +177,3 @@ export function trackInfo(name: TrackName): { bars: number; seconds: number; int
   const stepDur = 60 / s.bpm / 4;
   return { bars: s.loopBars, seconds: (s.length - s.loopStep) * stepDur, intro: s.loopStep * stepDur, samples: [...s.samples] };
 }
-
-export const ALL_TRACKS: readonly TrackName[] = TRACK_NAMES;

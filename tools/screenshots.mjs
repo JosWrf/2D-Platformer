@@ -788,6 +788,60 @@ await arenaMoment(
 );
 await shot('42-grauwacht');
 
+/* 43 — picking a boss attack: the grid over the hero's head */
+
+// Every attack learned, a few of them cooling down, the key held: the grid
+// over his head with the cursor two steps on, the world slowed behind it.
+await open('?x=40');
+await page.evaluate(() => {
+  const g = window.game;
+  for (const id of [
+    'herzkern',
+    'keilerhaut',
+    'goldzahn',
+    'gauklerschritt',
+    'bebenfaust',
+    'lichtkern',
+    'seidenmantel',
+    'glutklinge',
+    'zwillingsstern',
+    'flutklinge',
+    'steinblick',
+    'taktgeber',
+    'blutdurst',
+    'schattenschritt',
+    'zweiteratem',
+    'splitterparade',
+    'hydrablut',
+    'klingenwelle',
+  ]) {
+    g.takeRelic(id);
+  }
+  g.dialogue = null;
+  g.zoneBanner = { text: '', timer: 0 };
+  const p = g.player;
+  const owned = p.ownedSkills();
+  p.skill = owned[4];
+  for (const [i, t] of [
+    [1, 2.4],
+    [5, 6.5],
+    [9, 3.2],
+    [12, 8.8],
+    [16, 1.6],
+  ]) {
+    p.skillCooldowns.set(owned[i], t);
+  }
+});
+await step(40);
+await step(14, { cycle: true });
+await step(1, { cycle: true, right: true });
+await step(2, { cycle: true, right: false });
+await step(1, { cycle: true, down: true });
+await step(2, { cycle: true, down: false });
+await shot('43-angriffswahl');
+await release('cycle');
+await step(2);
+
 console.log(JSON.stringify(results, null, 2));
 await browser.close();
 server.close();

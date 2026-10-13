@@ -879,13 +879,6 @@ const BUILD: Record<SampleId, () => Built> = {
   },
 };
 
-/** Every sample, built: the palette, once, at the first key press. */
-export function buildPalette(): Map<SampleId, Sample> {
-  const out = new Map<SampleId, Sample>();
-  for (const id of SAMPLE_IDS) out.set(id, buildSample(id));
-  return out;
-}
-
 /** One sample, built, compressed the cartridge's way and smoothed the S-DSP's. */
 export function buildSample(id: SampleId): Sample {
   const b = BUILD[id]();
