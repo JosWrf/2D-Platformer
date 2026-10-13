@@ -722,7 +722,7 @@ export class Boar extends Enemy {
     const wallX = this.facing > 0 ? this.x + this.w : this.x;
     this.vx = 0;
     this.speed = 0;
-    audio.play('slam', 0.6);
+    audio.play('impactBoar', 0.6);
     audio.play('crumble', 0.8);
     world.camera.addShake(9);
     world.hitStop(0.08);
@@ -748,7 +748,7 @@ export class Boar extends Enemy {
     this.slamPose = 1;
     this.waves.push({ x: this.cx + 4, dir: 1, life: WAVE_LIFE, hit: false });
     this.waves.push({ x: this.cx - 4, dir: -1, life: WAVE_LIFE, hit: false });
-    audio.play('slam', 0.75);
+    audio.play('impactBoar', 0.75);
     audio.play('burst', 0.7);
     world.camera.addShake(6);
     world.hitStop(0.04);

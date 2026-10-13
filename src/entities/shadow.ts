@@ -396,7 +396,7 @@ export class Shadow extends Enemy {
     this.state = 'rise';
     this.timer = 1.4;
     audio.play('rumble', 1.5);
-    audio.play('magic', 0.5);
+    audio.play('impactShadow', 0.5);
     world.camera.addShake(4);
   }
 
@@ -642,7 +642,7 @@ export class Shadow extends Enemy {
     this.stepAttack = false;
     this.stepX = clamp(p.cx - p.facing * 46, this.arenaLeft + 20, this.arenaRight - 20);
     this.setPlan('step', 1);
-    audio.play('magic', 0.45);
+    audio.play('impactShadow', 0.45);
   }
 
   private updateFade(dt: number, world: World, mirror: Mirror): void {
@@ -662,7 +662,7 @@ export class Shadow extends Enemy {
       b.vx = 0;
       b.vy = 0;
       b.facing = p.cx > b.cx ? 1 : -1;
-      audio.play('magic', 0.7);
+      audio.play('impactShadow', 0.7);
     }
     this.stepTimer -= dt;
     this.presence = clamp(1 - this.stepTimer / 0.42, 0, 1);

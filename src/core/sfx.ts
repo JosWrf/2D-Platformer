@@ -84,7 +84,25 @@ export type Sfx =
   | 'castSchattensprung'
   | 'castSplitteransturm'
   | 'castKronenfeuer'
-  | 'castSplitterregen';
+  | 'castSplitterregen'
+  | 'impactMire'
+  | 'impactBoar'
+  | 'impactGold'
+  | 'impactJester'
+  | 'impactStone'
+  | 'impactGloom'
+  | 'impactWeb'
+  | 'impactFire'
+  | 'impactTwins'
+  | 'impactTide'
+  | 'impactGargoyle'
+  | 'impactClock'
+  | 'impactBlood'
+  | 'impactKnight'
+  | 'impactShadow'
+  | 'impactShard'
+  | 'impactHydra'
+  | 'impactCrystal';
 
 /** One note of an effect. */
 export interface Hit {
@@ -107,6 +125,8 @@ export interface Hit {
   vib?: readonly [number, number, number];
   /** Which of the effect's channels: 0 or 1 (2 and 3 for a set piece). */
   ch?: number;
+  /** Starts this far into the sample, seconds of it. */
+  from?: number;
 }
 
 /**
@@ -123,7 +143,10 @@ export interface SfxDef {
   pri: number;
   /** Fine level, on top of the class's. */
   level?: number;
-  /** Pitch never wobbles: tunes stay in tune. */
+  /**
+   * Pitch never wobbles: tunes stay in tune, and a boss's own sounds stay on
+   * the pitches its music plays them at, never a few cents beside them.
+   */
   steady?: boolean;
   /** The least time between two of it, seconds. */
   gap?: number;
@@ -584,6 +607,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castKlatschsprung: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'bloopBass', hz: 98, to: 2.5, slide: 0.18, dur: 0.2, env: E.tone },
       { s: 'bubble', r: 1.1, dur: 0.12, env: E.drum, ch: 1 },
@@ -593,6 +617,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castFelswurf: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'taiko', r: 1.1, dur: 0.3, env: E.drum },
       { s: 'lowHorn', hz: hz('D3'), to: 1.5, slide: 0.2, dur: 0.24, env: E.tone, ch: 1 },
@@ -613,6 +638,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castTrugbild: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'woodblock', r: 1.2, dur: 0.06, env: E.drum },
       { s: 'calliope', hz: hz('A5'), dur: 0.05, env: E.blip, ch: 1 },
@@ -624,6 +650,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castSonnenblick: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     echo: true,
     hits: [
       { s: 'gong', hz: 220, dur: 0.45, env: E.ring },
@@ -634,6 +661,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castIrrlichter: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     echo: true,
     hits: [
       { s: 'choirLow', hz: hz('C#4'), to: 1.5, dur: 0.4, env: E.swell },
@@ -656,6 +684,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castFeuerwelle: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'anvil', hz: 700, dur: 0.25, env: E.ring },
       { s: 'brassGrit', hz: hz('E3'), to: 1.4, slide: 0.25, dur: 0.3, env: E.tone, ch: 1 },
@@ -665,6 +694,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castMondsichel: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     echo: true,
     hits: [
       { s: 'flute', hz: hz('D6'), to: 0.75, dur: 0.22, env: E.tone },
@@ -689,6 +719,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castSteinsturz: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     echo: true,
     hits: [
       { s: 'churchBell', hz: 330, dur: 0.4, env: E.ring },
@@ -722,6 +753,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castSchattenwelle: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'orchHit', r: 1.1, dur: 0.3, env: E.drum },
       { s: 'stringsStacc', hz: hz('D3'), dur: 0.08, env: E.short, ch: 1 },
@@ -732,6 +764,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castSchattensprung: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'revCymbal', r: 1.0, dur: 0.3, env: E.drum },
       { s: 'revLead', hz: hz('B4'), dur: 0.3, env: E.drum, ch: 1 },
@@ -741,6 +774,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castSplitteransturm: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'crystal', hz: hz('E6'), dur: 0.25, env: E.ring },
       { s: 'bowedGlass', hz: hz('B4'), to: 2, dur: 0.3, env: E.tone, ch: 1 },
@@ -750,6 +784,7 @@ export const SFX: Record<Sfx, SfxDef> = {
   castKronenfeuer: {
     cls: 'hero',
     pri: 5,
+    steady: true,
     hits: [
       { s: 'warDrum', r: 1.1, dur: 0.35, env: E.drum },
       { s: 'horn', hz: hz('G3'), to: 1.5, slide: 0.15, dur: 0.3, env: E.tone, ch: 1 },
@@ -765,6 +800,212 @@ export const SFX: Record<Sfx, SfxDef> = {
       { s: 'glassBell', hz: hz('D6'), dur: 0.3, env: E.ring },
       { s: 'celesta', hz: hz('A5'), dur: 0.04, env: E.short, ch: 1 },
       { s: 'celesta', hz: hz('D6'), at: 0.05, dur: 0.15, env: E.ring, ch: 1 },
+    ],
+  },
+
+  /* ------------------------------------------------- each boss's own blow */
+  // Where a boss's blow lands, a sound of its own two instruments - the
+  // families its fight and the attack it teaches are made of - instead of
+  // the same thud for every one of them. Played at one pitch, as the era's
+  // drivers played their effects.
+  impactMire: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'bloopBass', hz: 98, to: 0.55, dur: 0.24, env: E.tone },
+      { s: 'bubble', r: 0.7, dur: 0.12, env: E.drum, ch: 1 },
+    ],
+  },
+  impactBoar: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'taiko', r: 0.85, dur: 0.35, env: E.drum },
+      { s: 'lowHorn', hz: hz('D2'), to: 0.8, dur: 0.18, env: E.tone, ch: 1 },
+    ],
+  },
+  impactGold: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'coins', r: 0.7, dur: 0.3, env: E.drum },
+      { s: 'glock', hz: hz('E5'), dur: 0.18, env: E.ring, ch: 1 },
+    ],
+  },
+  impactJester: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.06,
+    hits: [
+      { s: 'woodblock', r: 0.8, dur: 0.06, env: E.drum },
+      { s: 'calliope', hz: hz('A4'), to: 0.75, dur: 0.14, env: E.tone, ch: 1 },
+    ],
+  },
+  impactStone: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'gong', hz: 110, dur: 0.45, env: E.ring },
+      { s: 'lowBrass', hz: hz('E2'), to: 0.85, dur: 0.22, env: E.tone, ch: 1 },
+    ],
+  },
+  impactGloom: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'drone', hz: hz('C#2'), to: 0.7, dur: 0.3, env: E.tone },
+      { s: 'choirLow', hz: hz('C#3'), to: 0.6, dur: 0.3, env: E.tone, ch: 1 },
+    ],
+  },
+  impactWeb: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'pizz', hz: hz('A2'), dur: 0.2, env: E.ring },
+      { s: 'koto', hz: hz('E4'), to: 0.75, dur: 0.2, env: E.ring, ch: 1 },
+    ],
+  },
+  impactFire: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'anvil', hz: 520, dur: 0.25, env: E.ring },
+      { s: 'brassGrit', hz: hz('E2'), to: 0.8, dur: 0.22, env: E.tone, ch: 1 },
+    ],
+  },
+  impactTwins: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'flute', hz: hz('D6'), to: 0.5, dur: 0.16, env: E.tone },
+      { s: 'glassHarp', hz: hz('A5'), dur: 0.3, env: E.ring, ch: 1 },
+    ],
+  },
+  impactTide: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'harp', hz: hz('D3'), dur: 0.25, env: E.ring },
+      { s: 'choirAah', hz: hz('A3'), to: 0.8, dur: 0.25, env: E.tone, ch: 1 },
+    ],
+  },
+  impactGargoyle: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'churchBell', hz: 196, dur: 0.4, env: E.ring },
+      { s: 'timpani', hz: 82, dur: 0.3, env: E.ring, ch: 1 },
+    ],
+  },
+  impactClock: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.06,
+    hits: [
+      { s: 'tick', r: 0.6, dur: 0.05, env: E.drum },
+      { s: 'musicBox', hz: hz('A5'), dur: 0.3, env: E.ring, ch: 1 },
+    ],
+  },
+  impactBlood: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'harpsichord', hz: hz('D3'), dur: 0.2, env: E.ring },
+      { s: 'organ', hz: hz('D3'), dur: 0.22, env: E.hold, ch: 1 },
+    ],
+  },
+  impactKnight: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'orchHit', r: 0.85, dur: 0.4, env: E.drum },
+      { s: 'stringsStacc', hz: hz('D2'), dur: 0.12, env: E.short, ch: 1 },
+    ],
+  },
+  // Umbra's runs backwards too, but only its last moment: a short swell
+  // that stops dead, so the dead stop is the blow.
+  impactShadow: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'revCymbal', from: 0.31, dur: 0.16, env: E.drum },
+      { s: 'revLead', hz: hz('B3'), from: 0.38, dur: 0.18, env: E.drum, ch: 1 },
+    ],
+  },
+  impactShard: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'crystal', hz: hz('E5'), dur: 0.25, env: E.ring },
+      { s: 'bowedGlass', hz: hz('B3'), to: 0.7, dur: 0.25, env: E.tone, ch: 1 },
+    ],
+  },
+  impactHydra: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'warDrum', r: 1, dur: 0.35, env: E.drum },
+      { s: 'horn', hz: hz('C3'), to: 0.85, dur: 0.22, env: E.tone, ch: 1 },
+    ],
+  },
+  impactCrystal: {
+    cls: 'hit',
+    pri: 6,
+    steady: true,
+    echo: true,
+    gap: 0.08,
+    hits: [
+      { s: 'glassBell', hz: hz('D5'), dur: 0.3, env: E.ring },
+      { s: 'celesta', hz: hz('A5'), dur: 0.2, env: E.ring, ch: 1 },
     ],
   },
 };
@@ -790,7 +1031,7 @@ export const CLASS_LEVEL: Record<SfxClass, number> = {
 const TRIM: Partial<Record<Sfx, number>> = {
   blip: 1.023,
   select: 0.638,
-  deny: 0.562,
+  deny: 0.631,
   ready: 0.403,
   confirm: 0.741,
   swing: 0.631,
@@ -850,9 +1091,27 @@ const TRIM: Partial<Record<Sfx, number>> = {
   castPendelschlag: 0.495,
   castBlutsicheln: 0.733,
   castSchattenwelle: 1.479,
-  castSchattensprung: 0.989,
+  castSchattensprung: 1.397,
   castSplitteransturm: 0.741,
   castKronenfeuer: 0.631,
   castSplitterregen: 0.501,
+  impactMire: 0.827,
+  impactBoar: 1.089,
+  impactGold: 0.747,
+  impactJester: 0.862,
+  impactStone: 0.901,
+  impactGloom: 1.104,
+  impactWeb: 0.985,
+  impactFire: 1.091,
+  impactTwins: 0.569,
+  impactTide: 0.66,
+  impactGargoyle: 0.981,
+  impactClock: 0.623,
+  impactBlood: 0.797,
+  impactKnight: 1.716,
+  impactShadow: 0.741,
+  impactShard: 1.087,
+  impactHydra: 0.795,
+  impactCrystal: 0.644,
 };
 for (const [name, level] of Object.entries(TRIM) as [Sfx, number][]) SFX[name].level = (SFX[name].level ?? 1) * level;

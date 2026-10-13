@@ -388,6 +388,15 @@ export class Player extends Body {
     this.quakePending = this.has('bebenfaust') && this.onGround;
   }
 
+  /**
+   * A charge let go of without its blow: the attack picker has taken the
+   * keys, and a held blade must not fire the moment the world slows down.
+   */
+  dropCharge(): void {
+    this.chargeTimer = 0;
+    this.chargeReady = false;
+  }
+
   /** Seconds until an attack is ready again, 0 if it is. */
   cooldownLeft(id: SkillId): number {
     return this.skillCooldowns.get(id) ?? 0;

@@ -1252,7 +1252,7 @@ export class Clockwork extends Enemy {
       case 'hands':
         for (const s of this.spears) s.stab(world);
         if (this.spears.length > 0) this.released();
-        audio.play('slam', 1.7);
+        audio.play('impactClock', 1.7);
         audio.play('clank', 1.1);
         world.camera.addShake(5);
         break;
@@ -1336,7 +1336,7 @@ export class Clockwork extends Enemy {
     this.hammerRing = 1;
     audio.play('clank', 0.5);
     audio.play('magic', 0.55);
-    audio.play('slam', 1.5);
+    audio.play('impactClock', 1.5);
     world.camera.addShake(5);
     world.particles.burst(this.cx, this.floorY - H, 16, '#fff0c0', { speed: 180, gravity: 100, shape: 'spark' });
   }

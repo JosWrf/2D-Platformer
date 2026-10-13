@@ -16,7 +16,9 @@ import type { SampleId } from './samples';
  * would recognise: phrases of four bars, a rhythm stated and answered, the
  * strong beats on the chord, steps between them, a question that ends open
  * and an answer that comes home. They are seeded, so a piece is the same
- * every time it plays.
+ * every time it plays. A melody can also carry a motif written by hand, a
+ * bar or two of its own: where a section asks for it, it is played as
+ * written, and the rules write the rest of the line around it.
  */
 
 export const MODES = {
@@ -77,6 +79,13 @@ export interface Score {
 
 /* ------------------------------------------------------------ the sketch */
 
+/**
+ * A motif written by hand, bar by bar: each note a scale step from the tonic
+ * in the melody's octave and a length in steps (a negative length rests).
+ * Where a section states it, the melody plays it as written.
+ */
+export type Motif = readonly (readonly (readonly [number, number])[])[];
+
 export interface Section {
   /** The chord of each bar, as the scale step it is built on (0 is the tonic). */
   chords: number[];
@@ -86,6 +95,8 @@ export interface Section {
   rest?: string[];
   /** A seed of its own for the melody, so a returning section can come back changed. */
   vary?: number;
+  /** The bars (of this section) where the melody states its motif. */
+  motif?: number[];
 }
 
 interface PartBase {
@@ -106,6 +117,8 @@ export interface MelodyPart extends PartBase {
   leap?: number;
   /** Plays only in bars where this is true (bar index within the section): call and response. */
   bars?: (bar: number) => boolean;
+  /** The piece's own figure, stated where a section asks for it. */
+  motif?: Motif;
 }
 
 /** A slower line under the melody, on the chord's tones. */
@@ -240,6 +253,19 @@ interface Bar {
   vary: number;
   /** The last bar of a phrase. */
   phraseEnd: boolean;
+  /** Where in the section the melody's motif starts. */
+  motif: readonly number[];
+}
+
+/** The bar of the motif this bar plays, if a statement of it covers this bar. */
+function motifBar(part: MelodyPart, bar: Bar): readonly (readonly [number, number])[] | null {
+  const m = part.motif;
+  if (!m) return null;
+  for (const start of bar.motif) {
+    const k = bar.inSection - start;
+    if (k >= 0 && k < m.length) return m[k];
+  }
+  return null;
 }
 
 function melody(sk: Sketch, part: MelodyPart, bars: Bar[], spb: number, ch: number, out: Ev[]): void {
@@ -258,6 +284,19 @@ function melody(sk: Sketch, part: MelodyPart, bars: Bar[], spb: number, ch: numb
     for (let b = 0; b < phraseLen; b++) {
       const bar = bars[i + b];
       if (!bar || bar.rest.has(part.name) || (part.bars && !part.bars(bar.inSection))) continue;
+      const written = motifBar(part, bar);
+      if (written) {
+        // The motif, as written: the line goes on from where it ends.
+        let pos = 0;
+        for (const [deg, d] of written) {
+          if (d > 0) {
+            out.push({ step: bar.step + pos, ch, inst: part.inst, midi: noteOf(sk, deg, part.oct), len: d, vel: (pos === 0 ? 1 : 0.92) * (bar.energy === 2 ? 1 : 0.94) });
+            prev = Math.max(lo, Math.min(hi, deg));
+          }
+          pos += Math.abs(d);
+        }
+        continue;
+      }
       const cadence = b === phraseLen - 1;
       let rhythm = b % 2 === 0 ? r0 : r1;
       if (cadence) {
@@ -453,6 +492,7 @@ export function compose(sk: Sketch): Score {
       rest: new Set(f.sec.rest ?? []),
       vary: f.sec.vary ?? 0,
       phraseEnd: (f.inSection + 1) % 4 === 0,
+      motif: f.sec.motif ?? [],
     });
   });
   const events: Ev[] = [];

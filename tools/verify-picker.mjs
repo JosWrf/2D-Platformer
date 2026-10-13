@@ -6,13 +6,14 @@
  *      attack between its neighbours, whole for at least 1.2 s, and still over
  *      his head 0.6 s later while he runs at full speed.
  *   2. Held, the key opens the picker, and the world goes on at a third of its
- *      pace while it is open; the hero gets neither the arrows nor the jump.
+ *      pace while it is open; the hero gets neither the arrows nor the jump,
+ *      and no blow, parry, roll or attack goes off while it is.
  *   3. Every attack from every other, eighteen owned (306 pairs, played): at
  *      most 5 inputs and 3.5 on average, a hold counting as one; with six
  *      owned at most 3; the one before always 2 (the hold and one step).
  *   4. The picked attack ready again: the chime and the badge lit, at once.
  *   5. R: a tap in play changes nothing; held 0.8 s it starts over, with a bar
- *      filling over the hero. On the pause screen a tap does it.
+ *      filling over the hero. On the pause screen it asks once: a second tap.
  *   6. On the pause screen's attacks, up and down pick one; each says how
  *      ready it is.
  *   7. The caps follow the keys in use: C/V, U/O, F/Q; the arrows or WASD.
@@ -208,7 +209,30 @@ results.hold = await page.evaluate(() => {
   out.heroMoved = Math.abs(p.x - sx) + Math.abs(p.y - sy);
   out.gridKind = g.picker.view.kind;
   out.gridBox = { ...g.picker.view };
+  // No blow, no parry, no roll, no attack while it is open: it is not a slow motion to fight in.
+  p.parryCooldown = 0;
+  h.tick(['cycle', 'parry'], true);
+  h.tick(['cycle'], true);
+  h.tick(['cycle', 'attack'], true);
+  h.tick(['cycle'], true);
+  h.tick(['cycle', 'dash'], true);
+  h.tick(['cycle'], true);
+  const cooled = p.skillCooldowns.size;
+  h.tick(['cycle', 'skill'], true);
+  h.tick(['cycle'], true);
+  out.whileOpen = { parry: p.parryTimer, attack: p.attackTimer, dashing: p.isDashing, cast: p.skillCooldowns.size - cooled, open: g.picker.open };
   h.tick([], true);
+  // And after it: a parry's window is its own length again.
+  for (let f = 0; f < 40; f++) h.tick([], true);
+  p.parryCooldown = 0;
+  h.tick(['parry'], true);
+  let frames = 0;
+  while (p.parryTimer > 0 && frames < 120) {
+    h.tick([], true);
+    frames++;
+  }
+  out.parryAfter = frames + 1;
+  out.parryOwn = Math.round(p.parryWindow * 60);
   void pace;
   return out;
 });
@@ -403,7 +427,11 @@ results.pause = await page.evaluate(() => {
   h.tick(['music']);
   h.tick(['sound']);
   h.tick([]);
-  // R at a tap from the pause screen.
+  // R from the pause screen: the first tap asks, the second starts over.
+  const before = p.skills.size;
+  h.tick(['restart']);
+  h.tick([]);
+  out.askedFirst = p.skills.size === before && g.state === 'paused' && g.restartAsked > 0;
   h.tick(['restart']);
   h.tick([]);
   out.restartFromPause = p.skills.size === 0 && g.state === 'playing';
@@ -454,6 +482,11 @@ const checks = [
   ['held 0.2 s the key opens the picker; a frame does not', !H.openAfter1 && H.openAfter13 && H.closedOnRelease],
   ['while it is open the world runs at no more than 0.35 of its pace', H.paceRatio > 0 && H.paceRatio <= 0.35],
   ['while it is open the hero neither walks nor jumps on the picker keys', H.heroMoved < 0.5 && H.gridKind === 'grid'],
+  [
+    'while it is open no blow, parry, roll or attack goes off (S9)',
+    H.whileOpen.open && H.whileOpen.parry === 0 && H.whileOpen.attack === 0 && !H.whileOpen.dashing && H.whileOpen.cast === 0,
+  ],
+  ['after it, a parry window is its own length again, not stretched', Math.abs(H.parryAfter - H.parryOwn) <= 1],
   ['18 owned: every attack from every other, as planned', P18.pairs === 306 && P18.wrong === 0],
   ['18 owned: at most 5 inputs, 3.5 on average', P18.worst <= 5 && P18.mean <= 3.5],
   ['back one after an overshoot: 2 inputs', P18.undo <= 2 && P6.undo <= 2],
@@ -465,7 +498,8 @@ const checks = [
   ['and held on, it does not start over again', Rs.restartHoldAfter === -1],
   ['pause: up and down pick an attack on its page', Ps.page === 'skills' && Ps.afterDown === 1 && Ps.afterUpUp === 17],
   ['pause: every attack says how ready it is', Ps.allHaveStatus && Ps.statuses[0] === 'BEREIT' && /S$/.test(Ps.statuses[1])],
-  ['pause: M and N leave no banner for later; R takes a tap there', Ps.bannerUnderPause <= 0 && Ps.bannerAfterResume <= 0 && Ps.restartFromPause],
+  ['pause: M and N leave no banner for later', Ps.bannerUnderPause <= 0 && Ps.bannerAfterResume <= 0],
+  ['pause: one R asks, a second starts over', Ps.askedFirst && Ps.restartFromPause],
   [
     'the caps follow the keys in use',
     C.C.attack === 'CV' && C.U.attack === 'UO' && C.Q.attack === 'FQ' && C.arrows.move === '←→↑↓' && C.wasd.move === 'ADWS',

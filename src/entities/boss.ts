@@ -630,7 +630,7 @@ export class Boss extends Body {
   }
 
   private doSlam(world: World): void {
-    audio.play('slam');
+    audio.play('impactKnight');
     world.camera.addShake(10);
     const groundY = this.bottom;
     world.particles.burst(this.cx + this.facing * 40, groundY, 26, '#c8b9a0', {
@@ -653,7 +653,7 @@ export class Boss extends Body {
   }
 
   private doGroundPound(world: World): void {
-    audio.play('slam', 0.8);
+    audio.play('impactKnight', 0.8);
     world.camera.addShake(13);
     world.particles.burst(this.cx, this.bottom, 40, '#c8b9a0', {
       speed: 300,

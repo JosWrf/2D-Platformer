@@ -619,7 +619,7 @@ export class Wyrm extends Enemy {
         if (this.timer <= 0) {
           this.state = 'wave';
           this.lastPillarX = this.hx;
-          audio.play('burst', 0.8);
+          audio.play('impactFire', 0.8);
         }
         break;
 
@@ -629,7 +629,7 @@ export class Wyrm extends Enemy {
         if (Math.abs(this.hx - this.lastPillarX) >= 42) {
           this.lastPillarX = this.hx;
           this.pillars.push({ x: this.hx, t: 0, hit: false });
-          if (this.pillars.length % 3 === 0) audio.play('burst', 1.4);
+          if (this.pillars.length % 3 === 0) audio.play('impactFire', 1.4);
         }
         const end = this.waveDir > 0 ? this.arenaRight - 30 : this.arenaLeft + 30;
         if ((this.waveDir > 0 && this.hx >= end) || (this.waveDir < 0 && this.hx <= end)) {
@@ -669,7 +669,7 @@ export class Wyrm extends Enemy {
     // Breaking the surface throws up rock and fire.
     const under = this.hy > this.floorY + 8;
     if (under !== this.wasUnder && this.state !== 'dying' && this.state !== 'dormant') {
-      audio.play('burst', under ? 1.2 : 0.9);
+      audio.play('impactFire', under ? 1.2 : 0.9);
       world.camera.addShake(under ? 3 : 6);
       world.particles.burst(this.hx, this.floorY - 4, 22, '#6a4a3e', { speed: 260, gravity: 900, size: 4, angle: -Math.PI / 2, spread: 2.2 });
       world.particles.burst(this.hx, this.floorY - 4, 16, '#ffae54', { speed: 240, gravity: 300, shape: 'spark', angle: -Math.PI / 2, spread: 2.4 });

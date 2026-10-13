@@ -633,7 +633,7 @@ export class Jester extends Enemy {
       if (!hit) continue;
       q.dead = true;
       world.particles.burst(q.cx, q.cy, 10, '#eef0f8', { speed: 150, gravity: 200, shape: 'spark' });
-      audio.play('clank', 1.6);
+      audio.play('impactJester', 1.6);
       const before = this.hp;
       if (this.state === 'guess') {
         this.struck = hit;
@@ -692,7 +692,7 @@ export class Jester extends Enemy {
     me.vx = -this.wheelDir * 60;
     me.spin = 0;
     me.act = 'dizzy';
-    audio.play('clank', 0.8);
+    audio.play('impactJester', 0.8);
     audio.play('coin', 0.7);
     world.camera.addShake(6);
     world.hitStop(0.1);
@@ -1223,7 +1223,7 @@ export class Jester extends Enemy {
     me.knives = KNIVES;
     me.t = 0;
     audio.play('tellVolley', 1.35);
-    audio.play('clank', 2.1);
+    audio.play('impactJester', 2.1);
   }
 
   beginCrouch(world: World): void {
@@ -1525,7 +1525,7 @@ export class Jester extends Enemy {
     me.t = 0;
     this.hp -= amount * 2;
     this.flash = 1;
-    audio.play('clank', 1.75);
+    audio.play('impactJester', 1.75);
     audio.play('screech', 1.3);
     audio.play('bossHit', 0.85);
     world.hitStop(0.12);
@@ -1574,7 +1574,7 @@ export class Jester extends Enemy {
       f.facing = p.cx > f.x ? 1 : -1;
     }
     audio.play('tellVolley', 1.25);
-    audio.play('clank', 2.2);
+    audio.play('impactJester', 2.2);
   }
 
   /** And they throw, all at once, and go back into him. */
@@ -1661,7 +1661,7 @@ export class Jester extends Enemy {
   private dropMask(world: World): void {
     const me = this.me;
     this.dropped = { x: me.x + me.facing * 10, y: me.y - 34, vx: me.facing * rand(50, 80), vy: -150, rot: 0, spin: me.facing * 7 };
-    audio.play('clank', 1.5);
+    audio.play('impactJester', 1.5);
     world.particles.burst(me.x, me.y - 34, 6, '#f4efe4', { speed: 80, gravity: 300, size: 2 });
   }
 

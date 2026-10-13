@@ -539,7 +539,7 @@ export class Spider extends Enemy {
           this.bvy = 0;
           this.state = 'stunned';
           this.timer = 2.6;
-          audio.play('slam', 0.9);
+          audio.play('impactWeb', 0.9);
           world.camera.addShake(6);
           world.hitStop(0.06);
           world.particles.burst(this.bx, this.floorY - 4, 18, '#6a7a8a', { speed: 200, gravity: 600, angle: -Math.PI / 2, spread: 2.4 });
@@ -703,7 +703,7 @@ export class Spider extends Enemy {
     this.bvy = 0;
     // The legs come down with her, not after her.
     this.pose = Math.max(this.pose, 0.6);
-    audio.play('slam', 1.1);
+    audio.play('impactWeb', 1.1);
     world.camera.addShake(6);
     world.particles.burst(this.bx, this.floorY - 4, 20, '#7a8a9a', { speed: 220, gravity: 700, angle: -Math.PI / 2, spread: 2.6 });
     const p = world.player;

@@ -50,7 +50,7 @@ import {
   splitBarName,
 } from './ui/hud';
 import { UI, screen } from './ui/kit';
-import { AttackPicker, PICKER_KEYS, PICKER_PACE, readiness } from './ui/picker';
+import { AttackPicker, PICKER_KEYS, PICKER_PACE, type Placed, readiness } from './ui/picker';
 import * as screens from './ui/screens';
 import { LEDGE_HERO_X, LEDGE_TOP, LEDGE_Y, MIST_Y, titleLedge, titleMist } from './ui/titleScene';
 import type { PauseEntry } from './ui/screens';
@@ -75,6 +75,10 @@ const NO_INPUT = new Input();
  * take a tap - they say R on screen, and nothing else is going on.
  */
 const RESTART_HOLD = 0.8;
+/** On the pause screen R asks first: a second tap within this many seconds starts over. */
+const RESTART_CONFIRM = 2.5;
+/** Seconds in a new zone before its music takes over. */
+const ZONE_MUSIC_AFTER = 1.5;
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
@@ -413,6 +417,12 @@ export class Game implements World {
   private input: Input | null = null;
   /** Seconds R has been held in play; -1 until it is let go after a restart. */
   private restartHold = 0;
+  /** Seconds left in which a second R on the pause screen starts over. */
+  private restartAsked = 0;
+  /** The zone whose piece is playing, and the one the hero has stepped into and for how long. */
+  private musicZone: TrackName | null = null;
+  private zoneCandidate: TrackName | null = null;
+  private zoneCandidateFor = 0;
   private currentZone = '';
   private titlePulse = 0;
   /** The title's two pages: the scene with the call to start, and every control. */
@@ -1061,8 +1071,36 @@ export class Game implements World {
     return ZONE_TRACK[zoneAt(this.player.cx).name] ?? null;
   }
 
-  private updateSound(): void {
-    audio.setMusic(this.chooseMusic());
+  /**
+   * The music for this moment. A fight's piece comes at once, and so does the
+   * first piece of all; a zone's piece only once the hero has been in the zone
+   * a moment - walking to and fro over a border must not restart the music
+   * twice a second (and coming back within a few seconds, the music.ts side
+   * picks the old piece up where it was).
+   */
+  private updateMusic(dt: number): void {
+    const want = this.chooseMusic();
+    const zonal = want !== null && !want.startsWith('boss') && want !== 'title';
+    if (!zonal || this.musicZone === null || want === this.musicZone || this.state === 'title') {
+      if (zonal) this.musicZone = want;
+      this.zoneCandidate = null;
+      audio.setMusic(want);
+      return;
+    }
+    if (want !== this.zoneCandidate) {
+      this.zoneCandidate = want;
+      this.zoneCandidateFor = 0;
+    }
+    this.zoneCandidateFor += dt;
+    if (this.zoneCandidateFor >= ZONE_MUSIC_AFTER) {
+      this.musicZone = want;
+      this.zoneCandidate = null;
+    }
+    audio.setMusic(this.musicZone);
+  }
+
+  private updateSound(dt: number): void {
+    this.updateMusic(dt);
     const zone = zoneAt(this.player.cx);
     audio.setRoom(this.state === 'title' ? 'forest' : zone.name);
     audio.duck(this.state === 'paused' || this.state === 'dead' || this.dialogue !== null);
@@ -1094,7 +1132,7 @@ export class Game implements World {
       const on = audio.toggleSfx();
       if (told) this.zoneBanner = { text: on ? 'EFFEKTE AN' : 'EFFEKTE AUS', timer: 2.2 };
     }
-    this.updateSound();
+    this.updateSound(dt);
 
     // A dialogue holds everything else: no enemies, no gravity, no clock.
     if (this.dialogue) {
@@ -1136,7 +1174,16 @@ export class Game implements World {
     // hero), and at a tap on the screens that offer it.
     if (!input.isDown('restart')) this.restartHold = 0;
     else if (this.state === 'playing' && this.restartHold >= 0) this.restartHold += dt;
-    if (this.state === 'playing' ? this.restartHold >= RESTART_HOLD : input.pressed('restart')) {
+    let restartNow = this.state === 'playing' && this.restartHold >= RESTART_HOLD;
+    if (this.state !== 'playing' && input.pressed('restart')) {
+      // The pause screen is one key from play: there R asks once more.
+      if (this.state === 'paused' && this.restartAsked <= 0) {
+        this.restartAsked = RESTART_CONFIRM;
+        audio.play('deny');
+      } else restartNow = true;
+    }
+    if (restartNow) {
+      this.restartAsked = 0;
       this.restartHold = -1;
       this.restart();
       input.endFrame();
@@ -1144,7 +1191,11 @@ export class Game implements World {
     }
 
     if (this.state === 'paused') {
-      if (input.pressed('pause') || input.pressed('confirm')) this.state = 'playing';
+      this.restartAsked = Math.max(0, this.restartAsked - dt);
+      if (input.pressed('pause') || input.pressed('confirm')) {
+        this.state = 'playing';
+        this.restartAsked = 0;
+      }
       // Two lists, one screen: left and right turn between the relics and
       // the attacks. On the attacks, up and down pick one - the one picked
       // is the one marked - and the key that changes it in play takes the
@@ -1242,11 +1293,13 @@ export class Game implements World {
     }
 
     // The attack picker reads its key in real time. While it is open the
-    // world goes on at a third of its pace, and the hero goes on without the
-    // keys it has taken: the four that move its cursor, and the jump.
+    // world goes on at a third of its pace, and the hero stands in it: the
+    // picker has the four keys that move its cursor, and every move he has.
     const decided = this.victoryTimer > 0;
+    const wasOpen = this.picker.open;
     if (decided) this.picker.close();
     else this.picker.update(dt, input, this.player);
+    if (this.picker.open && !wasOpen) this.player.dropCharge();
     if (this.picker.open) dt *= PICKER_PACE;
     this.pickerKeys ??= new MaskedKeys(input, PICKER_KEYS);
     this.player.update(dt, decided ? NO_INPUT : this.picker.open ? this.pickerKeys : input, this);
@@ -1400,6 +1453,8 @@ export class Game implements World {
   private respawnAtCheckpoint(): void {
     this.player.respawn(this.checkpointX, this.checkpointY - 8);
     this.picker.reset();
+    // Back at a checkpoint the zone's piece comes at once, wherever the hero fell.
+    this.musicZone = null;
     this.projectiles.length = 0;
     this.particles.clear();
     this.spawnEnemiesFresh();
@@ -2195,13 +2250,26 @@ export class Game implements World {
    */
   private drawAtHero(ctx: CanvasRenderingContext2D): void {
     const p = this.player;
-    const hx = (p.cx - this.camera.renderX) / ART;
-    const hy = (p.y - this.camera.renderY) / ART;
-    const fy = (p.y + p.h - this.camera.renderY) / ART;
+    const toArt = (b: { x: number; y: number; w: number; h: number }): Placed => ({
+      x: (b.x - this.camera.renderX) / ART,
+      y: (b.y - this.camera.renderY) / ART,
+      w: b.w / ART,
+      h: b.h / ART,
+    });
+    const me = toArt(p);
+    const at = { cx: me.x + me.w / 2, head: me.y, feet: me.y + me.h, left: me.x, right: me.x + me.w };
     const input = this.input;
     // A restart under way says so alone.
-    if (this.restartHold > 0) drawRestartHold(ctx, hx, hy, this.restartHold / RESTART_HOLD);
-    else this.picker.draw(ctx, p, hx, hy, fy, { cycle: input?.attackKeys[1] ?? 'Q', move: input?.moveKeys ?? ['A', 'D', 'W', 'S'] });
+    if (this.restartHold > 0) {
+      drawRestartHold(ctx, at.cx, at.head, this.restartHold / RESTART_HOLD);
+      return;
+    }
+    // What must not be hidden behind it: whatever flies at him, and whoever is fighting him.
+    const clear: Placed[] = [];
+    for (const shot of this.projectiles) if (!shot.dead && !shot.friendly) clear.push(toArt(shot.rect));
+    for (const e of this.enemies) if (!e.dead && e.active && (e.engaged || BOSS_KINDS.has(e.kind))) clear.push(toArt(e));
+    if (this.boss && this.boss.engaged && !this.boss.dead) clear.push(toArt(this.boss));
+    this.picker.draw(ctx, p, at, clear, { cycle: input?.attackKeys[1] ?? 'Q', move: input?.moveKeys ?? ['A', 'D', 'W', 'S'] });
   }
 
   /**
@@ -2321,6 +2389,7 @@ export class Game implements World {
             keys: { up: this.input?.moveKeys[2] ?? 'W', down: this.input?.moveKeys[3] ?? 'S', cycle: this.input?.attackKeys[1] ?? 'Q' },
             music: !audio.musicOff,
             sound: !audio.sfxOff,
+            restartAsked: this.restartAsked > 0,
             motion: this.camera.motion > 0,
           },
           this.titlePulse,

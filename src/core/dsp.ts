@@ -74,6 +74,8 @@ export interface Note {
   /** Key-on, on the context clock, and how long until key-off. */
   at: number;
   dur: number;
+  /** Starts this far into the sample, seconds of it: a start address a few blocks in. */
+  from?: number;
 }
 
 /** Where a voice's sound goes: its dry path, and the echo send beside it. */
@@ -252,8 +254,9 @@ export class Dsp {
     if (e.f !== Infinity) g.setTargetAtTime(0, at + attack + settle, e.f);
     // Key-off: from wherever the envelope is, straight down in 8 ms. A
     // one-shot that runs out first simply ends.
+    const from = Math.min(Math.max(0, note.from ?? 0), buffer.duration);
     let off = at + Math.max(0.004, note.dur);
-    if (sample.loopStart === null) off = Math.min(off, at + buffer.duration / Math.max(0.05, Math.min(note.rate, note.rate2 ?? note.rate)));
+    if (sample.loopStart === null) off = Math.min(off, at + (buffer.duration - from) / Math.max(0.05, Math.min(note.rate, note.rate2 ?? note.rate)));
     const level = peak * envelopeAt(e, off - at);
     g.setValueAtTime(level, off);
     g.linearRampToValueAtTime(0, off + RELEASE);
@@ -265,7 +268,7 @@ export class Dsp {
     env.connect(pan);
     pan.connect(out.dry);
     if (note.echo) pan.connect(out.wet);
-    src.start(at);
+    src.start(at, from);
     src.stop(end);
     const voice: Voice = { src, env, pan, note, start: at, end, priority, owner };
     src.onended = () => {
@@ -305,7 +308,7 @@ export class Dsp {
   }
 
   /** The voice that will be sounding on a channel at time t, if any. */
-  holder(channel: number, t: number): { priority: number; owner: 'music' | 'sfx'; end: number } | null {
+  holder(channel: number, t: number): { priority: number; owner: 'music' | 'sfx'; start: number; end: number } | null {
     let found: Voice | null = null;
     for (const v of this.voices[channel]) {
       if (v.start <= t && v.end > t) found = v;

@@ -1291,7 +1291,7 @@ export class Gloom extends Enemy {
     this.squash = 1;
     this.waves.push({ x: this.cx + 6, dir: 1, hit: false });
     this.waves.push({ x: this.cx - 6, dir: -1, hit: false });
-    audio.play('slam', 0.62);
+    audio.play('impactGloom', 0.62);
     audio.play('burst', 0.5);
     world.camera.addShake(6);
     world.hitStop(0.04);

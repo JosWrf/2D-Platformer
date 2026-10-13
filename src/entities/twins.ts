@@ -1008,7 +1008,7 @@ export class Twins extends Enemy {
     this.mark = null;
     this.flares.push({ x: s.x, y: this.floorY - 3, t: 0, life: 0.45, radius: LEAP_RADIUS, rgb: '255,206,120', round: false });
     audio.play('slam', 0.8);
-    audio.play('burst', 1.25);
+    audio.play('impactTwins', 1.25);
     world.camera.addShake(6);
     world.particles.burst(s.x, this.floorY - 4, 18, '#ffd27a', {
       speed: 240,
@@ -1250,7 +1250,7 @@ export class Twins extends Enemy {
       t.timer = REST;
     }
     this.flares.push({ x, y: this.floorY - 70, t: 0, life: 0.5, radius: 60, rgb: '255,240,210', round: true });
-    audio.play('burst', 0.7);
+    audio.play('impactTwins', 0.7);
     audio.play('beam', 0.85);
     world.camera.addShake(6);
     world.hitStop(0.05);
@@ -1379,7 +1379,7 @@ export class Twins extends Enemy {
       if (r.pulse <= 0) {
         this.rings.push({ x: c.x, dir: -1, hit: false }, { x: c.x, dir: 1, hit: false });
         this.flares.push({ x: c.x, y: this.floorY - 40, t: 0, life: 0.4, radius: 46, rgb: c.who === 'sol' ? '255,214,140' : '200,220,255', round: true });
-        audio.play('burst', 0.85);
+        audio.play('impactTwins', 0.85);
         world.camera.addShake(3);
         r.pulse = CALL_PULSE;
         r.told = false;

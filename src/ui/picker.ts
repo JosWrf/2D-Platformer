@@ -12,11 +12,13 @@ import { UI, blit, box, drawFrame, paletteColor, text, textWidth } from './kit';
  * A tap of the key that changes it (Q, O or V) takes the next one, as it
  * always did. Held, it opens the picker: every attack learned, as a grid of
  * its badges over the hero's head, the world slowed to a third while it is
- * open. Left and right walk the cursor along the list - off the end of a row
- * into the next - up and down a row at a time, both round at the ends; and
- * letting go of the key takes the one under it. The grid is the one with the
- * fewest steps between any two badges: eighteen attacks are at most four
- * steps apart, six at most two, and the one before is always a single step.
+ * open and the hero standing still in it - no blow, no parry, no roll, no
+ * attack while he chooses. Left and right walk the cursor along the list -
+ * off the end of a row into the next - up and down a row at a time, both
+ * round at the ends; and letting go of the key takes the one under it. The
+ * grid is the one with the fewest steps between any two badges: eighteen
+ * attacks are at most four steps apart, six at most two, and the one before
+ * is always a single step.
  *
  * Every change shows itself at the hero, not in the corner of the screen: the
  * picked attack's badge between the one before and the one after it, its name
@@ -35,8 +37,13 @@ const TOAST_BLINK = 0.4;
 /** The widest the grid gets: wider, and it no longer fits over the hero. */
 const MAX_COLS = 7;
 
-/** The actions the picker takes from the hero while it is open: the cursor's, and the key's own. */
-export const PICKER_KEYS = new Set(['left', 'right', 'up', 'down', 'jump', 'cycle'] as const);
+/**
+ * The actions the picker takes from the hero while it is open: the cursor's,
+ * the key's own - and every move he could make, so the slowed world is a
+ * moment to choose in and never a moment to fight in. Picking costs standing
+ * still.
+ */
+export const PICKER_KEYS = new Set(['left', 'right', 'up', 'down', 'jump', 'cycle', 'attack', 'parry', 'dash', 'skill'] as const);
 
 export interface PickerGrid {
   cols: number;
@@ -196,23 +203,24 @@ export class AttackPicker {
   }
 
   /**
-   * Draws the picker or the toast over the hero, whose head is at (hx, hy) on
-   * the art grid and whose feet are at fy; under him, if over him is off the
-   * screen. `keys` are the caps of the keys in use: the one that changes the
-   * attack, and the four that move.
+   * Draws the picker or the toast at the hero, `at` him on the art grid: over
+   * his head, or - where something is coming at him from above (`clear` are
+   * the boxes of what must not be hidden) - beside him, or under him. `keys`
+   * are the caps of the keys in use: the one that changes the attack, and the
+   * four that move.
    */
-  draw(ctx: CanvasRenderingContext2D, player: Player, hx: number, hy: number, fy: number, keys: PickerKeys): void {
+  draw(ctx: CanvasRenderingContext2D, player: Player, at: HeroBox, clear: readonly Placed[], keys: PickerKeys): void {
     this.view.kind = 'none';
     const owned = player.ownedSkills();
     if (owned.length === 0) return;
     if (this.open) {
-      Object.assign(this.view, drawGrid(ctx, player, owned, this.cursor, hx, hy, fy, keys), { kind: 'grid', timer: this.openFor });
+      Object.assign(this.view, drawGrid(ctx, player, owned, this.cursor, at, clear, keys), { kind: 'grid', timer: this.openFor });
       return;
     }
     if (this.toast <= 0) return;
     // Blinking out over its last moments, a whole frame on, a whole frame off.
     if (this.toast < TOAST_BLINK && Math.floor(this.toast * 10) % 2 === 1) return;
-    Object.assign(this.view, drawToast(ctx, player, owned, hx, hy, fy), { kind: 'toast', timer: this.toast });
+    Object.assign(this.view, drawToast(ctx, player, owned, at, clear), { kind: 'toast', timer: this.toast });
   }
 }
 
@@ -222,11 +230,21 @@ export interface PickerKeys {
   move: readonly [string, string, string, string];
 }
 
-interface Placed {
+/** A box on the art grid. */
+export interface Placed {
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+/** The hero on the art grid: the middle of him, his head, his feet, and his sides. */
+export interface HeroBox {
+  cx: number;
+  head: number;
+  feet: number;
+  left: number;
+  right: number;
 }
 
 /** What a badge shows for an attack now: lit, or filling up as it comes back. */
@@ -236,22 +254,39 @@ function badgeFor(player: Player, id: SkillId): HTMLCanvasElement {
   return skillBadge(id, info.color, left <= 0, left <= 0 ? null : 1 - left / info.cooldown);
 }
 
+function overlaps(a: Placed, b: Placed): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
 /**
- * Where a box of w × h goes over the hero: centred over his head, or under
- * his feet when over him would run into the HUD's top row; and on the screen.
+ * Where a box of w × h goes at the hero: over his head where that is on the
+ * screen and hides nothing in `clear`; else beside him, his head at its middle,
+ * on whichever side is free; else under his feet. Where every place hides
+ * something, over his head after all - kept on the screen and below the
+ * HUD's top row.
  */
-function place(hx: number, hy: number, fy: number, w: number, h: number, gap: number): Placed {
-  const x = Math.max(2, Math.min(ART_W - w - 2, Math.round(hx - w / 2)));
-  let y = Math.round(hy - h - gap);
-  if (y < 36) y = Math.round(fy + gap);
-  y = Math.max(36, Math.min(ART_H - h - 2, y));
-  return { x, y, w, h };
+function place(at: HeroBox, w: number, h: number, gap: number, clear: readonly Placed[]): Placed {
+  const sideY = Math.round(at.head + 6 - h / 2);
+  const tries: Placed[] = [
+    { x: Math.round(at.cx - w / 2), y: Math.round(at.head - h - gap), w, h },
+    { x: Math.round(at.right + gap), y: sideY, w, h },
+    { x: Math.round(at.left - gap - w), y: sideY, w, h },
+    { x: Math.round(at.cx - w / 2), y: Math.round(at.feet + gap), w, h },
+  ];
+  const onScreen = (b: Placed): boolean => b.x >= 2 && b.x + b.w <= ART_W - 2 && b.y >= 36 && b.y + b.h <= ART_H - 2;
+  const pick = tries.find((b) => onScreen(b) && !clear.some((c) => overlaps(b, c))) ?? tries.find(onScreen) ?? tries[0];
+  return {
+    x: Math.max(2, Math.min(ART_W - w - 2, pick.x)),
+    y: Math.max(36, Math.min(ART_H - h - 2, pick.y)),
+    w,
+    h,
+  };
 }
 
 /** The toast: the picked attack between its neighbours, its name and how ready it is. */
-function drawToast(ctx: CanvasRenderingContext2D, player: Player, owned: readonly SkillId[], hx: number, hy: number, fy: number): Placed {
-  const at = Math.max(0, player.skill ? owned.indexOf(player.skill) : 0);
-  const id = owned[at];
+function drawToast(ctx: CanvasRenderingContext2D, player: Player, owned: readonly SkillId[], at: HeroBox, clear: readonly Placed[]): Placed {
+  const index = Math.max(0, player.skill ? owned.indexOf(player.skill) : 0);
+  const id = owned[index];
   const info = skillInfo(id);
   const left = player.cooldownLeft(id);
   const name = info.name.toUpperCase();
@@ -260,15 +295,15 @@ function drawToast(ctx: CanvasRenderingContext2D, player: Player, owned: readonl
   const rowW = many ? BADGE * 3 + 4 : BADGE;
   const w = Math.max(rowW, textWidth(name, { font: 'small' }), textWidth(status, { font: 'small' })) + 8;
   const h = BADGE + 22;
-  const placed = place(hx, hy, fy, w, h, 4);
+  const placed = place(at, w, h, 4, clear);
   const { x, y } = placed;
   drawFrame(ctx, 'plate', x, y, w, h);
   const mid = x + Math.floor(w / 2);
   text(ctx, name, mid, y + 3, { font: 'small', color: left <= 0 ? paletteColor(info.color) : UI.mist, align: 'center' });
   const by = y + 11;
   if (many) {
-    const prev = owned[(at - 1 + owned.length) % owned.length];
-    const next = owned[(at + 1) % owned.length];
+    const prev = owned[(index - 1 + owned.length) % owned.length];
+    const next = owned[(index + 1) % owned.length];
     blit(ctx, badgeFor(player, prev), mid - BADGE / 2 - BADGE - 2, by);
     blit(ctx, badgeFor(player, next), mid + BADGE / 2 + 2, by);
     // The neighbours a step back: a rule of steel under them, the picked one's in its colour.
@@ -300,9 +335,8 @@ function drawGrid(
   player: Player,
   owned: readonly SkillId[],
   cursor: number,
-  hx: number,
-  hy: number,
-  fy: number,
+  at: HeroBox,
+  clear: readonly Placed[],
   keys: PickerKeys,
 ): Placed {
   const { cols, rows } = gridOf(owned.length);
@@ -320,7 +354,7 @@ function drawGrid(
   const nameW = textWidth(name) + 4 + textWidth(status, { font: 'small' });
   const w = Math.max(gridW, nameW, moveW, takeW) + 10;
   const h = 14 + rows * pitch - 2 + 4 + KEY_H * 2 + 1 + 5;
-  const placed = place(hx, hy, fy, w, h, 6);
+  const placed = place(at, w, h, 6, clear);
   const { x, y } = placed;
   drawFrame(ctx, 'panel', x, y, w, h);
   const mid = x + Math.floor(w / 2);

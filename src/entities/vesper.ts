@@ -337,7 +337,7 @@ export class Vesper extends Enemy {
             this.x -= sign(this.vx) * 8;
           }
           this.knockDown(world);
-          audio.play('slam', 1.2);
+          audio.play('impactBlood', 1.2);
         }
         break;
       }
@@ -370,7 +370,7 @@ export class Vesper extends Enemy {
           this.y = this.floorY - this.h;
           this.state = 'stunned';
           this.timer = 2.2;
-          audio.play('slam', 1.1);
+          audio.play('impactBlood', 1.1);
           world.camera.addShake(6);
           world.particles.burst(this.cx, this.floorY - 2, 16, '#6a5060', { speed: 160, gravity: 500 });
         }
@@ -576,7 +576,7 @@ export class Vesper extends Enemy {
     this.timer = 1.35 * (this.phaseTwo && this.dives < 2 ? 0.55 : 1);
     this.vx = sign(this.vx) * 260;
     this.vy = 0;
-    audio.play('slam', 1.3);
+    audio.play('impactBlood', 1.3);
     world.camera.addShake(5);
     world.particles.burst(this.cx, this.floorY - 2, 18, '#7a5a6a', { speed: 200, gravity: 500, angle: -Math.PI / 2, spread: Math.PI });
     world.particles.burst(this.cx, this.floorY - 2, 10, '#ff4a68', { speed: 160, gravity: 200, shape: 'spark' });

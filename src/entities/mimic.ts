@@ -435,7 +435,7 @@ export class Mimic extends Enemy {
         if (this.state !== 'bite') break;
         if (this.timer < 0.1) this.lidTarget = 0;
         if (this.timer <= 0) {
-          audio.play('slam', 1.5);
+          audio.play('impactGold', 1.5);
           world.camera.addShake(3);
           if (this.chain) {
             // The second of a pair: hardly a breath between them.
@@ -461,7 +461,7 @@ export class Mimic extends Enemy {
           this.hitThisMove = false;
           this.lid = 0.9;
           this.lidTarget = 0;
-          audio.play('slam', 1.6);
+          audio.play('impactGold', 1.6);
         }
         break;
 
@@ -567,7 +567,7 @@ export class Mimic extends Enemy {
         if (this.timer <= 0) {
           // And then it shuts.
           this.lidTarget = 0;
-          audio.play('slam', 1.2);
+          audio.play('impactGold', 1.2);
           world.camera.addShake(4);
           const front = this.facing > 0 ? this.x + W : this.x;
           if (!player.dead && Math.abs(player.cx - front) < 52 && Math.abs(player.bottom - this.bottom) < 40) {

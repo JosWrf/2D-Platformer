@@ -485,7 +485,7 @@ export class Gargoyle extends Enemy {
     this.crackGlow = 1;
     audio.play('crumble', 0.7);
     audio.play('bossRoar', 0.55);
-    audio.play('slam', 0.7);
+    audio.play('impactGargoyle', 0.7);
     world.camera.addShake(8);
     world.hitStop(0.14);
   }
@@ -1073,7 +1073,7 @@ export class Gargoyle extends Enemy {
     this.timer = LAND * this.haste;
     this.vx = sign(this.vx) * 120;
     this.vy = 0;
-    audio.play('slam', 1.25);
+    audio.play('impactGargoyle', 1.25);
     world.camera.addShake(4);
     world.particles.burst(this.cx, this.floorY - 2, 16, '#7c8490', { speed: 200, gravity: 500, angle: -Math.PI / 2, spread: Math.PI });
   }
@@ -1114,7 +1114,7 @@ export class Gargoyle extends Enemy {
     this.stare = 0;
     this.tumble = 0;
     this.lastFallDamage = 0;
-    audio.play('slam', 1.55);
+    audio.play('impactGargoyle', 1.55);
     world.camera.addShake(2);
     world.particles.burst(this.cx, this.floorY - 2, 8, '#7c8490', { speed: 120, gravity: 500, angle: -Math.PI / 2, spread: Math.PI });
     if (!watched) this.wakeUp(world);
@@ -1131,7 +1131,7 @@ export class Gargoyle extends Enemy {
     this.slump = 0;
     this.makeCracks(6);
     this.crackGlow = 1;
-    audio.play('slam', 0.8);
+    audio.play('impactGargoyle', 0.8);
     audio.play('crumble', 0.85);
     world.camera.addShake(8);
     world.hitStop(0.08);

@@ -27,7 +27,7 @@ const ROOMS = {
   open: { steps: 3, feedback: 0.25, level: 0.2 },
   cave: { steps: 7, feedback: 0.45, level: 0.26 },
   rift: { steps: 10, feedback: 0.4, level: 0.15 },
-  hall: { steps: 13, feedback: 0.6, level: 0.28 },
+  hall: { steps: 13, feedback: 0.57, level: 0.28 },
 } satisfies Record<string, EchoPreset>;
 
 type Room = keyof typeof ROOMS;
@@ -177,7 +177,9 @@ export class AudioBus {
       for (const ch of allowed) {
         if (assign.includes(ch)) continue;
         const held = dsp.holder(ch, t0);
-        const pri = held ? held.priority : -1;
+        // A sound struck this same moment keeps its channel against one that
+        // matters no more than it does: one of them is heard, not neither.
+        const pri = held ? held.priority + (held.start >= t0 ? 0.5 : 0) : -1;
         const end = held ? held.end : 0;
         if (pri < bestPri || (pri === bestPri && end < bestEnd)) {
           best = ch;
@@ -210,6 +212,7 @@ export class AudioBus {
           echo,
           at: t0 + (h.at ?? 0),
           dur: h.dur,
+          from: h.from,
         },
         out,
         'sfx',

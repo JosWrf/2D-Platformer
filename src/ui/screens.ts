@@ -103,6 +103,8 @@ export interface PauseInfo {
   music: boolean;
   sound: boolean;
   motion: boolean;
+  /** R pressed once: the next one starts the run over. */
+  restartAsked: boolean;
   /** The caps of the keys in use that pick an attack here: up, down, and the one that changes it. */
   keys: { up: string; down: string; cycle: string };
 }
@@ -177,7 +179,7 @@ export function drawPause(ctx: CanvasRenderingContext2D, p: PauseInfo, time: num
     ctx,
     [
       [['P', 'LEERTASTE'], 'FORTSETZEN'],
-      [['R'], 'NEUSTART'],
+      [['R'], p.restartAsked ? 'NOCHMAL: NEUSTART' : 'NEUSTART'],
       [['M'], p.music ? 'MUSIK AN' : 'MUSIK AUS'],
       [['N'], p.sound ? 'EFFEKTE AN' : 'EFFEKTE AUS'],
       [['B'], p.motion ? 'BILDWACKELN AN' : 'BILDWACKELN AUS'],

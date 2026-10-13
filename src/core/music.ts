@@ -21,6 +21,8 @@ export { TRACK_NAMES, type TrackName } from './tracks';
 /** How long the old piece takes to fade, and the steps it fades in. */
 const FADE = 0.6;
 const FADE_STEPS = 8;
+/** A zone's piece left and come back to within this many seconds picks up at the bar it was in. */
+const RESUME_WITHIN = 10;
 /** How far ahead the notes are scheduled, seconds. */
 const AHEAD = 0.25;
 
@@ -80,6 +82,8 @@ export class Music {
   private next: { name: TrackName; at: number } | null = null;
   /** The piece asked for: what is playing, or what is about to. */
   current: TrackName | null = null;
+  /** Where each zone's piece was when it was faded out, and when. */
+  private readonly left = new Map<TrackName, { step: number; at: number }>();
 
   constructor(private readonly dsp: Dsp) {}
 
@@ -92,6 +96,11 @@ export class Music {
     for (const r of this.retiring) free = Math.max(free, r.stopAt + 0.005);
     const old = this.piece;
     if (old) {
+      // A zone's piece remembers its bar, for a hero who steps straight back.
+      if (!old.name.startsWith('boss') && old.name !== 'title') {
+        const next = old.score.events[old.index];
+        this.left.set(old.name, { step: next ? next.step : old.score.loopStep, at: now });
+      }
       // Out in steps, then every note of it stopped.
       const level = TRACK_LEVEL[old.name];
       stepGain(old.dry.gain, level, 0, now, FADE, FADE_STEPS);
@@ -129,7 +138,21 @@ export class Music {
       wet.gain.value = TRACK_LEVEL[name];
       dry.connect(this.dsp.musicBus);
       wet.connect(this.dsp.musicWet);
-      this.piece = new Piece(name, scoreOf(name), dry, wet, Math.max(at, now + 0.02));
+      const start = Math.max(at, now + 0.02);
+      const piece = new Piece(name, scoreOf(name), dry, wet, start);
+      const back = this.left.get(name);
+      this.left.delete(name);
+      if (back && now - back.at <= RESUME_WITHIN) {
+        // Back within a few seconds: on from the start of the bar it was in.
+        const s = piece.score;
+        const bar = Math.floor(back.step / s.stepsPerBar) * s.stepsPerBar;
+        const index = s.events.findIndex((e) => e.step >= bar);
+        if (index >= 0) {
+          piece.index = index;
+          piece.t0 = start - bar * piece.stepDur;
+        }
+      }
+      this.piece = piece;
     }
     const p = this.piece;
     if (!p) return;

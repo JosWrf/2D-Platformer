@@ -1616,7 +1616,7 @@ export class Warden extends Enemy {
         if (this.onGround && this.vy >= 0) {
           world.camera.addShake(9);
           world.hitStop(0.05);
-          audio.play('slam');
+          audio.play('impactShard');
           world.particles.burst(this.cx, this.bottom, 26, '#b078ff', { speed: 260, gravity: 620, shape: 'spark' });
           if (!this.hitThisMove && Math.abs(player.cx - this.cx) < 78 && Math.abs(player.bottom - this.bottom) < 40) {
             this.hitThisMove = true;
@@ -1886,7 +1886,7 @@ export class Gallert extends Enemy {
         // his feet down zeroes it in the same frame.
         if (this.onGround && this.vy >= 0) {
           this.squash = -1;
-          audio.play('slam');
+          audio.play('impactMire');
           world.camera.addShake(6);
           world.particles.burst(this.cx, this.bottom, 24, '#8fd45c', { speed: 250, gravity: 520 });
           if (
@@ -1944,7 +1944,7 @@ export class Gallert extends Enemy {
           }
           this.spawned += 2;
           this.squash = -0.6;
-          audio.play('slam', 0.6);
+          audio.play('impactMire', 0.6);
           world.camera.addShake(4);
           this.state = 'recover';
           this.timer = 1.25 * quick;
@@ -2360,7 +2360,7 @@ export class Thalassa extends Enemy {
             wave.water = true;
             world.spawnProjectile(wave);
           }
-          audio.play('splash', 0.8);
+          audio.play('impactTide', 0.8);
           world.camera.addShake(this.surgeLeft > 1 ? 7 : 5);
           world.particles.burst(this.cx, this.bottom, 22, '#7fd6cc', { speed: 240, gravity: 500 });
           this.surgeLeft--;
@@ -2401,7 +2401,7 @@ export class Thalassa extends Enemy {
         if (this.timer <= 0) {
           this.state = 'undertow';
           this.timer = 1.1;
-          audio.play('splash', 0.6);
+          audio.play('impactTide', 0.6);
         }
         break;
 
@@ -2559,7 +2559,7 @@ export class Thalassa extends Enemy {
         continue;
       }
       if (before < g.wind) {
-        audio.play('splash', 0.9);
+        audio.play('impactTide', 0.9);
         world.camera.addShake(3);
         world.particles.burst(g.x, this.floorY - 6, 14, '#a8efe6', {
           speed: 220,
@@ -2861,7 +2861,7 @@ export class Prismarch extends Enemy {
             const vy = ((dx / len) * Math.sin(a) + (dy / len) * Math.cos(a)) * 215;
             world.spawnProjectile(new Projectile('orb', this.cx - 7, this.cy - 16, vx, vy));
           }
-          audio.play('magic', 1.3);
+          audio.play('impactCrystal', 1.3);
           this.state = 'recover';
           this.timer = 1.25 * quick;
         }
@@ -3550,7 +3550,7 @@ export class Hydra extends Enemy {
         this.breathDir = dx > 0 ? 1 : -1;
         this.breath = 0.001;
         this.markDrops(world, [this.cx - 150, this.cx + 20, this.cx + 170], 0.85);
-        audio.play('slam');
+        audio.play('impactHydra');
         world.camera.addShake(5);
         this.state = 'act';
         this.timer = 1.0;
@@ -3586,7 +3586,7 @@ export class Hydra extends Enemy {
         } else if (pick === 1) {
           this.breathDir = dx > 0 ? 1 : -1;
           this.breath = 0.001;
-          audio.play('slam', 0.8);
+          audio.play('impactHydra', 0.8);
           this.state = 'act';
           this.timer = 1.0;
         } else {
@@ -3719,7 +3719,7 @@ export class Hydra extends Enemy {
         drop.fired = true;
         const rock = new Projectile('rock', drop.x - 10, this.ceilingY + 2, 0, 120);
         world.spawnProjectile(rock);
-        audio.play('slam', 0.4);
+        audio.play('impactHydra', 0.4);
       }
     }
     this.drops = this.drops.filter((d) => !d.fired || d.t < d.wind + 0.4);

@@ -649,7 +649,7 @@ export class Colossus extends Enemy {
             hand.y = this.floorY - HAND_H / 2;
             hand.state = 'floor';
             hand.timer = 1.25 * this.haste;
-            audio.play('slam', 0.8);
+            audio.play('impactStone', 0.8);
             world.camera.addShake(8);
             world.hitStop(0.04);
             world.particles.burst(hand.x, this.floorY - 4, 22, '#bfa77c', { speed: 260, gravity: 700, size: 4, angle: -Math.PI / 2, spread: Math.PI });
@@ -731,7 +731,7 @@ export class Colossus extends Enemy {
           if ((hand.dir > 0 && hand.x >= far) || (hand.dir < 0 && hand.x <= far)) {
             hand.state = 'hover';
             world.camera.addShake(4);
-            audio.play('slam', 1.2);
+            audio.play('impactStone', 1.2);
           }
           break;
         }
