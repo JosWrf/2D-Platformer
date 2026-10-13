@@ -319,12 +319,7 @@ function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: n
   const breath = step3(time * 1.6 + ty * 0.35);
   const x = tx * TPX;
   const y = ty * TPX;
-  for (let i = 0; i < CURTAIN.length; i++) {
-    let key = CURTAIN[i];
-    if (breath === 2 && (i === 4 || i === 6)) key = 'dark';
-    ctx.fillStyle = ink[key];
-    px(ctx, x + 3 + i, y, 1, TPX);
-  }
+  ctx.drawImage(wardCurtain(ink, breath), x * ART, y * ART, TPX * ART, TPX * ART);
   // Strands of light running up the curtain, a pixel at a time.
   ctx.fillStyle = ink.mid;
   for (let i = 0; i < 3; i++) {
@@ -335,21 +330,63 @@ function drawWard(ctx: CanvasRenderingContext2D, level: Level, tx: number, ty: n
     const bottom = Math.min(y + TPX, sy + 5);
     if (bottom > top) px(ctx, sx, top, 1, bottom - top);
   }
-  // A rune every third tile, and one where it meets the floor.
-  if (ty % 3 === 1 || floorBelow) {
-    ctx.fillStyle = breath === 2 ? ink.edge : ink.mid;
-    for (const [rx, ry] of RUNE_CELLS) px(ctx, x + 5 + rx, y + 4 + ry, 1, 1);
+  const marks = wardMarks(ink, breath, ty % 3 === 1 || floorBelow, topCap, floorBelow);
+  if (marks) ctx.drawImage(marks, x * ART, y * ART, TPX * ART, TPX * ART);
+}
+
+/**
+ * A tile of standing ward, made once for each look and blitted from then on:
+ * a curtain is a column of two dozen tiles, and two of them stand round every
+ * fight - pixel by pixel, that was hundreds of rectangles a frame.
+ */
+const wardTiles = new Map<string, HTMLCanvasElement | null>();
+
+/** The curtain itself: its ten columns, as the ward breathes. */
+function wardCurtain(ink: WardInk, breath: number): HTMLCanvasElement {
+  const key = `c|${ink.edge}|${breath}`;
+  let tile = wardTiles.get(key);
+  if (!tile) {
+    const { canvas, ctx } = makeCanvas(TPX, TPX);
+    for (let i = 0; i < CURTAIN.length; i++) {
+      let part = CURTAIN[i];
+      if (breath === 2 && (i === 4 || i === 6)) part = 'dark';
+      ctx.fillStyle = ink[part];
+      ctx.fillRect(3 + i, 0, 1, TPX);
+    }
+    tile = canvas;
+    wardTiles.set(key, tile);
   }
-  // Where it ends in the air, a bar of light across it; where it meets the
-  // floor, a foot that spreads a pixel each way.
-  ctx.fillStyle = ink.mid;
-  if (topCap) px(ctx, x + 3, y, 10, 1);
-  ctx.fillStyle = ink.edge;
-  if (floorBelow) {
-    px(ctx, x + 1, y + TPX - 1, 14, 1);
-    px(ctx, x + 2, y + TPX - 2, 1, 1);
-    px(ctx, x + 13, y + TPX - 2, 1, 1);
+  return tile;
+}
+
+/**
+ * What lies over the curtain and its strands: a rune every third tile and one
+ * where it meets the floor; where it ends in the air, a bar of light across
+ * it; where it meets the floor, a foot that spreads a pixel each way. Null
+ * where a tile has none of them.
+ */
+function wardMarks(ink: WardInk, breath: number, rune: boolean, topCap: boolean, foot: boolean): HTMLCanvasElement | null {
+  if (!rune && !topCap && !foot) return null;
+  const key = `m|${ink.edge}|${breath}|${rune ? 1 : 0}${topCap ? 1 : 0}${foot ? 1 : 0}`;
+  let tile = wardTiles.get(key);
+  if (tile === undefined) {
+    const { canvas, ctx } = makeCanvas(TPX, TPX);
+    if (rune) {
+      ctx.fillStyle = breath === 2 ? ink.edge : ink.mid;
+      for (const [rx, ry] of RUNE_CELLS) ctx.fillRect(5 + rx, 4 + ry, 1, 1);
+    }
+    ctx.fillStyle = ink.mid;
+    if (topCap) ctx.fillRect(3, 0, 10, 1);
+    if (foot) {
+      ctx.fillStyle = ink.edge;
+      ctx.fillRect(1, TPX - 1, 14, 1);
+      ctx.fillRect(2, TPX - 2, 1, 1);
+      ctx.fillRect(13, TPX - 2, 1, 1);
+    }
+    tile = canvas;
+    wardTiles.set(key, tile);
   }
+  return tile;
 }
 
 /**

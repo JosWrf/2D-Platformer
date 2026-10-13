@@ -1735,8 +1735,11 @@ Risses, die Bannwand der Ertrunkenen Halle.
 Boden: eine Decke, die nur abdunkelt, was heller ist als die Nacht der Zone, und
 nichts, was schon dunkler gemalt ist. Licht hebt, was es trifft, um eine oder
 zwei Stufen auf seiner Rampe zu seiner Farbe hin – in harten Bändern mit
-gerastertem Saum, ohne weichen Verlauf. Die gemalte Kulisse dahinter wird nie
-abgedunkelt. Pause, Dialog, Tod und der weiße Blitz eines fallenden Bosses sind
+gerastertem Saum, ohne weichen Verlauf. Es trifft nur die Flächen, die der Boden
+ihm zuwendet: höchstens sechs Kunstpixel unter einer offenen Oberseite und drei
+hinter einer offenen Seite; tiefer im Fels bleibt die Nacht der Zone, statt dass
+eine Fackel eine helle Kuppel in den Boden malt. Warmes Licht macht grauen Stein
+rostig statt blasser. Die gemalte Kulisse dahinter wird nie abgedunkelt. Pause, Dialog, Tod und der weiße Blitz eines fallenden Bosses sind
 ebenfalls Tabellen über der Palette statt halbdurchsichtiger Schleier, die der
 Raster in ein graues Schachbrett verwandelt hätte.
 
@@ -1749,13 +1752,18 @@ Gegnerarten sind Zeichen-Sprites mit eigenen Farben in jeder Zone, jede im
 Median mindestens 18 L* heller als das, was um sie herum liegt. Die achtzehn
 Bosse sind wie zu 16-Bit-Zeiten aus Teilen gebaut – Kopf, Kiefer, Rumpf,
 Gliedmaßen, Halssegmente –, jedes in den Winkeln vorgezeichnet, die es annehmen
-kann, und nur noch auf ganze Pixel gesetzt. Die Ebene der Darsteller erhält
+kann, und nur noch auf ganze Pixel gesetzt; jeder ist mindestens 2,2-mal so hoch
+wie der Held oder hat einen Schauplatz um sich – Gallerts Moorhügel,
+Gierschlunds Münzhort, Sonne und Mond hinter Sol und Luna. Die Ebene der Darsteller erhält
 automatisch eine Kontur von einem Pixel; was halbdurchsichtig gemeint ist, wird
 zu einem geordneten Raster statt zu einer weichen Kante.
 
 **Kulissen und Gelände.** Jede Zone hat ihre gemalten Parallaxstreifen und einen
 Schauplatz – Mond, Aquädukt, Theatervorhang mit Schattenspiel, Uhrwerk,
-Rosenfenster, Blutmond, Kristallspitzen. Ferne Wände zeichnen ihre Fugen nur in
+Rosenfenster, Blutmond, Kristallspitzen. Zwischen zwei Zonen geht die eine
+Kulisse in einem geordneten 4×4-Raster in die nächste über, nie aber in einer
+Bossarena, im Thronsaal oder im Schlund: ein Übergang wartet hinter der fernen
+Wand eines Kampfraums (`verify-level` prüft das für alle 17 Räume). Ferne Wände zeichnen ihre Fugen nur in
 den Rampennachbarn ihrer Grundfarbe und mit halber Liniendichte und treten so
 hinter die Spielebene zurück; über den Lavafällen der Glutkammer flimmert die
 Luft um ganze Pixel. Die Kacheln setzen sich selbst zusammen, mit Grasrand,
@@ -1789,7 +1797,24 @@ statt nur hinzusehen:
 
 Runde 0 gab 3 von 10 Punkten, Runde 1 nach Raster, Palette, Held, Gelände und
 Kulissen 6 von 10 – mit einer Liste von dreizehn Fehlern außerhalb der Bosse und
-einem Regelwerk für die Bosse, die alle neu gezeichnet wurden.
+einem Regelwerk für die Bosse, die alle neu gezeichnet wurden. Runde 2 gab 7 von
+10 und fünf Bedingungen für die Abnahme; Runde 3 hat **abgezeichnet, mit 8 von
+10**, jede Bedingung gemessen:
+
+| Bedingung | Runde 2 | Runde 3 |
+|---|---|---|
+| Keine fremde oder zeilenweise überblendete Kulisse in einer Arena | 14 Arenen betroffen | 0 von 5 121 Stichproben, 51 Bilder |
+| Licht nur auf offenen Flächen des Bodens | 79,5 % der angehobenen Pixel tief im Fels | 14,6 % |
+| Warmes Licht auf grauem Stein | Buntheit −2 bis −6 | +18 bis +36 |
+| Jeder Boss mindestens 2,2-mal so hoch wie der Held (oder ein Schauplatz) | 3 zu klein, 4 knapp | alle 18 |
+| Rastersalz in jeder Teilzone | bis 0,248 % | höchstens 0,025 % |
+| Abgeschnittene Gerätepixel bei 125 % und 150 % | 47 von 72 Fenstern | 0 von 72 |
+
+Vor der Freigabe hat er noch einen Fehler verlangt, mit einer Zahl statt einer
+weiteren Runde: Ein Lichtschritt durfte die Rampe einer Farbe für eine ganz andere
+Farbfamilie verlassen – Kerzenlicht machte dunkles Moos zu kaltem Schiefergrau.
+In neun Lichtszenen, beleuchtet gegen dasselbe Bild ohne Lichtschritte gemessen:
+vorher 981 solche Pixel, jetzt keines.
 
 ## Ton und Musik
 
