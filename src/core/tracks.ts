@@ -820,7 +820,7 @@ export const SKETCHES: Record<TrackName, Sketch> = {
 /**
  * The balance of each fight's parts, by channel: measured, every part of
  * every fight rendered alone, and set so that no two fights sound alike - the
- * mean spectrum of each at least 4.8 dB from any other's, where the bare
+ * mean spectrum of each more than 3 dB from any other's, where the bare
  * sketches had pairs within 2.6 - without any lead dropping more than 2 dB.
  */
 const PART_GAIN: Partial<Record<TrackName, number[]>> = {
@@ -833,15 +833,15 @@ const PART_GAIN: Partial<Record<TrackName, number[]>> = {
   bossWeb: [0.5, 1.8, 1.625, 0.605, 0.5],
   bossFire: [0.78, 0.5, 0.5, 1.209, 0.72, 0.527],
   bossTwins: [0.78, 1.435, 1.8, 0.614, 0.578],
-  bossTide: [0.644, 1.18, 0.795, 0.531, 0.743, 0.553],
-  bossGargoyle: [1.8, 0.944, 0.747, 0.5, 1.0],
+  bossTide: [0.776, 1.487, 0.851, 0.716, 0.614, 0.774],
+  bossGargoyle: [1.26, 1.322, 0.523, 0.4, 0.7],
   bossClock: [1.298, 1.532, 0.552, 0.5, 0.5, 1.643],
-  bossBlood: [0.5, 1.8, 0.5, 0.5, 0.5, 0.8],
+  bossBlood: [0.45, 2.0, 0.566, 0.519, 0.4, 0.612],
   bossKnight: [0.85, 0.78, 0.5, 1.331, 1.8, 1.383],
-  bossShadow: [1.293, 1.085, 0.935, 1.272, 0.5, 0.818],
+  bossShadow: [1.678, 1.519, 0.654, 1.781, 0.7, 1.145],
   bossShard: [1.0, 1.18, 1.0, 1.1, 1.0, 0.9],
   bossHydra: [0.986, 0.727, 1.8, 1.362, 0.5, 0.833],
-  bossCrystal: [1.41, 1.8, 0.65, 1.0, 1.464, 0.9],
+  bossCrystal: [1.974, 1.35, 0.455, 0.755, 1.087, 0.737],
 };
 
 function scaled(i: Inst, g: number): Inst {
@@ -880,20 +880,20 @@ export const TRACK_LEVEL: Record<TrackName, number> = {
   bossShard: 0.194,
   bossStone: 0.165,
   bossFire: 0.211,
-  bossTide: 0.201,
-  bossBlood: 0.175,
+  bossTide: 0.162,
+  bossBlood: 0.161,
   bossKnight: 0.168,
   bossHydra: 0.136,
-  bossCrystal: 0.159,
+  bossCrystal: 0.161,
   bossGold: 0.28,
   bossWeb: 0.339,
-  bossShadow: 0.165,
+  bossShadow: 0.118,
   bossBoar: 0.158,
   bossTwins: 0.131,
   bossClock: 0.169,
   bossJester: 0.139,
   bossGloom: 0.118,
-  bossGargoyle: 0.168,
+  bossGargoyle: 0.186,
 };
 
 export const TRACK_NAMES = Object.keys(SKETCHES) as TrackName[];
