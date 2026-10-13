@@ -121,8 +121,10 @@ export interface MelodyPart extends PartBase {
   bars?: (bar: number) => boolean;
   /** The piece's own figure, stated where a section asks for it. */
   motif?: Motif;
-  /** Another piece's figure, quoted where a section asks for it. */
+  /** Another piece's figure, quoted where a section asks for it... */
   quote?: Motif;
+  /** ...on that piece's own instrument, if it has one. */
+  quoteInst?: Inst;
 }
 
 /** A slower line under the melody, on the chord's tones. */
@@ -262,16 +264,16 @@ interface Bar {
   quote: readonly number[];
 }
 
-/** The bar of the motif (or the quote) this bar plays, if a statement of it covers this bar. */
-function motifBar(part: MelodyPart, bar: Bar): readonly (readonly [number, number])[] | null {
-  for (const [m, starts] of [
-    [part.motif, bar.motif],
-    [part.quote, bar.quote],
+/** The bar of the motif (or the quote) this bar plays, and on what, if a statement of it covers this bar. */
+function motifBar(part: MelodyPart, bar: Bar): { notes: readonly (readonly [number, number])[]; inst: Inst } | null {
+  for (const [m, starts, inst] of [
+    [part.motif, bar.motif, part.inst],
+    [part.quote, bar.quote, part.quoteInst ?? part.inst],
   ] as const) {
     if (!m) continue;
     for (const start of starts) {
       const k = bar.inSection - start;
-      if (k >= 0 && k < m.length) return m[k];
+      if (k >= 0 && k < m.length) return { notes: m[k], inst };
     }
   }
   return null;
@@ -297,9 +299,9 @@ function melody(sk: Sketch, part: MelodyPart, bars: Bar[], spb: number, ch: numb
       if (written) {
         // The motif, as written: the line goes on from where it ends.
         let pos = 0;
-        for (const [deg, d] of written) {
+        for (const [deg, d] of written.notes) {
           if (d > 0) {
-            out.push({ step: bar.step + pos, ch, inst: part.inst, midi: noteOf(sk, deg, part.oct), len: d, vel: (pos === 0 ? 1 : 0.92) * (bar.energy === 2 ? 1 : 0.94) });
+            out.push({ step: bar.step + pos, ch, inst: written.inst, midi: noteOf(sk, deg, part.oct), len: d, vel: (pos === 0 ? 1 : 0.92) * (bar.energy === 2 ? 1 : 0.94) });
             prev = Math.max(lo, Math.min(hi, deg));
           }
           pos += Math.abs(d);

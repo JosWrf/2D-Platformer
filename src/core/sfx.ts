@@ -51,6 +51,7 @@ export type Sfx =
   | 'burst'
   | 'fireball'
   | 'screech'
+  | 'tellClock'
   | 'wing'
   | 'crumble'
   | 'beamCharge'
@@ -166,6 +167,12 @@ export interface SfxDef {
   gap?: number;
   /** Rings in the room's echo where the room has one (set pieces always do). */
   echo?: boolean;
+  /**
+   * May take the music's channel when both of its own are busy - without
+   * outranking anything: a cue the player must hear, never at the cost of a
+   * boss's warning.
+   */
+  urgent?: boolean;
 }
 
 /** A note's frequency by name: 'C5', 'F#4', 'Bb3'. */
@@ -203,7 +210,8 @@ export const SFX: Record<Sfx, SfxDef> = {
   // A boss attack picked: two notes, pitched by its place in the list.
   select: {
     cls: 'ui',
-    pri: 5,
+    pri: 6,
+    urgent: true,
     steady: true,
     hits: [
       { s: 'pulseHi', hz: hz('C6'), dur: 0.045, env: E.blip },
@@ -213,7 +221,8 @@ export const SFX: Record<Sfx, SfxDef> = {
   // Not ready yet: a buzz, twice, falling - above the music's bass, where it is heard.
   deny: {
     cls: 'ui',
-    pri: 5,
+    pri: 6,
+    urgent: true,
     steady: true,
     gap: 0.15,
     hits: [
@@ -224,7 +233,8 @@ export const SFX: Record<Sfx, SfxDef> = {
   // Ready again: three notes up a chord.
   ready: {
     cls: 'ui',
-    pri: 5,
+    pri: 6,
+    urgent: true,
     steady: true,
     hits: [
       { s: 'celesta', hz: hz('C6'), dur: 0.05, env: E.ring },
@@ -380,6 +390,19 @@ export const SFX: Record<Sfx, SfxDef> = {
     hits: [
       { s: 'pulse', hz: hz('A4'), to: 2.6, slide: 0.4, dur: 0.42, env: E.swell, vib: [14, 0.45, 0.02] },
       { s: 'noiseHi', r: 0.5, to: 1.4, dur: 0.42, env: E.swell, v: 0.4, ch: 1 },
+    ],
+  },
+  // Tickmar's count-in: the anvil struck and a tone climbing over it, one
+  // beat of it at a time, each a step higher than the last.
+  tellClock: {
+    cls: 'tell',
+    pri: 7,
+    steady: true,
+    echo: true,
+    gap: 0.1,
+    hits: [
+      { s: 'anvil', hz: 1240, dur: 0.3, env: E.ring },
+      { s: 'pulseHi', hz: 2640, to: 1.12, dur: 0.12, env: E.tone, v: 0.6, ch: 1 },
     ],
   },
   // A bat's shriek: a thin tone shaking and falling. (The bosses each have a voice of their own.)

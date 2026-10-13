@@ -168,7 +168,7 @@ export class AudioBus {
     const t0 = now + RELEASE + 0.006;
     let layers = 0;
     for (const h of def.hits) layers = Math.max(layers, (h.ch ?? 0) + 1);
-    const allowed = def.cls === 'set' ? SET_CHANNELS : def.pri >= 7 ? URGENT_CHANNELS : SFX_CHANNELS;
+    const allowed = def.cls === 'set' ? SET_CHANNELS : def.pri >= 7 || def.urgent ? URGENT_CHANNELS : SFX_CHANNELS;
     const assign: number[] = [];
     for (let l = 0; l < layers; l++) {
       let best = -1;

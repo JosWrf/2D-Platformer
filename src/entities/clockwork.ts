@@ -1116,8 +1116,7 @@ export class Clockwork extends Enemy {
     // Tick, tick, tick, tock - and in the bar of a warning, a count-in that
     // climbs to the blow.
     if (this.state === 'tell' && this.inState >= 1 && this.inState <= 3) {
-      audio.play('clank', 1.45 + this.inState * 0.15);
-      audio.play('blip', 2.2 + this.inState * 0.2);
+      audio.play('tellClock', 1.45 + this.inState * 0.15);
     } else {
       audio.play('blip', this.beat === 0 ? 1.4 : 2);
     }

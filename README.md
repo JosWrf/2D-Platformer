@@ -1913,8 +1913,8 @@ Durchlauf mindestens zweimal unverändert wiederkehrt: Gallerts zwei Tropfen und
 ein Hüpfer, Grimmzahns Scharren auf der kleinen Sekunde, Tickmars Spieluhr,
 Vesperons Orgel-Mordent. Das Titelstück trägt das Motiv des Helden — eine
 Quinte hinauf, eine Wendung, zurück zum Grundton —, und Umbra, sein Schatten,
-zitiert es erst, wie es ist, und spielt es dann auf dem Kopf, jede Note
-rückwärts anschwellend; Sol ruft, und Luna antwortet mit demselben Ruf,
+zitiert es erst auf der Laute des Helden und spielt es dann auf dem Kopf, auf
+seiner eigenen Stimme, jede Note rückwärts anschwellend; Sol ruft, und Luna antwortet mit demselben Ruf,
 gespiegelt. Jedes Motiv hebt sich um mindestens 6 dB von der übrigen Musik ab.
 Die Zonenstücke wiederholen sich erst nach 16 bis 24 Takten (42 bis 69
 Sekunden), die Kämpfe nach 16 bis 24 Takten (24 bis 40 Sekunden, Bosse mit einem
@@ -1955,14 +1955,16 @@ gleichzeitig. Eine neue Zone übernimmt die Musik erst, wenn der Held 1,5 s in
 ihr ist — wer an einer Grenze hin- und herläuft, hört nicht zweimal in der
 Sekunde einen Neuanfang —, und wer binnen 10 s zurückkehrt, hört das alte Stück
 ab dem Takt weiter, in dem er es verlassen hat. Alle Zonenstücke sitzen bei
-−24 LUFS, alle Kämpfe bei −22.
+−24 LUFS, die Kämpfe bei −22 — Arachnas bei −23, weil ihre gezupften Stimmen
+einmal im Durchlauf alle auf denselben Taktanfang schlagen.
 
 **Die Effekte** (`src/core/sfx.ts`) sind dasselbe wie die Musik, nur kürzer:
 ein paar Noten auf einem oder zwei Kanälen. Ein Schwerthieb ist ein Stoß
 Schieberegister-Rauschen, der nach unten gleitet, ein Edelstein zwei schnelle
 Rechteck-Noten, ein Boss, der ausholt, ein aufsteigendes Knurren. Vier
 **Ankündigungen** nach Art des Angriffs — Ansturm, Salve, Stampfer, Strahl —
-statt einer für alle 51 Stellen; und die 18 Boss-Angriffe des Helden haben je
+statt einer für alle 51 Stellen, dazu Tickmars Einzählen: ein Amboss und ein
+Ton darüber, mit jedem Schlag eine Stufe höher; und die 18 Boss-Angriffe des Helden haben je
 einen eigenen Klang aus den beiden Instrumenten ihres Bosses: Felswurf ist
 Grimmzahns Taiko und Horn, Goldregen Gierschlunds Münzen und Glockenspiel.
 Ebenso klingt jeder **Treffer eines Bosses** nach ihm selbst — 18 Trefferklänge
@@ -1973,7 +1975,10 @@ gemeinsamen Brüllens: Maskarill lacht auf der Dampforgel die Tonleiter hinab,
 Tickmars Spieluhr läuft ab, Vesperons Fledermäuse kreischen über einem
 Cembalo-Triller, Umbras Brüllen läuft rückwärts. Boss-Klänge spielen in fester
 Tonhöhe, wie die Treiber der Zeit ihre Effekte spielten; so treffen sie die Töne
-ihrer Musik statt ein paar Cent daneben. Jeder
+ihrer Musik statt ein paar Cent daneben. Die Klänge der Angriffsauswahl —
+gewählt, noch nicht bereit, wieder bereit — dürfen sich in vollen Kämpfen den
+Musikkanal leihen, damit sie nicht untergehen, ohne je eine Warnung eines Bosses
+zu verdrängen. Jeder
 Effekt sitzt in einer Lautheitsklasse — Bedienung um −30 LUFS, die Bewegungen
 des Helden um −27, Treffer um −22, Ankündigungen um −19, die großen Momente
 um −15 —, und in fünf Bosskämpfen geht keiner der 1 499 Effekte unter der Musik

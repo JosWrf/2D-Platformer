@@ -19,7 +19,7 @@ import type { SampleId } from './samples';
  *
  * Every fight has a motif of its own, written by hand, that comes back at
  * least twice in each loop; the title's lute states the hero's, and Umbra,
- * the hero's shadow, plays it upside down.
+ * the hero's shadow, quotes it on that lute and then plays it upside down.
  */
 
 export type TrackName =
@@ -731,13 +731,13 @@ export const SKETCHES: Record<TrackName, Sketch> = {
     intro: { chords: [0], energy: 2, rest: ['rev', 'counter'] },
     sections: [
       { chords: [0, 3, 2, 0, 3, 0, 1, 5], energy: 1, quote: [0], motif: [4] },
-      { chords: [3, 1, 0, 6, 3, 0, 1, 5], energy: 2, motif: [4] },
+      { chords: [3, 1, 0, 6, 3, 2, 6, 5], energy: 2, motif: [4] },
     ],
     parts: [
 
-      // The hero's figure from the title, as it is and then upside down, every note
-      // swelling backwards.
-      { name: 'rev', role: 'melody', inst: inst('revLead', 0.7, ENV.drum, { echo: true }), oct: 2, rhythms: [[8, 8], [8, 4, 4], [4, 4, 8], [16]], range: [0, 7], motif: stretch(mirror(HERO, 3.5), 2, 16), quote: stretch(HERO, 2, 16) },
+      // The hero's figure from the title, first on the hero's own lute, then upside
+      // down on the shadow's lead, every note of it swelling backwards.
+      { name: 'rev', role: 'melody', inst: inst('revLead', 0.7, ENV.drum, { echo: true }), oct: 2, rhythms: [[8, 8], [8, 4, 4], [4, 4, 8], [16]], range: [0, 7], motif: stretch(mirror(HERO, 3.5), 2, 16), quote: stretch(HERO, 2, 16), quoteInst: inst('lute', 0.6, ENV.pluck, { echo: true, gate: 1 }) },
       { name: 'counter', role: 'counter', inst: inst('pulse', 0.42, ENV.lead, { echo: true, pan: 0.3 }), oct: 0, per: 4 },
       { name: 'swell', role: 'drums', inst: inst('revCymbal', 0.42, ENV.drum), kit: { r: inst('revCymbal', 0.42, ENV.drum, { pan: -0.3 }) }, patterns: ['................', '................', '........r.......'], phrase: 4, fill: '........r.......' },
       { name: 'bass', role: 'bass', inst: inst('bass', 1, ENV.bass, { gate: 0.92 }), oct: 0, patterns: ['rrrrrrrrrrrrrrrr', 'rrRrrrRrrrRrrrRr', 'rrRrrrRrfrRrfrRr', 'rrrrrrrraaaaaaaa'] },
@@ -840,7 +840,7 @@ const PART_GAIN: Partial<Record<TrackName, number[]>> = {
   bossClock: [1.298, 1.532, 0.552, 0.5, 0.5, 1.643],
   bossBlood: [0.45, 2.0, 0.566, 0.519, 0.4, 0.612],
   bossKnight: [0.64, 1.17, 0.5, 1.331, 1.8, 1.383],
-  bossShadow: [1.678, 1.519, 0.654, 1.781, 0.7, 1.145],
+  bossShadow: [2.1, 1.2, 0.654, 1.781, 0.7, 1.145],
   bossShard: [1.0, 1.18, 1.0, 1.1, 1.0, 0.9],
   bossHydra: [0.986, 0.727, 1.8, 1.362, 0.5, 0.833],
   bossCrystal: [1.974, 1.35, 0.455, 0.755, 1.087, 0.737],
@@ -858,6 +858,7 @@ for (const [name, gains] of Object.entries(PART_GAIN) as [TrackName, number[]][]
       for (const [k, v] of Object.entries(part.kit)) kit[k] = scaled(v, g);
       return { ...part, inst: scaled(part.inst, g), kit };
     }
+    if (part.role === 'melody' && part.quoteInst) return { ...part, inst: scaled(part.inst, g), quoteInst: scaled(part.quoteInst, g) };
     return { ...part, inst: scaled(part.inst, g) };
   });
 }
@@ -865,7 +866,8 @@ for (const [name, gains] of Object.entries(PART_GAIN) as [TrackName, number[]][]
 /**
  * Each piece's level on the music bus, measured so the zones sit at about
  * -24 LUFS and the fights at about -22 (tools/verify-audio.mjs renders and
- * checks them).
+ * checks them) - Arachna's at -23: all of her plucked parts strike together
+ * on one downbeat a loop, and that peak wants the room.
  */
 export const TRACK_LEVEL: Record<TrackName, number> = {
   title: 0.317,
@@ -888,8 +890,8 @@ export const TRACK_LEVEL: Record<TrackName, number> = {
   bossHydra: 0.136,
   bossCrystal: 0.161,
   bossGold: 0.28,
-  bossWeb: 0.339,
-  bossShadow: 0.118,
+  bossWeb: 0.302,
+  bossShadow: 0.121,
   bossBoar: 0.146,
   bossTwins: 0.131,
   bossClock: 0.169,
