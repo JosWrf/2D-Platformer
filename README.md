@@ -304,6 +304,8 @@ offenem Raster nichts tun und die Parade danach wieder ihre eigene Länge hat,
 das Schild im Lauf, den Bereit-Klang, das gehaltene `R`, das doppelte `R` in
 der Pause, die Auswahl in der Pause und die Tastenkappen.
 
+![Q gehalten: alle achtzehn Angriffe als Raster über dem Helden, die Welt in Zeitlupe](screenshots/43-angriffswahl.png)
+
 | | |
 | --- | --- |
 | ![Die Angriffe in der Pause](screenshots/35-angriffe.png) | ![Ignivors Feuerwelle aus den Händen des Helden](screenshots/36-feuerwelle.png) |
