@@ -121,8 +121,8 @@ const ARENA_TITLES: Partial<Record<EnemyKind, string>> = {
 
 /** The fight each boss is fought to. */
 const BOSS_TRACK: Partial<Record<EnemyKind, TrackName>> = {
-  gallert: 'boss',
-  warden: 'boss',
+  gallert: 'bossMire',
+  warden: 'bossShard',
   thalassa: 'bossTide',
   colossus: 'bossStone',
   wyrm: 'bossFire',
@@ -1053,10 +1053,10 @@ export class Game implements World {
     if (this.state === 'victory') return 'crystal';
     if (this.boss && this.boss.engaged && !this.boss.dead) return 'bossKnight';
     const fight = this.arenaFight;
-    if (fight) return BOSS_TRACK[fight.kind] ?? 'boss';
+    if (fight) return BOSS_TRACK[fight.kind] ?? 'bossMire';
     for (const e of this.enemies) {
       if (e.dead || !e.engaged) continue;
-      if (e.kind === 'hydra' || e.kind === 'prismarch') return BOSS_TRACK[e.kind] ?? 'boss';
+      if (e.kind === 'hydra' || e.kind === 'prismarch') return BOSS_TRACK[e.kind] ?? 'bossMire';
     }
     return ZONE_TRACK[zoneAt(this.player.cx).name] ?? null;
   }
@@ -1064,7 +1064,7 @@ export class Game implements World {
   private updateSound(): void {
     audio.setMusic(this.chooseMusic());
     const zone = zoneAt(this.player.cx);
-    audio.setSpace(zone.name === 'drowned' ? 1 : zone.interior ? 0.8 : zone.name === 'rift' ? 0.55 : 0.25);
+    audio.setRoom(this.state === 'title' ? 'forest' : zone.name);
     audio.duck(this.state === 'paused' || this.state === 'dead' || this.dialogue !== null);
     audio.tick();
   }

@@ -818,13 +818,13 @@ export class Twins extends Enemy {
       s.dir = dir;
       s.fromX = s.x;
       s.toX = clamp(s.x + dir * DASH_LENGTH, this.arenaLeft + BODY_W, this.arenaRight - BODY_W);
-      audio.play('tell', 0.8);
+      audio.play('tellLunge', 0.8);
       audio.play('fireball', 0.55);
     } else {
       s.state = 'leapWind';
       s.timer = LEAP_TELL;
       this.mark = { x: clamp(p.cx, this.arenaLeft + 24, this.arenaRight - 24), locked: false };
-      audio.play('tell', 0.7);
+      audio.play('tellSlam', 0.7);
       audio.play('beamCharge', 1.3);
     }
   }
@@ -1042,13 +1042,13 @@ export class Twins extends Enemy {
     if (move === 'throw') {
       l.state = 'throwWind';
       l.timer = THROW_TELL;
-      audio.play('tell', 1.3);
+      audio.play('tellVolley', 1.3);
       audio.play('magic', 1.6);
     } else {
       l.state = 'iceWind';
       l.timer = ICE_TELL;
       this.markIce(world);
-      audio.play('tell', 1.55);
+      audio.play('tellBeam', 1.55);
       audio.play('magic', 1.2);
     }
   }
@@ -1220,7 +1220,7 @@ export class Twins extends Enemy {
           t.facing = this.mid >= t.x ? 1 : -1;
         }
         this.eclipse = 0;
-        audio.play('tell', 0.6);
+        audio.play('tellBeam', 0.6);
         audio.play('beamCharge', 0.75);
         world.camera.addShake(2);
       }
@@ -1372,7 +1372,7 @@ export class Twins extends Enemy {
       if (r.pulse <= CALL_TELL) {
         if (!r.told) {
           r.told = true;
-          audio.play('tell', c.who === 'sol' ? 0.95 : 1.3);
+          audio.play(c.who === 'sol' ? 'tellBeam' : 'tellVolley', c.who === 'sol' ? 0.95 : 1.3);
         }
         c.glow = Math.max(c.glow, 1 - Math.max(0, r.pulse) / CALL_TELL);
       }

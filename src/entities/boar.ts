@@ -683,7 +683,7 @@ export class Boar extends Enemy {
     this.lastMove = 'stomp';
     this.state = 'rear';
     this.timer = REAR;
-    audio.play('tell', 1.1);
+    audio.play('tellSlam', 1.1);
     audio.play('bossRoar', 1.35);
   }
 
@@ -692,7 +692,7 @@ export class Boar extends Enemy {
     this.lastMove = 'rock';
     this.state = 'dig';
     this.timer = DIG;
-    audio.play('tell', 1.3);
+    audio.play('tellVolley', 1.3);
     audio.play('crumble', 1.4);
   }
 
@@ -701,7 +701,7 @@ export class Boar extends Enemy {
     this.state = 'scrape';
     this.timer = SCRAPE;
     this.lastMove = 'charge';
-    audio.play('tell', 0.75);
+    audio.play('tellLunge', 0.75);
     audio.play('crumble', 1.7);
     this.breathe(world, 4);
   }
@@ -734,7 +734,7 @@ export class Boar extends Enemy {
       this.timer = TURN;
       this.turned = false;
       this.vx = -this.facing * 90;
-      audio.play('tell', 0.65);
+      audio.play('tellLunge', 0.65);
       audio.play('bossRoar', 1.05);
       return;
     }

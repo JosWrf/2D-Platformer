@@ -597,7 +597,7 @@ export class Shadow extends Enemy {
       // Too far for the blade: close in, or throw if it can.
       if (b.beamTier > 0 && Math.random() < 0.5) {
         this.setPlan('volley', 2);
-        audio.play('tell', 1.5);
+        audio.play('tellVolley', 1.5);
       } else {
         this.setPlan('stalk', 0.2);
       }
@@ -620,15 +620,15 @@ export class Shadow extends Enemy {
     }
     if (roll < 0.55) {
       this.setPlan('windup', this.phaseTwo ? 0.3 : 0.38);
-      audio.play('tell', 1.7);
+      audio.play('tellLunge', 1.7);
     } else if (roll < 0.8) {
       this.setPlan('draw', DRAW_TIME);
-      audio.play('tell', 1.25);
+      audio.play('tellBeam', 1.25);
     } else if (p.onGround) {
       this.setPlan('leap', 1);
     } else {
       this.setPlan('windup', this.phaseTwo ? 0.3 : 0.38);
-      audio.play('tell', 1.7);
+      audio.play('tellLunge', 1.7);
     }
     void haste;
   }

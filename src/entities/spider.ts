@@ -651,30 +651,30 @@ export class Spider extends Enemy {
         // The longest warning she has, for the move that hurts most.
         this.timer = 0.7;
         this.dropX = player.cx;
-        audio.play('tell', 0.85);
+        audio.play('tellSlam', 0.85);
         break;
       case 'web':
         this.state = 'webWind';
         this.timer = 0.55;
-        audio.play('tell', 1.25);
+        audio.play('tellVolley', 1.25);
         break;
       case 'brood':
         this.state = 'broodWind';
         this.timer = 0.6;
-        audio.play('tell', 0.7);
+        audio.play('tellBeam', 0.7);
         break;
       case 'lash':
         this.state = 'lashWind';
         this.timer = LASH_WIND;
         this.lashDir = player.cx > this.bx ? 1 : -1;
-        audio.play('tell', 1.05);
+        audio.play('tellLunge', 1.05);
         audio.play('screech', 1.5);
         break;
       case 'swing':
         this.state = 'swingWind';
         this.timer = 0.75;
         this.anchorX = clamp((this.arenaLeft + this.arenaRight) / 2 + (player.cx - (this.arenaLeft + this.arenaRight) / 2) * 0.3, this.arenaLeft + 200, this.arenaRight - 200);
-        audio.play('tell', 0.6);
+        audio.play('tellLunge', 0.6);
         audio.play('screech', 1.3);
         break;
     }

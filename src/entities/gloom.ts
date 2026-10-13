@@ -1110,7 +1110,7 @@ export class Gloom extends Enemy {
       this.state = 'swipe';
       this.timer = SWIPE_TELL;
       this.faceTo(p.cx);
-      audio.play('tell', 1.15);
+      audio.play('tellLunge', 1.15);
       audio.play('screech', 1.25);
     } else {
       this.beginEat(world);
@@ -1218,7 +1218,7 @@ export class Gloom extends Enemy {
     this.timer = GRIP_FOLLOW + GRIP_HOLD + GRIP_CLAW + 0.25;
     this.pool = { x: p.cx, surface: this.surfaceUnder(world, p.cx, p.bottom), t: 0, hit: false };
     this.heat = 1;
-    audio.play('tell', 0.72);
+    audio.play('tellSlam', 0.72);
     audio.play('rumble', 1.1);
   }
 
@@ -1262,7 +1262,7 @@ export class Gloom extends Enemy {
     this.timer = RISE;
     this.riseFrom = this.bottom;
     this.heat = 1;
-    audio.play('tell', 0.58);
+    audio.play('tellSlam', 0.58);
     audio.play('bossRoar', 1.5);
   }
 
@@ -1345,7 +1345,7 @@ export class Gloom extends Enemy {
     this.state = 'gather';
     this.timer = ORB_TELL;
     this.heat = 1;
-    audio.play('tell', 1.3);
+    audio.play('tellBeam', 1.3);
     audio.play('beamCharge', 0.55);
   }
 

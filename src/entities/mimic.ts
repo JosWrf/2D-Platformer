@@ -442,7 +442,7 @@ export class Mimic extends Enemy {
             this.chain = false;
             this.state = 'biteWind';
             this.timer = 0.5;
-            audio.play('tell', 1.3);
+            audio.play('tellLunge', 1.3);
           } else {
             this.gape(GAPE.bite);
           }
@@ -651,7 +651,7 @@ export class Mimic extends Enemy {
         this.lastMove = 'snap';
         this.state = 'snapWind';
         this.timer = 0.5;
-        audio.play('tell', 1.6);
+        audio.play('tellSlam', 1.6);
       } else {
         this.lastMove = 'back';
         this.state = 'hop';
@@ -679,23 +679,23 @@ export class Mimic extends Enemy {
         // quarter of a second late still has half a second to get out.
         this.timer = 0.75;
         this.chain = this.phaseTwo;
-        audio.play('tell', 1.1);
+        audio.play('tellLunge', 1.1);
         break;
       case 'spit':
         this.state = 'spitWind';
         this.timer = 0.6;
-        audio.play('tell', 1.4);
+        audio.play('tellVolley', 1.4);
         audio.play('coin', 0.7);
         break;
       case 'tongue':
         this.state = 'tongueWind';
         this.timer = 0.55;
-        audio.play('tell', 0.9);
+        audio.play('tellBeam', 0.9);
         break;
       case 'gulp':
         this.state = 'gulpWind';
         this.timer = 0.6;
-        audio.play('tell', 0.8);
+        audio.play('tellSlam', 0.8);
         break;
     }
   }

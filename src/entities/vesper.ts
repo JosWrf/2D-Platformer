@@ -543,12 +543,12 @@ export class Vesper extends Enemy {
       case 'slash':
         this.state = 'slashWind';
         this.timer = 0.62;
-        audio.play('tell', 1.4);
+        audio.play('tellLunge', 1.4);
         break;
       case 'swarm':
         this.state = 'swarmWind';
         this.timer = 0.7;
-        audio.play('tell', 1.1);
+        audio.play('tellVolley', 1.1);
         break;
       case 'moon':
         this.state = 'moonWind';

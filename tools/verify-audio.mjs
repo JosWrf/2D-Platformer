@@ -58,6 +58,7 @@ await page.waitForFunction(() => !!window.game);
 /* ----------------------------------------------------------- offline levels */
 
 const probe = await page.evaluate(() => window.audio.constructor.probe());
+const palette = await page.evaluate(() => window.audio.constructor.palette());
 const silentSfx = Object.entries(probe.sfx).filter(([, m]) => m.peak < 0.01).map(([n]) => n);
 const clippingSfx = Object.entries(probe.sfx).filter(([, m]) => m.peak >= 1).map(([n]) => n);
 const silentMusic = Object.entries(probe.music).filter(([, m]) => m.rms < 0.004).map(([n]) => n);
@@ -193,11 +194,34 @@ console.log(JSON.stringify(report, null, 2));
 await browser.close();
 server.close();
 
+// The palette's rules (samples.ts, tracks.ts): what a sixteen-bit cartridge could hold.
+const pieces = Object.entries(palette.tracks);
+const bossPieces = pieces.filter(([n]) => n.startsWith('boss'));
+const zonePieces = pieces.filter(([n]) => !n.startsWith('boss'));
+const ownSamples = (list, name) => {
+  const mine = new Set(list.find(([n]) => n === name)[1].samples);
+  for (const [n, info] of list) if (n !== name) for (const s of info.samples) mine.delete(s);
+  return mine.size;
+};
+const fewOwn = [...bossPieces.filter(([n]) => ownSamples(bossPieces, n) < 2), ...zonePieces.filter(([n]) => ownSamples(zonePieces, n) < 1)].map(([n]) => n);
+const crowded = pieces.filter(([, i]) => i.samples.length > 8).map(([n]) => n);
+const shortLoops = pieces
+  .filter(([n, i]) => (n.startsWith('boss') ? i.bars < 12 || i.seconds < 20 : i.bars < 16 || i.seconds < 40))
+  .map(([n, i]) => `${n} ${i.bars} bars ${i.seconds.toFixed(1)} s`);
+
 const bossTracks = Object.entries(fights).map(([k, v]) => [k, v.fightTrack]);
 const tracksOf = (kinds) => bossTracks.filter(([k]) => kinds.includes(k)).map(([, t]) => t);
-const FIGHTS = ['gallert', 'boar', 'mimic', 'jester', 'colossus', 'gloom', 'spider', 'wyrm', 'twins', 'thalassa', 'gargoyle', 'clock', 'vesper', 'shadow', 'knight'];
+const FIGHTS = ['gallert', 'boar', 'mimic', 'jester', 'colossus', 'gloom', 'spider', 'wyrm', 'twins', 'thalassa', 'gargoyle', 'clock', 'vesper', 'shadow', 'warden', 'knight'];
 const distinct = new Set(tracksOf(FIGHTS));
 const checks = [
+  [`at most 64 samples and 512 k frames (${palette.samples}, ${Math.round(palette.frames / 1000)} k)`, palette.samples <= 64 && palette.frames <= 512000],
+  [
+    'one-shots at most 16 000 frames, loops at most 4 096, attacks at most 8 192',
+    palette.longestOneShot <= 16000 && palette.longestLoop <= 4096 && palette.longestAttack <= 8192,
+  ],
+  [`every piece at most 8 samples${crowded.length ? ' - ' + crowded.join(', ') : ''}`, crowded.length === 0],
+  [`every boss piece 2 samples of its own, every zone 1${fewOwn.length ? ' - ' + fewOwn.join(', ') : ''}`, fewOwn.length === 0],
+  [`zones loop after 16 bars and 40 s or more, fights after 12 and 20${shortLoops.length ? ' - ' + shortLoops.join(', ') : ''}`, shortLoops.length === 0],
   ['every effect makes a sound', silentSfx.length === 0],
   ['no effect clips on its own', clippingSfx.length === 0],
   ['every piece of music plays', silentMusic.length === 0],
@@ -213,7 +237,7 @@ const checks = [
         .filter(([k]) => k !== 'knight')
         .every(([, v]) => v.fightTrack && v.fightTrack.startsWith('boss') && v.after && !v.after.startsWith('boss')),
   ],
-  [`${FIGHTS.length} bosses, ${FIGHTS.length} different fights`, distinct.size === FIGHTS.length],
+  [`${FIGHTS.length} bosses, ${FIGHTS.length} different fights (Gallert and the Splitterwächter apart now too)`, distinct.size === FIGHTS.length],
   ['the knight has his own', fights.knight.fightTrack === 'bossKnight'],
   ['N turns the effects off, says so, and the music plays on', soundOff.sfxOff && !soundOff.musicOff && soundOff.track !== null && /EFFEKTE AUS/.test(soundOff.banner)],
   ['M turns the music off and says so, the effects switch untouched', musicOff.musicOff && musicOff.track === null && musicOff.sfxOff && /MUSIK AUS/.test(musicOff.banner)],

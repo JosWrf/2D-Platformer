@@ -1,4 +1,4 @@
-import { audio } from '../core/audio';
+import { audio, type Sfx } from '../core/audio';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, rectsOverlap, sign } from '../core/math';
 import { ART, snap, type PixelSprite } from '../render/pixel';
 import { shadow } from '../render/sprites';
@@ -142,6 +142,8 @@ const MOVES: readonly Move[] = ['pendel', 'gears', 'bell', 'hands'];
 const SIGN_ANGLE: Record<Move, number> = { bell: -Math.PI / 2, gears: 0, pendel: Math.PI / 2, hands: Math.PI };
 /** The pitch each move's warning is sung at, so the four are told apart by ear too. */
 const TELL_PITCH: Record<Move, number> = { pendel: 0.8, gears: 1.15, bell: 0.95, hands: 1.35 };
+/** And which kind of warning each is: the pendulum swings in, the gears fly, the bell comes down, the hands sweep. */
+const TELL_SFX: Record<Move, Sfx> = { pendel: 'tellLunge', gears: 'tellVolley', bell: 'tellSlam', hands: 'tellBeam' };
 /** Ten past ten: where his hands rest when they are not saying anything. */
 const HOUR_REST = (-5 * Math.PI) / 6;
 const MINUTE_REST = -Math.PI / 6;
@@ -1168,7 +1170,7 @@ export class Clockwork extends Enemy {
     this.move = move;
     this.lastMove = move;
     this.facing = p.cx >= this.cx ? 1 : -1;
-    audio.play('tell', TELL_PITCH[move]);
+    audio.play(TELL_SFX[move], TELL_PITCH[move]);
     audio.play('clank', 1.5);
     switch (move) {
       case 'pendel':

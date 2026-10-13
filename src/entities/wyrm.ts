@@ -542,7 +542,7 @@ export class Wyrm extends Enemy {
           if (this.hy <= this.floorY - SPIT_HEAD + 2) {
             this.state = 'spitWind';
             this.timer = 0.72;
-            audio.play('tell', 1.2);
+            audio.play('tellVolley', 1.2);
           }
         } else {
           this.hy = approach(this.hy, this.floorY + DEPTH, 400 * dt);
@@ -608,7 +608,7 @@ export class Wyrm extends Enemy {
           this.state = 'waveWind';
           this.timer = 1.0;
           audio.play('rumble', 0.9);
-          audio.play('tell', 0.5);
+          audio.play('tellSlam', 0.5);
         }
         break;
       }

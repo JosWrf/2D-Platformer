@@ -1222,7 +1222,7 @@ export class Jester extends Enemy {
     this.timer = JUGGLE;
     me.knives = KNIVES;
     me.t = 0;
-    audio.play('tell', 1.35);
+    audio.play('tellVolley', 1.35);
     audio.play('clank', 2.1);
   }
 
@@ -1231,7 +1231,7 @@ export class Jester extends Enemy {
     me.facing = world.player.cx > me.x ? 1 : -1;
     this.state = 'crouch';
     this.timer = CROUCH;
-    audio.play('tell', 1.15);
+    audio.play('tellLunge', 1.15);
   }
 
   beginKneel(world: World): void {
@@ -1239,7 +1239,7 @@ export class Jester extends Enemy {
     me.facing = world.player.cx > me.x ? 1 : -1;
     this.state = 'kneel';
     this.timer = KNEEL;
-    audio.play('tell', 1.0);
+    audio.play('tellSlam', 1.0);
   }
 
   beginConjure(world: World): void {
@@ -1247,7 +1247,7 @@ export class Jester extends Enemy {
     me.facing = world.player.cx > me.x ? 1 : -1;
     this.state = 'conjure';
     this.timer = CONJURE;
-    audio.play('tell', 0.7);
+    audio.play('tellBeam', 0.7);
     audio.play('magic', 0.8);
   }
 
@@ -1573,7 +1573,7 @@ export class Jester extends Enemy {
       f.leg = null;
       f.facing = p.cx > f.x ? 1 : -1;
     }
-    audio.play('tell', 1.25);
+    audio.play('tellVolley', 1.25);
     audio.play('clank', 2.2);
   }
 

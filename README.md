@@ -10,9 +10,9 @@ des Schattenritters Morvain — und darüber hinaus. Siebzehn Bosse stehen auf d
 an keinem führt er vorbei, und jeder lässt ihm etwas da, das er behält.
 
 Kein Spiel-Framework, keine Bild- oder Audiodateien — alles wird zur Laufzeit
-auf ein `<canvas>` gezeichnet, und alles, was man hört, wird per WebAudio
-synthetisiert: gut vierzig Soundeffekte und vierundzwanzig Musikstücke, keines
-davon aufgenommen.
+auf ein `<canvas>` gezeichnet, und alles, was man hört, spielt ein
+nachgebauter Sechzehn-Bit-Soundchip aus 58 errechneten Samples: 66
+Soundeffekte und 28 Musikstücke, keines davon aufgenommen.
 
 [![Titelbild](screenshots/01-titel.png)](https://joswrf.github.io/2D-Platformer/)
 
@@ -1854,62 +1854,119 @@ vorher 981 solche Pixel, jetzt keines.
 
 ## Ton und Musik
 
-Früher waren es siebzehn Piepser aus je einem Oszillator. Jetzt läuft alles über
-ein kleines Mischpult: Effekte und Musik auf eigenen Kanälen, ein gemeinsamer
-Hall, dessen Größe der Zone folgt — eine Höhle hallt, ein Wald nicht, die
-Ertrunkene Halle am meisten —, und ein Kompressor am Ende, damit ein sterbender
-Boss auf einer Parade nicht übersteuert.
+Die Grafik hält sich an die Regeln einer Sechzehn-Bit-Konsole — ein Raster,
+eine Palette, harte Lichtstufen. Der Ton tut das jetzt auch: Er läuft auf
+einem nachgebauten **S-DSP**, dem Sample-Chip der Zeit, mit dessen Regeln
+statt mit allem, was Web Audio kann.
 
-**Effekte** (`src/core/audio.ts`) sind Rezepte aus Schichten: ein Körper, der die
-Tonhöhe gibt, ein Stoß gefiltertes Rauschen für die Textur, und etwas Kurzes
-obendrauf für den Anschlag. Dazu FM-Stimmen für alles, was klingt — die Parade
-ist Klinge auf Klinge und hallt nach, ein Treffer auf Ignivors Panzer klirrt —,
-und eine Verzerrerstufe für Einschläge. Jeder Effekt schwankt um ein paar
-Prozent in der Tonhöhe, damit zehn Hiebe hintereinander nicht zehnmal derselbe
-Hieb sind. Es gibt jetzt 42: Landung, Doppelsprung, Abwehr, das Schließen und
-Öffnen einer Bannwand, Explosion und Zündschnur des Zunders, Wasser, Grollen,
-Durchbruch, Feuerball, Fledermausschrei, Flügelschlag, zerberstender Stein,
-Sonnenstrahl, Magie, Dialogtippen, Tod, Bossfall, Upgrade, Phasenwechsel — und
-vor jedem Bosszug ein eigenes Aufziehen, das „gleich kommt etwas" sagt.
+| Grafik | Ton |
+| --- | --- |
+| 480 × 270 Pixel | **32 000 Hz**, dazu ein fester Tiefpass bei 10 kHz am Ausgang — darüber gibt es nichts |
+| 64 Farben in Rampen | **höchstens 64 Samples** fürs ganze Spiel (jetzt 58, 421 000 Frames), jedes Stück höchstens **8** davon |
+| harte Lichtstufen, keine Transparenz | **keine Filter auf den Stimmen**, nichts wird gesweept, nichts doppelt verstimmt; eine Stimme kann nur Tonhöhe gleiten lassen und vibrieren |
+| Paletten-Überblendung | Lautstärke ändert sich **in Stufen**: Pause und Dialog drücken die Musik um 8 dB, ein Stückwechsel blendet in acht Schritten aus |
+| aus Teilen gebaute Bosse | **acht Kanäle für alles**: sechs für die Musik, zwei für die Effekte; ein Boss, der ausholt, ein Treffer am Helden und die großen Momente dürfen sich einen Musikkanal leihen |
 
-**Musik** (`src/core/music.ts`) ist als Daten geschrieben und wird von einem
-Step-Sequencer gespielt: Tonart, Tempo, ein Akkord pro Takt und ein paar
-Sechzehntel-Muster für Bass, Arpeggio, Melodie und Schlagzeug. Er plant die
-Noten einen Sekundenbruchteil voraus auf der Uhr des AudioContext; ein
-Stückwechsel blendet über, statt abzuschneiden. Jede Zone hat ihr Stück — der
-Wald dorisch, die Ruinen phrygisch, die Höhlen mit Tropfen aus Glocken, die Burg
-im Marschtritt —, und jeder Boss seinen Kampf: Grimmzahn als Stampede aus
-Tomtoms unter einer sturen, stampfenden Linie, Gierschlund hüpfend, mit
-klimpernden Glocken über einem treibenden Bass, Ankhor mit Tomtoms, Arachna mit
-einem langsamen Puls und einem Arpeggio, das sich einen Faden entlangtastet,
-Ignivor schnell in harmonisch Moll, Sol und Luna in zwei Stimmen, einer hellen
-und einer kalten, die einander antworten, Tickmar in seinem eigenen Takt — 120
-Schläge, ein Tick jede halbe Sekunde —, Vesperon mit einem Cembalo-Arpeggio über einer
-Orgel, Umbra noch schneller, mit einer Melodie, die rückwärts läuft, der Ritter,
-die Fünfkronige und der Prismarch jeder mit eigenem. Die Musik
-wechselt, sobald die Bannwand fällt, und gibt nach dem Kampf an die Zone zurück;
-in der Pause, im Dialog und nach einem Tod wird sie gedämpft.
+**Die Palette** (`src/core/samples.ts`) wird beim ersten Tastendruck gebaut, aus
+Rechnung statt aus Aufnahmen: Teiltöne addiert, eine Saite gezupft, ein
+15-Bit-Schieberegister für das Rauschen getaktet. Danach geht jedes Sample
+durch das Kompressionsformat der Konsole (BRR: vier Bit pro Frame, sechzehn
+Frames pro Block mit eigenem Bereich und Prädiktor) — das gibt das leichte
+Korn der Zeit — und durch die Gauß-Glättung des Chips, die jedem Sample seinen
+gedämpften Glanz gibt. Ein Einzelschlag ist höchstens eine halbe Sekunde lang
+(16 000 Frames); was länger klingt, ist ein Anschlag von höchstens 8 192 Frames
+und eine Schleife von höchstens 4 096, in der jeder Teilton eine ganze Zahl von
+Schwingungen macht, damit sie nahtlos wiederholt — die Hüllkurve des Kanals
+macht den Rest.
 
-`M` schaltet die Musik, `N` die Effekte — jedes für sich, die Musik spielt
-ohne die Effekte weiter und umgekehrt; beides bleibt über Sitzungen erhalten.
-Vor dem ersten Tastendruck läuft nichts — so wollen es die Browser.
+**Der Chip** (`src/core/dsp.ts`): Jeder Ton ist ein Sample mit einer Hüllkurve
+aus den Tabellen des Chips (Anschlag aus 13 festen Zeiten, Abfall auf einen
+Pegel in Achteln, langsames Ausklingen) und lässt beim Loslassen in 8 ms los;
+der nächste Ton auf einem Kanal schneidet den letzten ab. Statt eines Halls
+gibt es **ein Echo** — eine Verzögerung in Schritten von 16 ms, eine
+Rückkopplung und ein Filter mit acht Abgriffen —, eingestellt je Zone: im Wald
+ein kurzes, leises Echo von 48 ms, in Höhle, Thronsaal und Schlund 112 ms, im
+Riss 160 ms und leise, in der Ertrunkenen Halle 208 ms mit langem Nachhall.
+Kein Kompressor: Die Pegel lassen den Platz, gemessen in fünf Bosskämpfen
+höchstens −2,4 dBFS.
+
+**Die Musik** (`src/core/compose.ts`, `tracks.ts`, `music.ts`) ist als Skizze
+geschrieben — Tonart, Tempo, ein Akkord pro Takt, Abschnitte, bis zu sechs
+Stimmen — und wird daraus ausgeschrieben: Melodien in Phrasen von vier Takten
+nach Regeln, die ein Songschreiber kennt (ein Rhythmus wird gestellt und
+beantwortet, die schweren Zeiten auf dem Akkord, Schritte dazwischen, eine
+Frage endet offen, die Antwort kommt heim), dazu Gegenstimmen, gebrochene
+Akkorde, Bass und Schlagzeug mit Wirbeln am Phrasenende. Die Zonenstücke
+wiederholen sich erst nach 16 bis 24 Takten (42 bis 69 Sekunden), die Kämpfe
+nach 16 bis 24 Takten (24 bis 40 Sekunden, Bosse mit einem Vorspiel von ein, zwei
+Takten). Jede Zone hat ihr eigenes Instrument und jeder Boss **zwei, die kein
+anderer Kampf benutzt**:
+
+| | eigene Instrumente | | eigene Instrumente |
+| --- | --- | --- | --- |
+| Titel | Laute | Gallert | glucksender Bass, Blasen |
+| Nebelwald | Holzflöte | Grimmzahn | Taiko, tiefes Horn |
+| Ruinen | Chor „ooh“, Gong | Gierschlund | Glockenspiel, Münzen |
+| Dunkelgrotte | Glasmarimba, Tropfen | Maskarill | Dampforgel, Holzblock |
+| Ertrunkene Halle | Harfe, Chor „aah“ | Ankhor | Gong, tiefes Blech |
+| Burg | Blechbläser | Nyktos | tiefer Chor, Bordun |
+| Thronsaal | Pfeifenorgel, Pauke | Arachna | Pizzicato, Koto |
+| Riss | gestrichenes Glas | Ignivor | heiseres Blech, Amboss |
+| Schlund | Holztrommel | Sol und Luna | Flöte gegen Glasharfe |
+| Kristallhort | Celesta | Thalassa | Harfe, Chor |
+| | | Grauwacht | Kirchenglocke, Pauke |
+| | | Tickmar | Uhrticken, Spieluhr |
+| | | Vesperon | Cembalo, Orgel |
+| | | Morvain | Orchesterschlag, Streicher-Ostinato |
+| | | Umbra | rückwärts laufende Melodie, rückwärts gespieltes Becken |
+| | | Splitterwächter | Kristallschlägel, Glas |
+| | | Fünfkronige | Hörner, Kriegstrommel |
+| | | Prismarch | Glasglocke, Celesta |
+
+Gallert und der Splitterwächter teilen sich kein Stück mehr. Damit keine zwei
+Kämpfe gleich klingen, wurde jede Stimme jedes Kampfes einzeln gerendert und die
+Balance so gesetzt, dass die mittleren Spektren aller 18 Kämpfe mindestens
+4,8 dB auseinanderliegen (vorher lagen 15 von 17 Kämpfen innerhalb von 3 dB von
+einem anderen). Ein Stückwechsel ist der der Zeit: das alte in acht Stufen über
+0,6 s aus, dann beginnt das neue — zwei Stücke klingen nie gleichzeitig. Alle
+Zonenstücke sitzen bei −24 LUFS, alle Kämpfe bei −22.
+
+**Die Effekte** (`src/core/sfx.ts`) sind dasselbe wie die Musik, nur kürzer:
+ein paar Noten auf einem oder zwei Kanälen. Ein Schwerthieb ist ein Stoß
+Schieberegister-Rauschen, der nach unten gleitet, ein Edelstein zwei schnelle
+Rechteck-Noten, ein Boss, der ausholt, ein aufsteigendes Knurren. Vier
+**Ankündigungen** nach Art des Angriffs — Ansturm, Salve, Stampfer, Strahl —
+statt einer für alle 51 Stellen; und die 18 Boss-Angriffe des Helden haben je
+einen eigenen Klang aus den beiden Instrumenten ihres Bosses: Felswurf ist
+Grimmzahns Taiko und Horn, Goldregen Gierschlunds Münzen und Glockenspiel. Jeder
+Effekt sitzt in einer Lautheitsklasse — Bedienung um −30 LUFS, die Bewegungen
+des Helden um −27, Treffer um −22, Ankündigungen um −19, die großen Momente
+um −15 —, und in fünf Bosskämpfen geht keiner der 1 458 Effekte unter der Musik
+unter. Im Wald klingt ein Effekt im Mittel nach 0,33 s aus, und nur die vier
+großen Momente (Sieg, Bossfall, Tod, Upgrade) länger als eine Sekunde.
+
+`M` schaltet die Musik, `N` die Effekte — jedes für sich, samt seinem Anteil am
+Echo; die Musik ist nach `M` binnen einer halben Sekunde um mehr als 40 dB
+leiser. Beides bleibt über Sitzungen erhalten. Vor dem ersten Tastendruck läuft
+nichts — so wollen es die Browser.
 
 `verify:audio` hört so, wie ein Testlauf hören kann: Es rendert jeden Effekt und
-jedes Stück offline und misst Spitze und Mittel. Ein Rezept, das nichts baut,
-käme als Null heraus, eines, das übersteuert, über eins. Danach spielt es mit
-echten Tastendrücken: Titelmusik, Übergabe an den Wald, in jeder Bossarena der
-richtige Kampf und danach wieder die Zone, fünfzehn Bosse mit fünfzehn
-verschiedenen Stücken (Gallert und der Splitterwächter teilen sich das kurze
-Lehrstück), `M`
-und `N` samt Neuladen.
+jedes Stück offline und misst Spitze und Mittel, prüft die Regeln der Palette
+(höchstens 64 Samples und 512 000 Frames, Längen, höchstens 8 je Stück, zwei
+eigene je Kampf, eines je Zone, Schleifenlängen) und spielt dann mit echten
+Tastendrücken: Titelmusik, Übergabe an den Wald, in jeder Bossarena der richtige
+Kampf und danach wieder die Zone, sechzehn Bosse mit sechzehn verschiedenen
+Stücken, `M` und `N` samt Neuladen.
 
 ## Aufbau des Codes
 
 ```
 src/
   core/      Spielschleife (fester Zeitschritt), Eingabe, Kamera, Mathe,
-             WebAudio: synth.ts (Bausteine), audio.ts (Effekte, Mischpult),
-             music.ts (Stücke und Sequencer)
+             Ton: samples.ts (die Sample-Palette), dsp.ts (der Soundchip:
+             acht Kanäle, Hüllkurven, Echo), sfx.ts (Effekte), compose.ts und
+             tracks.ts (die Stücke als Skizzen), music.ts (Sequencer),
+             audio.ts (Schaltzentrale, Schalter M und N)
   world/     Level-ASCII, Parser, Kachel-Kollision, World-Interface
   entities/  Physikkörper, Spieler, Gegner, Boss, Projektile, Pickups, Plattformen;
              boar.ts, mimic.ts, jester.ts, colossus.ts, gloom.ts, spider.ts,

@@ -1015,7 +1015,7 @@ export class Gargoyle extends Enemy {
     this.state = 'clawWind';
     this.timer = CLAW_TELL;
     this.hitThisMove = true;
-    audio.play('tell', 1.3);
+    audio.play('tellLunge', 1.3);
     audio.play('wing', 1.3);
   }
 
@@ -1024,7 +1024,7 @@ export class Gargoyle extends Enemy {
     this.timer = this.phaseTwo ? DIVE_TELL_2 : DIVE_TELL;
     this.facing = world.player.cx > this.cx ? 1 : -1;
     this.hitThisMove = true;
-    audio.play('tell', 0.8);
+    audio.play('tellSlam', 0.8);
     audio.play('screech', 0.85);
     audio.play('wing', 0.75);
     this.kickDust(world, 6);
@@ -1082,7 +1082,7 @@ export class Gargoyle extends Enemy {
     this.state = 'glideWind';
     this.timer = GLIDE_TELL;
     this.hitThisMove = true;
-    audio.play('tell', 1.05);
+    audio.play('tellLunge', 1.05);
     audio.play('wing', 0.9);
   }
 
@@ -1164,7 +1164,7 @@ export class Gargoyle extends Enemy {
   private beginGurgle(): void {
     this.state = 'gurgle';
     this.timer = GURGLE;
-    audio.play('tell', 0.9);
+    audio.play('tellBeam', 0.9);
     audio.play('splash', 0.5);
   }
 

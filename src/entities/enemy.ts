@@ -1,4 +1,4 @@
-import { audio } from '../core/audio';
+import { audio, type Sfx } from '../core/audio';
 import { Rect, approach, clamp, rand, rectsOverlap, sign } from '../core/math';
 import { PALETTE, RAMP } from '../render/palette';
 import { ring as pixelRing, rect, sector } from '../render/pen';
@@ -1553,7 +1553,7 @@ export class Warden extends Enemy {
             this.state = 'volleyWind';
             this.timer = 0.5;
           }
-          audio.play('tell', 0.8);
+          audio.play(this.state === 'slamWind' ? 'tellSlam' : this.state === 'lungeWind' ? 'tellLunge' : 'tellVolley', 0.8);
         }
         break;
       }
@@ -1859,7 +1859,7 @@ export class Gallert extends Enemy {
           this.timer = move === 'hopWind' ? 0.7 : 0.6;
           this.core = 1;
           this.hitThisMove = false;
-          audio.play('tell', 0.6);
+          audio.play(move === 'hopWind' ? 'tellSlam' : move === 'spitWind' ? 'tellVolley' : 'tellBeam', 0.6);
         }
         break;
       }
@@ -2330,7 +2330,7 @@ export class Thalassa extends Enemy {
                   : 'undertow';
           // The warning itself never shortens - only the resting does.
           this.timer = 0.55;
-          audio.play('tell', 0.9);
+          audio.play(this.tell === 'surge' ? 'tellLunge' : this.tell === 'anchor' ? 'tellSlam' : 'tellBeam', 0.9);
         }
         break;
       }
@@ -2843,7 +2843,7 @@ export class Prismarch extends Enemy {
           this.lastMove = move;
           this.state = move as typeof this.state;
           this.timer = move === 'rainWind' ? 0.6 * quick : 0.55 * quick;
-          audio.play('tell', 1.3);
+          audio.play(move === 'chargeWind' ? 'tellLunge' : 'tellVolley', 1.3);
         }
         break;
       }
@@ -2989,6 +2989,8 @@ const REGROW = 9.5;
 const POOL_LIFE = 4.5;
 
 type NeckKind = 'venom' | 'flame' | 'storm' | 'stone' | 'crown';
+/** Each neck's warning by what it is about to do: spit, breathe, strike down, bite, call the storm. */
+const NECK_TELL: Record<NeckKind, Sfx> = { venom: 'tellVolley', flame: 'tellBeam', storm: 'tellBeam', stone: 'tellSlam', crown: 'tellLunge' };
 type NeckState = 'head' | 'stump' | 'sealed';
 
 /**
@@ -3443,7 +3445,7 @@ export class Hydra extends Enemy {
           this.hitThisMove = false;
           // The longest warnings belong to the biggest thing in the game.
           this.timer = (this.necks[this.acting].kind === 'storm' ? 0.75 : 0.65) * haste;
-          audio.play('tell', 0.7);
+          audio.play(NECK_TELL[this.necks[this.acting].kind], 0.7);
         }
         break;
 

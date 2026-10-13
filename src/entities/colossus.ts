@@ -512,14 +512,14 @@ export class Colossus extends Enemy {
         const hand = hands.find((h) => h.side === toward) ?? hands[0];
         this.lift(hand, 0);
         this.state = 'slam';
-        audio.play('tell', 0.7);
+        audio.play('tellSlam', 0.7);
         break;
       }
       case 'double':
         this.lift(hands[0], 0);
         this.lift(hands[1], 0.5 * this.haste);
         this.state = 'slam';
-        audio.play('tell', 0.65);
+        audio.play('tellSlam', 0.65);
         break;
       case 'sweep': {
         // From the far side, so it crosses his chest before it reaches the
@@ -529,7 +529,7 @@ export class Colossus extends Enemy {
         hand.hit = false;
         hand.dir = -hand.side;
         this.state = 'sweep';
-        audio.play('tell', 0.55);
+        audio.play('tellLunge', 0.55);
         break;
       }
       case 'gaze':

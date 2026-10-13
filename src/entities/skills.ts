@@ -21,7 +21,7 @@
  * it is the strongest adds about a quarter to what the blade does on its own -
  * measured, see verify:skills.
  */
-import { audio } from '../core/audio';
+import { audio, type Sfx } from '../core/audio';
 import { type Rect, TAU, clamp, rand, sign } from '../core/math';
 import { line as pixelLine, rect as pixelRect, ring as pixelRing } from '../render/pen';
 import { ART } from '../render/pixel';
@@ -492,7 +492,6 @@ class SlamHop extends SkillEffect {
       p.vy = 780;
       this.airborne = true;
     }
-    audio.play('jump', 0.7);
     world.particles.burst(p.cx, p.bottom, 12, 'rgba(143,224,138,0.85)', { speed: 130, gravity: 300, angle: -Math.PI / 2, spread: 2.2 });
   }
 
@@ -701,7 +700,6 @@ class SunColumn extends SkillEffect {
     this.target = t?.thing ?? null;
     this.x = t ? t.x : ahead(world, 130);
     this.floor = floorUnder(world, this.x, (t ? t.bottom : p.bottom) - 12);
-    audio.play('beamCharge', 1.2);
   }
 
   private get burning(): boolean {
@@ -804,7 +802,6 @@ class FireWave extends SkillEffect {
     this.dir = p.facing;
     this.from = p.cx + this.dir * 34;
     this.floor = floorUnder(world, p.cx, p.bottom - 6);
-    audio.play('burst', 0.8);
     world.camera.addShake(3);
   }
 
@@ -887,7 +884,6 @@ class Springtide extends SkillEffect {
     }
     if (spots.length === 0) spots.push({ x: ahead(world, 120), from: p.bottom - 12 });
     for (const s of spots) this.spouts.push({ x: s.x, floor: floorUnder(world, s.x, s.from), t: 0 });
-    audio.play('splash', 0.9);
   }
 
   private power(s: Spout): number {
@@ -1019,7 +1015,6 @@ class ShadeStep extends SkillEffect {
     this.fromX = p.cx;
     this.fromY = p.bottom;
     p.invuln = Math.max(p.invuln, 0.5);
-    audio.play('magic', 0.7);
     world.particles.burst(p.cx, p.bottom - 4, 14, 'rgba(120,90,200,0.9)', { speed: 90, gravity: -40, shape: 'circle' });
   }
 
@@ -1062,7 +1057,7 @@ class ShadeStep extends SkillEffect {
     this.toX = p.cx;
     this.toY = p.bottom;
     p.strikeFromShadow();
-    audio.play('phase', 1.5);
+    audio.play('chargeRelease', 1.2);
     world.particles.burst(p.cx, p.bottom - 10, 20, 'rgba(201,184,255,0.9)', { speed: 160, gravity: -30, shape: 'spark' });
   }
 
@@ -1097,8 +1092,6 @@ class CrystalCharge extends SkillEffect {
     const p = world.player;
     p.dashTimer = 0.3;
     p.vy = 0;
-    audio.play('dash', 0.8);
-    audio.play('deflect', 1.2);
   }
 
   update(dt: number, world: World): void {
@@ -1144,7 +1137,6 @@ class CrystalRain extends SkillEffect {
     const t = nearest(world, 360);
     this.center = t ? t.x : ahead(world, 140);
     this.top = (t ? t.y : p.cy) - 300;
-    audio.play('magic', 1.4);
   }
 
   update(dt: number, world: World): void {
@@ -1286,7 +1278,7 @@ class MoonCrescent extends SkillEffect {
       this.vx -= this.dir * 820 * dt;
       if (sign(this.vx) !== this.dir || solid(world, this.x + this.dir * 14, this.y)) {
         this.back = true;
-        audio.play('swing', 1.5);
+        audio.play('magic', 1.3);
       }
     } else {
       // Home to the hand, wherever it has got to.
@@ -1341,8 +1333,6 @@ class Pendulum extends SkillEffect {
     this.dir = p.facing;
     this.px = p.cx + this.dir * 70;
     this.py = p.bottom - 150;
-    audio.play('swing', 0.55);
-    audio.play('clank', 0.8);
   }
 
   private get angle(): number {
@@ -1420,8 +1410,6 @@ class Phantom extends SkillEffect {
     this.x = p.cx;
     this.to = ahead(world, 210);
     this.floor = p.bottom;
-    audio.play('dash', 1.25);
-    audio.play('magic', 1.5);
   }
 
   update(dt: number, world: World): void {
@@ -1468,8 +1456,6 @@ class Wisps extends SkillEffect {
   constructor(world: World) {
     super();
     this.place(world.player.cx, world.player.cy);
-    audio.play('magic', 1.7);
-    audio.play('beamCharge', 1.8);
   }
 
   private place(cx: number, cy: number): void {
@@ -1532,7 +1518,6 @@ class StoneFall extends SkillEffect {
     this.x = t ? t.x : ahead(world, 140);
     this.floor = floorUnder(world, this.x, (t ? t.bottom : p.bottom) - 12);
     this.y = this.floor - StoneFall.DROP;
-    audio.play('rumble', 1.4);
   }
 
   update(dt: number, world: World): void {
@@ -1609,22 +1594,45 @@ function fan(
   return out;
 }
 
-/** The picked attack, cast: whatever it puts into the world. */
+/**
+ * Each attack's own sound as it is cast: made of its boss's two instruments,
+ * so the ear knows Felswurf for Grimmzahn's before the eye sees the rock.
+ */
+const CAST_SOUND: Record<SkillId, Sfx> = {
+  klatschsprung: 'castKlatschsprung',
+  felswurf: 'castFelswurf',
+  goldregen: 'castGoldregen',
+  trugbild: 'castTrugbild',
+  sonnenblick: 'castSonnenblick',
+  irrlichter: 'castIrrlichter',
+  netzschuss: 'castNetzschuss',
+  feuerwelle: 'castFeuerwelle',
+  mondsichel: 'castMondsichel',
+  springflut: 'castSpringflut',
+  steinsturz: 'castSteinsturz',
+  pendelschlag: 'castPendelschlag',
+  blutsicheln: 'castBlutsicheln',
+  schattenwelle: 'castSchattenwelle',
+  schattensprung: 'castSchattensprung',
+  splitteransturm: 'castSplitteransturm',
+  kronenfeuer: 'castKronenfeuer',
+  splitterregen: 'castSplitterregen',
+};
+
+/** The picked attack, cast: its sound, and whatever it puts into the world. */
 export function castSkill(id: SkillId, world: World): SkillEffect[] {
   const p = world.player;
+  audio.play(CAST_SOUND[id]);
   switch (id) {
     case 'klatschsprung':
       return [new SlamHop(world)];
     case 'felswurf':
-      audio.play('jump', 0.5);
       return [new Boulder(p.cx + p.facing * 12, p.cy - 10, p.facing * 300, -380)];
     case 'mondsichel':
-      audio.play('swing', 1.2);
       return [new MoonCrescent(p.cx + p.facing * 12, p.cy - 4, p.facing)];
     case 'pendelschlag':
       return [new Pendulum(world)];
     case 'goldregen':
-      audio.play('coin', 0.8);
       return fan(world, 4, 0.36, 0.2, 430, (x, y, vx, vy) => new Shot(x, y, vx, vy, 500, 'coin', '#ffd866', 1, 1.2));
     case 'trugbild':
       return [new Phantom(world)];
@@ -1635,18 +1643,15 @@ export function castSkill(id: SkillId, world: World): SkillEffect[] {
     case 'steinsturz':
       return [new StoneFall(world)];
     case 'netzschuss':
-      audio.play('shoot', 1.3);
       return fan(world, 3, 0.36, 0.12, 400, (x, y, vx, vy) => new Shot(x, y, vx, vy, 260, 'web', '#e8f0f8', 1, 1.1));
     case 'feuerwelle':
       return [new FireWave(world)];
     case 'springflut':
       return [new Springtide(world)];
     case 'blutsicheln':
-      audio.play('swing', 0.7);
       return fan(world, 3, 0.36, 0.12, 400, (x, y, vx, vy) => new Shot(x, y, vx, vy, 0, 'blood', '#ff5470', 1, 0.8, true));
     case 'schattenwelle': {
       const floor = floorUnder(world, p.cx, p.bottom - 6);
-      audio.play('slam', 0.9);
       world.camera.addShake(4);
       world.particles.burst(p.cx, floor - 4, 18, 'rgba(154,134,232,0.9)', { speed: 180, gravity: 300, angle: -Math.PI / 2, spread: 2.4 });
       return [new FloorWave(p.cx + p.facing * 16, floor, p.facing), new FloorWave(p.cx - p.facing * 16, floor, -p.facing)];
@@ -1656,7 +1661,6 @@ export function castSkill(id: SkillId, world: World): SkillEffect[] {
     case 'splitteransturm':
       return [new CrystalCharge(world)];
     case 'kronenfeuer':
-      audio.play('fireball', 0.9);
       return fan(world, 5, 0.8, 0.75, 400, (x, y, vx, vy, i) => new Shot(x, y, vx, vy, 900, 'crown', CROWN_COLORS[i], 1, 1.6));
     case 'splitterregen':
       return [new CrystalRain(world)];

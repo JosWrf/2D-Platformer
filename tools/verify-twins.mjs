@@ -195,7 +195,7 @@ async function stage() {
         if (was !== null && s !== was) {
           if (WINDS[s] !== undefined) {
             windAt[t.who] = h.frame;
-            if (h.sounds.some((q) => q.frame === h.frame && q.name === 'tell')) h.obs.heard++;
+            if (h.sounds.some((q) => q.frame === h.frame && q.name.startsWith('tell'))) h.obs.heard++;
             else h.obs.silent.push(s);
             if (lastThreat >= 0 && windowFrame !== h.frame) h.obs.windows.push(+((h.frame - lastThreat) / 60).toFixed(2));
             windowFrame = h.frame;
