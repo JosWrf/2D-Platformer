@@ -39,13 +39,13 @@ Datei genügt, und weitergeben lässt sie sich als einzelner Anhang.
 | `E` / `I` | Parade — fängt einen Schlag ab, wenn sie im richtigen Moment kommt |
 | `Shift` / `L` | Ausweichrolle, während der Rolle unverwundbar |
 | `F` / `U` / `C` | Boss-Angriff einsetzen — der, den man gerade gewählt hat (siehe [Und einen seiner Angriffe](#und-einen-seiner-angriffe)) |
-| `Q` / `O` / `V` | Boss-Angriff wechseln — reihum durch alle, die man schon hat |
+| `Q` / `O` / `V` | Boss-Angriff wechseln — **antippen**: der nächste; **halten**: die Auswahl über dem Helden, mit den Richtungstasten wählen, loslassen nimmt (siehe [Einen Angriff wählen](#einen-angriff-wählen)) |
 | `↓` + Sprung | Durch eine Holzplattform nach unten fallen (auf festem Boden springt er normal) |
-| `P` / `Esc` | Pause |
-| `R` | Neustart |
+| `P` / `Esc` | Pause — auf der Seite *Angriffe* wählt `↑` `↓` einen Angriff |
+| `R` halten | Neustart nach 0,8 s, mit einem Balken über dem Helden; in der Pause, nach dem Fall und am Ende genügt ein Tippen |
 | `B` | Bildwackeln aus/an |
 | `M` | Musik aus/an |
-| `N` | Ton aus/an (alles) |
+| `N` | Effekte aus/an — die Musik spielt weiter |
 | `H` | Im Titelbild: alle Tasten auf einer eigenen Seite |
 
 Die Belegung wird mit **echten Tastendrücken** geprüft, nicht über die
@@ -108,7 +108,8 @@ bleibt zu, solange sie lebt, und sagt das auch, statt den Helden zu ignorieren.
 Wen das Bildwackeln bei Treffern stört, schaltet es mit `B` ab — jederzeit, auch
 im Titelbild und in der Pause. Das beruhigt zugleich das Sporenfeld in allen
 Zonen. Die Einstellung bleibt über Sitzungen erhalten, genau wie `M` (Musik) und
-`N` (der ganze Ton); das Pausenbild zeigt, was gerade an ist.
+`N` (die Effekte), jede für sich; das Pausenbild und das Titelbild zeigen, was
+gerade an ist.
 
 Die Zonengrenzen stehen nicht mehr als Zahlen in der Palette, sondern werden aus
 den Abschnitten abgeleitet. Vorher hätte jeder eingeschobene Abschnitt jede Zone
@@ -223,8 +224,8 @@ Die Relikte arbeiten von selbst. Dazu bringt jetzt **jeder Boss dem Helden
 einen seiner eigenen Angriffe bei** — mit demselben Fall, im selben Banner:
 Unter dem Namen des Relikts steht *NEUER ANGRIFF*, und der neue ist sofort der
 gewählte. Eingesetzt wird immer nur einer, der gewählte, mit **F** (oder `U`,
-`C`); **Q** (oder `O`, `V`) wählt reihum den nächsten, in der Reihenfolge des
-Weges. Jeder hat seine eigene Abklingzeit.
+`C`); **Q** (oder `O`, `V`) wechselt ihn (siehe [Einen Angriff wählen](#einen-angriff-wählen)).
+Jeder hat seine eigene Abklingzeit.
 
 | Boss | Angriff | was er tut | Abklingzeit |
 | --- | --- | --- | --- |
@@ -256,8 +257,43 @@ demselben Grund geht auch der Schattensprung nicht durch Wände.
 
 Unten links zeigt ein Feld den gewählten Angriff: sein Zeichen, das sich beim
 Abklingen von unten wieder füllt, „bereit“ oder die Sekunden, die noch fehlen,
-und für jeden gelernten einen Punkt hinter dem Q. Die Pause hat eine zweite
-Seite (`←` `→`) mit allen gelernten Angriffen und dem, was sie tun.
+und für jeden gelernten ein kleines Feld hinter der Wechseltaste — in seiner
+Farbe, wenn er bereit ist, dunkel und von unten nachfüllend, solange er abklingt.
+Die Pause hat eine zweite Seite (`←` `→`) mit allen gelernten Angriffen, was
+sie tun und wie bereit sie sind; dort wählt `↑` `↓` einen aus.
+
+#### Einen Angriff wählen
+
+Achtzehn Angriffe reihum durchzuschalten hieß bis zu siebzehn Tastendrücke, und
+der Name über dem Kopf blieb an der Stelle stehen, an der man getippt hatte.
+Jetzt:
+
+- **Antippen** der Wechseltaste nimmt wie bisher den nächsten.
+- **Halten** (ab 0,18 s) öffnet über dem Helden ein Raster aller gelernten
+  Angriffe, jedes Zeichen mit seiner Abklingzeit; die Welt läuft so lange mit
+  0,3facher Geschwindigkeit weiter. `←` `→` (oder `A` `D`) gehen die Liste
+  entlang, `↑` `↓` (`W` `S`) eine Reihe hoch oder runter, an den Enden jeweils
+  herum; Loslassen nimmt den Angriff unter dem goldenen Rahmen. Das Raster wird
+  so gelegt, dass die zwei entferntesten Angriffe möglichst wenige Schritte
+  auseinanderliegen: bei achtzehn 6 × 3, höchstens fünf Eingaben (das Halten
+  mitgezählt), im Mittel 3,2; bei sechs 3 × 2, höchstens drei. Den einen zurück,
+  wenn man einmal zu weit getippt hat: halten und `←`, zwei Eingaben.
+- Jeder Wechsel zeigt sich **am Helden**, nicht in der Ecke: ein Schild über
+  seinem Kopf mit dem gewählten Zeichen zwischen dem davor und dem danach, dem
+  Namen und „bereit“ oder den Sekunden, die fehlen — eines, wie schnell man
+  auch tippt, 1,3 s ganz zu sehen und dem Helden folgend, auch im Lauf und in
+  der Rolle.
+- Wird der gewählte Angriff wieder bereit, klingt ein kurzer Dreiklang, und sein
+  Zeichen unten links leuchtet 0,3 s weiß auf. Wer ihn zu früh drückt, hört ein
+  tiefes Brummen statt des alten, kaum hörbaren Klicks.
+- Die Tastenkappen im Bild folgen den Tasten, mit denen man spielt: wer `C` und
+  `V` drückt, sieht `C` und `V`, wer mit den Pfeilen läuft, sieht Pfeile.
+- `R` sitzt zwischen Parade und Boss-Angriff. Ein Tippen darauf löschte bisher
+  den ganzen Lauf; jetzt muss es im Spiel 0,8 s gehalten werden.
+
+`verify:picker` spielt das mit echten Eingaben durch: alle 306 Paare aus
+achtzehn Angriffen, die Zeitlupe, das Schild im Lauf, den Bereit-Klang, das
+gehaltene `R`, die Auswahl in der Pause und die Tastenkappen.
 
 | | |
 | --- | --- |
@@ -1854,8 +1890,9 @@ die Fünfkronige und der Prismarch jeder mit eigenem. Die Musik
 wechselt, sobald die Bannwand fällt, und gibt nach dem Kampf an die Zone zurück;
 in der Pause, im Dialog und nach einem Tod wird sie gedämpft.
 
-`M` schaltet die Musik, `N` den ganzen Ton; beides bleibt über Sitzungen
-erhalten. Vor dem ersten Tastendruck läuft nichts — so wollen es die Browser.
+`M` schaltet die Musik, `N` die Effekte — jedes für sich, die Musik spielt
+ohne die Effekte weiter und umgekehrt; beides bleibt über Sitzungen erhalten.
+Vor dem ersten Tastendruck läuft nichts — so wollen es die Browser.
 
 `verify:audio` hört so, wie ein Testlauf hören kann: Es rendert jeden Effekt und
 jedes Stück offline und misst Spitze und Mittel. Ein Rezept, das nichts baut,
@@ -1940,6 +1977,7 @@ npm run verify:chain   # die ganze Belohnungskette in einem Lauf, ohne Neustart
 npm run verify:motion  # schwingt das Bild bei Treffern, oder rüttelt es?
 npm run verify:relics  # gibt jeder Boss sein Relikt her, und tut jedes, was es sagt?
 npm run verify:skills  # bringt jeder Boss seinen Angriff bei, und trifft jeder, wie er soll?
+npm run verify:picker  # Angriff wählen: Tippen, Halten, Zeitlupe, alle 306 Paare, R halten, Pause
 npm run verify:boar    # Grimmzahn: Ansturm gegen die Wand, benommen doppelt, Sprung, Parade, Ende
 npm run verify:twins   # Sol und Luna: einer ruft den anderen zurück, und nie greifen beide an
 npm run verify:clock   # Tickmar: alles im Takt, Aufziehen, Zahnrad zurück, Pendel klemmt

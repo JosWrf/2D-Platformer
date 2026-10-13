@@ -45,7 +45,10 @@ export type Sfx =
   | 'bossDown'
   | 'upgrade'
   | 'deflect'
-  | 'phase';
+  | 'phase'
+  | 'select'
+  | 'deny'
+  | 'ready';
 
 type Recipe = (s: Synth, o: Outlet, t: number, p: number) => void;
 
@@ -270,6 +273,22 @@ const RECIPES: Record<Sfx, Recipe> = {
   blip: (s, o, t, p) => {
     s.tone(o, t, { type: 'square', f: 880 * p, dur: 0.035, gain: 0.025, filter: { type: 'lowpass', f: 2400 } });
   },
+  // A boss attack picked: two quick notes, pitched by where it stands in the list.
+  select: (s, o, t, p) => {
+    s.tone(o, t, { type: 'square', f: 1046.5 * p, dur: 0.045, gain: 0.09 });
+    s.tone(o, t, { type: 'square', f: 1568 * p, dur: 0.07, gain: 0.08, at: 0.045 });
+  },
+  // Not ready yet: a short low buzz, falling.
+  deny: (s, o, t) => {
+    s.tone(o, t, { type: 'square', f: 233, f2: 196, dur: 0.12, gain: 0.1 });
+    s.tone(o, t, { type: 'square', f: 233, f2: 196, dur: 0.1, gain: 0.07, at: 0.13 });
+  },
+  // The picked attack ready again: three notes up.
+  ready: (s, o, t) => {
+    s.tone(o, t, { type: 'square', f: C6, dur: 0.05, gain: 0.08 });
+    s.tone(o, t, { type: 'square', f: 1318.5, dur: 0.05, gain: 0.08, at: 0.055 });
+    s.tone(o, t, { type: 'square', f: 1568, dur: 0.09, gain: 0.08, at: 0.11 });
+  },
   confirm: (s, o, t, p) => {
     s.tone(o, t, { type: 'triangle', f: 660 * p, dur: 0.1, gain: 0.06 });
     s.tone(o, t, { type: 'triangle', f: 990 * p, dur: 0.22, gain: 0.06, at: 0.08, wet: 0.4 });
@@ -307,7 +326,7 @@ const RECIPES: Record<Sfx, Recipe> = {
 };
 
 /** Sounds that do not wobble in pitch: tunes and chords stay in tune. */
-const STEADY = new Set<Sfx>(['victory', 'checkpoint', 'heal', 'upgrade', 'death', 'wardOpen', 'confirm', 'phase']);
+const STEADY = new Set<Sfx>(['victory', 'checkpoint', 'heal', 'upgrade', 'death', 'wardOpen', 'confirm', 'phase', 'select', 'deny', 'ready']);
 
 /** How close together the same effect may start, seconds. */
 const MIN_GAP: Partial<Record<Sfx, number>> = {

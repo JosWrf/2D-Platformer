@@ -52,19 +52,56 @@ const BINDINGS: Record<string, Action[]> = {
   Enter: ['confirm'],
 };
 
+/**
+ * The three sets of keys the game is played with, by the key that uses the
+ * picked boss attack and the key that changes it: F and Q beside WASD, C and
+ * V beside the arrow keys' X, U and O over the right hand's J, K and L. The
+ * HUD shows the caps of the set last used.
+ */
+const SKILL_KEYS: Readonly<Record<string, string>> = { KeyF: 'F', KeyU: 'U', KeyC: 'C' };
+const CYCLE_KEYS: Readonly<Record<string, string>> = { KeyQ: 'Q', KeyO: 'O', KeyV: 'V' };
+/** And the caps of the keys that move, by the set last used: left, right, up, down. */
+const MOVE_ARROWS = ['←', '→', '↑', '↓'] as const;
+const MOVE_WASD = ['A', 'D', 'W', 'S'] as const;
+const WASD = new Set(['KeyA', 'KeyD', 'KeyW', 'KeyS']);
+const PAIRS: Readonly<Record<string, readonly [string, string]>> = {
+  F: ['F', 'Q'],
+  Q: ['F', 'Q'],
+  U: ['U', 'O'],
+  O: ['U', 'O'],
+  C: ['C', 'V'],
+  V: ['C', 'V'],
+};
+
+/** What a reader of the keys needs: the keys themselves, or a view of them with some held back. */
+export interface Keys {
+  isDown(action: Action): boolean;
+  pressed(action: Action): boolean;
+  released(action: Action): boolean;
+  axisX(): number;
+}
+
 /** Keyboard state with edge detection; consumed once per fixed update. */
-export class Input {
+export class Input implements Keys {
   private readonly down = new Set<Action>();
   private readonly pressedThisFrame = new Set<Action>();
   private readonly releasedThisFrame = new Set<Action>();
   /** Anything typed since the last frame - used by "press any key" prompts. */
   anyPressed = false;
+  /** The caps of the set of keys last used for the boss attacks: [use, change]. */
+  attackKeys: readonly [string, string] = ['F', 'Q'];
+  /** The caps of the keys last used to move: left, right, up, down. */
+  moveKeys: readonly [string, string, string, string] = MOVE_WASD;
 
   attach(target: Window | HTMLElement): () => void {
     const onDown = (ev: KeyboardEvent) => {
       const actions = BINDINGS[ev.code];
       if (ev.code === 'Space' || ev.code.startsWith('Arrow')) ev.preventDefault();
       if (!actions) return;
+      const cap = SKILL_KEYS[ev.code] ?? CYCLE_KEYS[ev.code];
+      if (cap) this.attackKeys = PAIRS[cap];
+      if (ev.code.startsWith('Arrow')) this.moveKeys = MOVE_ARROWS;
+      else if (WASD.has(ev.code)) this.moveKeys = MOVE_WASD;
       if (!ev.repeat) {
         this.anyPressed = true;
         for (const a of actions) {
@@ -129,7 +166,32 @@ export class Input {
       if (!this.down.has(action)) this.pressedThisFrame.add(action);
       this.down.add(action);
     } else {
+      if (this.down.has(action)) this.releasedThisFrame.add(action);
       this.down.delete(action);
     }
+  }
+}
+
+/** The keys with some actions held back: what the hero reads while the attack picker has the arrows. */
+export class MaskedKeys implements Keys {
+  constructor(
+    private readonly keys: Keys,
+    private readonly hidden: ReadonlySet<Action>,
+  ) {}
+
+  isDown(action: Action): boolean {
+    return !this.hidden.has(action) && this.keys.isDown(action);
+  }
+
+  pressed(action: Action): boolean {
+    return !this.hidden.has(action) && this.keys.pressed(action);
+  }
+
+  released(action: Action): boolean {
+    return !this.hidden.has(action) && this.keys.released(action);
+  }
+
+  axisX(): number {
+    return (this.isDown('right') ? 1 : 0) - (this.isDown('left') ? 1 : 0);
   }
 }

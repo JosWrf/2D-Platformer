@@ -104,9 +104,15 @@ check('Todeszähler zählt', r.tode >= 1, `Tode=${r.tode}`);
 r = await page.evaluate(() => {
   const g = window.game, t = window.__tick;
   g.score = 500; g.gems = 7;
-  for (let i = 0; i < 4; i++) t({ restart: true });
-  return { zustand: g.state, punkte: g.score, edelsteine: g.gems, siegel: g.level.exitSealed, bossTot: g.boss.dead };
+  // R muss im Spiel 0,8 s gehalten werden: ein Tippen allein löscht keinen Lauf.
+  for (let i = 0; i < 12; i++) t({ restart: true });
+  t();
+  const nachTippen = g.score;
+  for (let i = 0; i < 60; i++) t({ restart: true });
+  t();
+  return { zustand: g.state, nachTippen, punkte: g.score, edelsteine: g.gems, siegel: g.level.exitSealed, bossTot: g.boss.dead };
 });
+check('Ein Tippen auf R ändert nichts', r.nachTippen === 500, `Punkte nach Tippen: ${r.nachTippen}`);
 check('Neustart setzt Lauf zurück', r.zustand === 'playing' && r.punkte === 0 && r.edelsteine === 0, JSON.stringify(r));
 check('Neustart versiegelt den Ausgang wieder', r.siegel === true && r.bossTot === false, `siegel=${r.siegel} bossTot=${r.bossTot}`);
 

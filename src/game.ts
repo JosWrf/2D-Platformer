@@ -1,6 +1,6 @@
 import { audio, type TrackName } from './core/audio';
 import { Camera } from './core/camera';
-import { Input } from './core/input';
+import { Input, MaskedKeys } from './core/input';
 import { clamp, rand } from './core/math';
 import { Boss } from './entities/boss';
 import {
@@ -45,10 +45,12 @@ import {
   drawStatusPlate,
   drawProgress,
   drawRelicBadge,
+  drawRestartHold,
   drawSkillPanel as drawSkillCard,
   splitBarName,
 } from './ui/hud';
 import { UI, screen } from './ui/kit';
+import { AttackPicker, PICKER_KEYS, PICKER_PACE, readiness } from './ui/picker';
 import * as screens from './ui/screens';
 import { LEDGE_HERO_X, LEDGE_TOP, LEDGE_Y, MIST_Y, titleLedge, titleMist } from './ui/titleScene';
 import type { PauseEntry } from './ui/screens';
@@ -65,6 +67,14 @@ const TILE_LAVA_TOP = Tile.LavaTop;
  * behind the portal and turn a finished run into a death.
  */
 const NO_INPUT = new Input();
+
+/**
+ * How long R has to be held in play before the run starts over, in seconds.
+ * It sits between the parry and the boss attack in the left hand's keys; a
+ * tap there must never wipe an hour of play. The pause, the fall and the end
+ * take a tap - they say R on screen, and nothing else is going on.
+ */
+const RESTART_HOLD = 0.8;
 
 export const VIEW_W = 960;
 export const VIEW_H = 540;
@@ -395,6 +405,14 @@ export class Game implements World {
   private zoneBanner: { text: string; timer: number; sub?: string; low?: boolean } = { text: '', timer: 0 };
   /** Which list the pause screen shows: the relics, or the boss attacks. */
   private pausePage: 'relics' | 'skills' = 'relics';
+  /** The boss attacks' picker over the hero's head, and the toast that says what is picked. */
+  readonly picker = new AttackPicker();
+  /** The keys as the hero reads them while the picker has the arrows and the jump. */
+  private pickerKeys: MaskedKeys | null = null;
+  /** The keyboard, for the caps of the keys in use. */
+  private input: Input | null = null;
+  /** Seconds R has been held in play; -1 until it is let go after a restart. */
+  private restartHold = 0;
   private currentZone = '';
   private titlePulse = 0;
   /** The title's two pages: the scene with the call to start, and every control. */
@@ -839,7 +857,9 @@ export class Game implements World {
     const taught = skillForRelic(id);
     if (taught && !p.skills.has(taught.id)) {
       p.learnSkill(taught.id);
-      this.zoneBanner = { text: relic(id).banner, timer: 4.2, sub: `NEUER ANGRIFF: ${taught.name.toUpperCase()}   ·   F EINSETZEN   ·   Q WECHSELN` };
+      const [use, change] = this.input?.attackKeys ?? ['F', 'Q'];
+      const sub = `NEUER ANGRIFF: ${taught.name.toUpperCase()}   ·   ${use} EINSETZEN   ·   ${change} WECHSELN, HALTEN: AUSWAHL`;
+      this.zoneBanner = { text: relic(id).banner, timer: 4.2, sub };
     }
     this.flashWhite = 0.7;
   }
@@ -1052,6 +1072,7 @@ export class Game implements World {
   /* --------------------------------------------------------------- update */
 
   update(dt: number, input: Input): void {
+    this.input = input;
     this.time += dt;
     this.titlePulse += dt;
 
@@ -1059,20 +1080,25 @@ export class Game implements World {
     // purpose: someone who cannot look at it must be able to switch it off
     // from wherever they are, including the title screen and the pause menu.
     if (input.pressed('calm')) this.setMotion(this.camera.motion > 0 ? 0 : 1);
+    // The two switches answer everywhere; in play a banner says what was
+    // switched, while the pause screen and the title say it in their rows.
+    // (A banner set under the pause would come up stale when play resumed.)
+    const told = this.state === 'playing' || this.state === 'dead';
     if (input.pressed('music')) {
       audio.unlock();
       const on = audio.toggleMusic();
-      this.zoneBanner = { text: on ? 'MUSIK AN' : 'MUSIK AUS', timer: 2.2 };
+      if (told) this.zoneBanner = { text: on ? 'MUSIK AN' : 'MUSIK AUS', timer: 2.2 };
     }
     if (input.pressed('sound')) {
       audio.unlock();
       const on = audio.toggleSfx();
-      this.zoneBanner = { text: on ? 'EFFEKTE AN' : 'EFFEKTE AUS', timer: 2.2 };
+      if (told) this.zoneBanner = { text: on ? 'EFFEKTE AN' : 'EFFEKTE AUS', timer: 2.2 };
     }
     this.updateSound();
 
     // A dialogue holds everything else: no enemies, no gravity, no clock.
     if (this.dialogue) {
+      this.picker.close();
       this.particles.update(dt * 0.3);
       if (input.pressed('confirm') || input.pressed('attack') || input.pressed('jump')) {
         audio.play('blip');
@@ -1106,7 +1132,12 @@ export class Game implements World {
       return;
     }
 
-    if (input.pressed('restart')) {
+    // R starts the run over: held, in play (with a bar filling over the
+    // hero), and at a tap on the screens that offer it.
+    if (!input.isDown('restart')) this.restartHold = 0;
+    else if (this.state === 'playing' && this.restartHold >= 0) this.restartHold += dt;
+    if (this.state === 'playing' ? this.restartHold >= RESTART_HOLD : input.pressed('restart')) {
+      this.restartHold = -1;
       this.restart();
       input.endFrame();
       return;
@@ -1114,11 +1145,21 @@ export class Game implements World {
 
     if (this.state === 'paused') {
       if (input.pressed('pause') || input.pressed('confirm')) this.state = 'playing';
-      // Two lists, one screen: left and right (or the key that picks an
-      // attack) turn between the relics and the attacks.
-      if (input.pressed('left') || input.pressed('right') || input.pressed('cycle')) {
+      // Two lists, one screen: left and right turn between the relics and
+      // the attacks. On the attacks, up and down pick one - the one picked
+      // is the one marked - and the key that changes it in play takes the
+      // next here too, and from the relics, turns to the attacks.
+      if (input.pressed('left') || input.pressed('right') || (input.pressed('cycle') && this.pausePage === 'relics')) {
         this.pausePage = this.pausePage === 'relics' ? 'skills' : 'relics';
         audio.play('blip');
+      } else if (this.pausePage === 'skills') {
+        const owned = this.player.ownedSkills();
+        const at = this.player.skill ? owned.indexOf(this.player.skill) : -1;
+        const by = input.pressed('down') || input.pressed('cycle') ? 1 : input.pressed('up') ? -1 : 0;
+        if (by !== 0 && owned.length > 0) {
+          const next = at < 0 ? (by > 0 ? 0 : owned.length - 1) : (at + by + owned.length) % owned.length;
+          this.player.pickSkill(owned[next]);
+        }
       }
       input.endFrame();
       return;
@@ -1157,6 +1198,7 @@ export class Game implements World {
 
     if (input.pressed('pause')) {
       this.state = 'paused';
+      this.picker.close();
       input.endFrame();
       return;
     }
@@ -1199,7 +1241,15 @@ export class Game implements World {
       return;
     }
 
-    this.player.update(dt, this.victoryTimer > 0 ? NO_INPUT : input, this);
+    // The attack picker reads its key in real time. While it is open the
+    // world goes on at a third of its pace, and the hero goes on without the
+    // keys it has taken: the four that move its cursor, and the jump.
+    const decided = this.victoryTimer > 0;
+    if (decided) this.picker.close();
+    else this.picker.update(dt, input, this.player);
+    if (this.picker.open) dt *= PICKER_PACE;
+    this.pickerKeys ??= new MaskedKeys(input, PICKER_KEYS);
+    this.player.update(dt, decided ? NO_INPUT : this.picker.open ? this.pickerKeys : input, this);
 
     for (const platform of this.platforms) {
       if (!this.isVisible(platform.x, platform.y, 260)) continue;
@@ -1327,6 +1377,7 @@ export class Game implements World {
 
     if (this.player.dead && this.state === 'playing') {
       this.state = 'dead';
+      this.picker.close();
       this.deathTimer = 1.1;
       this.deaths++;
       audio.play('death');
@@ -1348,6 +1399,7 @@ export class Game implements World {
 
   private respawnAtCheckpoint(): void {
     this.player.respawn(this.checkpointX, this.checkpointY - 8);
+    this.picker.reset();
     this.projectiles.length = 0;
     this.particles.clear();
     this.spawnEnemiesFresh();
@@ -1779,6 +1831,7 @@ export class Game implements World {
     this.particles.drawTexts(ui, { x: this.camera.renderX, y: this.camera.renderY, w: VIEW_W, h: VIEW_H });
     ui.restore();
     if (this.state === 'playing' || this.state === 'dead') this.drawHud(ui);
+    if (this.state === 'playing' && !this.dialogue) this.drawAtHero(ui);
     this.drawOverlays(ui);
     ui.restore();
 
@@ -2136,6 +2189,22 @@ export class Game implements World {
   }
 
   /**
+   * What is drawn at the hero rather than in a corner, since that is where
+   * the eyes are in a fight: the attack picker, or the toast saying which
+   * attack is picked; and the bar of a held R filling up to a restart.
+   */
+  private drawAtHero(ctx: CanvasRenderingContext2D): void {
+    const p = this.player;
+    const hx = (p.cx - this.camera.renderX) / ART;
+    const hy = (p.y - this.camera.renderY) / ART;
+    const fy = (p.y + p.h - this.camera.renderY) / ART;
+    const input = this.input;
+    // A restart under way says so alone.
+    if (this.restartHold > 0) drawRestartHold(ctx, hx, hy, this.restartHold / RESTART_HOLD);
+    else this.picker.draw(ctx, p, hx, hy, fy, { cycle: input?.attackKeys[1] ?? 'Q', move: input?.moveKeys ?? ['A', 'D', 'W', 'S'] });
+  }
+
+  /**
    * The badges under the counters, six to a row. See relicBadge. In a single
    * row eleven of them ran out to the middle of the screen, under the banner
    * a boss's fall puts up - the very moment the newest one arrives.
@@ -2182,7 +2251,8 @@ export class Game implements World {
   /**
    * The boss attack he has picked, in the bottom left corner where nothing
    * else is: its badge filling while it cools down, its name, whether it is
-   * ready, and a mark for every other one he could pick instead.
+   * ready, the keys that use and change it, and a chip for every attack he
+   * has, filling as it comes back.
    */
   private drawSkillPanel(ctx: CanvasRenderingContext2D): void {
     const p = this.player;
@@ -2194,7 +2264,9 @@ export class Game implements World {
       color: info.color,
       left: p.cooldownLeft(info.id),
       cooldown: info.cooldown,
-      owned: SKILLS.filter((k) => p.skills.has(k.id)).map((k) => ({ id: k.id, color: k.color })),
+      flash: p.readyFlash > 0,
+      keys: this.input?.attackKeys ?? ['F', 'Q'],
+      owned: SKILLS.filter((k) => p.skills.has(k.id)).map((k) => ({ id: k.id, color: k.color, left: p.cooldownLeft(k.id), cooldown: k.cooldown })),
     });
   }
 
@@ -2215,6 +2287,8 @@ export class Game implements World {
       from: k.from,
       color: k.color,
       picked: k.id === p.skill,
+      status: readiness(p.cooldownLeft(k.id)),
+      ready: p.cooldownLeft(k.id) <= 0,
     }));
   }
 
@@ -2244,6 +2318,7 @@ export class Game implements World {
           {
             page: this.pausePage,
             entries: this.pauseEntries(),
+            keys: { up: this.input?.moveKeys[2] ?? 'W', down: this.input?.moveKeys[3] ?? 'S', cycle: this.input?.attackKeys[1] ?? 'Q' },
             music: !audio.musicOff,
             sound: !audio.sfxOff,
             motion: this.camera.motion > 0,
@@ -2265,7 +2340,7 @@ export class Game implements World {
   private drawTitle(ctx: CanvasRenderingContext2D): void {
     // Which build this is. One cached index.html looks exactly like the new
     // one, and then a missing feature is indistinguishable from a bug.
-    screens.drawTitle(ctx, { build: __BUILD__, page: this.titlePage }, this.titlePulse);
+    screens.drawTitle(ctx, { build: __BUILD__, page: this.titlePage, music: !audio.musicOff, sound: !audio.sfxOff }, this.titlePulse);
   }
 
   private drawVictory(ctx: CanvasRenderingContext2D): void {

@@ -92,6 +92,9 @@ export interface PauseEntry {
   color: string;
   /** The attack that is picked, marked in the list. */
   picked?: boolean;
+  /** An attack's readiness: "BEREIT", or the seconds to go. */
+  status?: string;
+  ready?: boolean;
 }
 
 export interface PauseInfo {
@@ -100,6 +103,8 @@ export interface PauseInfo {
   music: boolean;
   sound: boolean;
   motion: boolean;
+  /** The caps of the keys in use that pick an attack here: up, down, and the one that changes it. */
+  keys: { up: string; down: string; cycle: string };
 }
 
 const ENTRY_H = 24;
@@ -109,7 +114,8 @@ const COL_W = 224;
  * The pause menu: its name, the two pages as tabs with a cursor on the open
  * one (left and right turn between them), the open page as a list in two
  * columns, and along the bottom every key the menu answers to, each with
- * what it does and how it is set. One casing throughout: capitals.
+ * what it does and how it is set. On the attacks, up and down pick one, and
+ * each says whether it is ready. One casing throughout: capitals.
  */
 export function drawPause(ctx: CanvasRenderingContext2D, p: PauseInfo, time: number): void {
   // A solid bar along the top and a strip along the bottom, so the HUD under
@@ -142,6 +148,10 @@ export function drawPause(ctx: CanvasRenderingContext2D, p: PauseInfo, time: num
     }
     text(ctx, label, tx + tabW / 2 + 3, tabY + 3, { color: open ? UI.white : UI.slate, align: 'center' });
   });
+  // On the attacks, between the menu's name and the tabs: how to pick one.
+  if (p.page === 'skills' && p.entries.length > 0) {
+    keyRow(ctx, [[[p.keys.up, p.keys.down], 'WÄHLEN'], [[p.keys.cycle], 'NÄCHSTER']], 188, tabY + 2);
+  }
 
   const top = 26;
   const kind = p.page;
@@ -185,7 +195,12 @@ function drawEntry(ctx: CanvasRenderingContext2D, e: PauseEntry, kind: 'relics' 
   const hue = paletteColor(e.color);
   const nameW = text(ctx, e.name, x + BADGE + 4, y, { color: hue });
   if (e.picked) text(ctx, '◀', x + BADGE + 4 + nameW + 4, y, { color: UI.gold });
-  text(ctx, e.from, x + COL_W - 8, y + 1, { font: 'small', color: UI.slate, align: 'right' });
+  // An attack's readiness at the right, whose it was before it.
+  let right = x + COL_W - 8;
+  if (e.status) {
+    right -= text(ctx, e.status, right, y + 1, { font: 'small', color: e.ready ? UI.green : UI.mist, align: 'right' }) + 5;
+  }
+  text(ctx, e.from, right, y + 1, { font: 'small', color: UI.slate, align: 'right' });
   wrap(e.text, COL_W - BADGE - 12, { font: 'small' })
     .slice(0, 2)
     .forEach((line, i) => text(ctx, line, x + BADGE + 4, y + 9 + i * 7, { font: 'small', color: UI.frost }));
@@ -270,40 +285,52 @@ export function drawVictory(ctx: CanvasRenderingContext2D, v: VictoryInfo, time:
 
 /* ------------------------------------------------------------- title */
 
-/** Every control the game has, as the title shows it: keys, and what they do. */
-const CONTROLS: [string, string][] = [
-  ['← → / A D', 'Laufen'],
-  ['LEERTASTE / W', 'Springen · Doppelsprung'],
-  ['J / K', 'Schwert (3er-Kombo, halten: Ladeschlag)'],
-  ['E / I', 'Parade'],
-  ['SHIFT / L', 'Ausweichrolle (unverwundbar)'],
-  ['F / Q', 'Boss-Angriff · wechseln'],
-  ['↓ + SPRUNG', 'Durch Plattform fallen'],
-  ['P / R', 'Pause · Neustart'],
-  ['M / N', 'Musik · Effekte an/aus (getrennt)'],
-  ['B', 'Bildwackeln an/aus'],
+/**
+ * Every control the game has, as the title shows it: keys, and what they do -
+ * moving and fighting on the left, the boss attacks and the switches on the
+ * right. A "/" between keys means "or": the three sets of keys (beside WASD,
+ * beside the arrows' X, over the right hand's J, K and L) each in its place.
+ */
+const CONTROLS: readonly (readonly [string, string])[][] = [
+  [
+    ['← → / A D', 'Laufen'],
+    ['LEERTASTE / W', 'Springen · Doppelsprung'],
+    ['J / K / X', 'Schwert (3er-Kombo, halten: Ladeschlag)'],
+    ['E / I', 'Parade'],
+    ['SHIFT / L', 'Ausweichrolle (unverwundbar)'],
+    ['↓ + SPRUNG', 'Durch Plattform fallen'],
+  ],
+  [
+    ['F / U / C', 'Boss-Angriff einsetzen'],
+    ['Q / O / V', 'Tippen: nächster · halten: Auswahl'],
+    ['P / ESC', 'Pause (dort auch Angriff wählen)'],
+    ['R HALTEN', 'Neustart'],
+    ['M', 'Musik an/aus'],
+    ['N', 'Effekte an/aus'],
+    ['B', 'Bildwackeln an/aus'],
+  ],
 ];
 
 let controlsCard: HTMLCanvasElement | null = null;
 
 /**
- * The controls, set once into a card: two columns of five, the keys in gold
- * on the right of their column's gutter, what they do in pale steel.
+ * The controls, set once into a card: two columns, the keys in gold on the
+ * right of their column's gutter, what they do in pale steel.
  */
 function controls(): HTMLCanvasElement {
   if (controlsCard) return controlsCard;
   const w = 468;
-  const h = 52;
+  const h = 7 + Math.max(...CONTROLS.map((c) => c.length)) * 9;
   const { canvas, ctx } = artCanvas(w, h);
   blit(ctx, frame('panel', w, h), 0, 0);
-  CONTROLS.forEach(([keys, what], i) => {
-    const col = Math.floor(i / 5);
-    const row = i % 5;
-    const gutter = 6 + col * 232 + 74;
-    const y = 5 + row * 9;
-    text(ctx, keys, gutter, y, { font: 'small', color: UI.gold, align: 'right' });
-    text(ctx, what, gutter + 6, y, { font: 'small', color: UI.frost });
-  });
+  CONTROLS.forEach((column, col) =>
+    column.forEach(([keys, what], row) => {
+      const gutter = 6 + col * 232 + 74;
+      const y = 5 + row * 9;
+      text(ctx, keys, gutter, y, { font: 'small', color: UI.gold, align: 'right' });
+      text(ctx, what, gutter + 6, y, { font: 'small', color: UI.frost });
+    }),
+  );
   controlsCard = canvas;
   return canvas;
 }
@@ -312,6 +339,9 @@ export interface TitleInfo {
   build: string;
   /** The scene with the call to start, or the page of every control. */
   page: 'main' | 'controls';
+  /** How the two sound switches stand. */
+  music: boolean;
+  sound: boolean;
 }
 
 /**
@@ -327,8 +357,9 @@ export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: 
     blit(ctx, studIcon(), ART_W / 2 - 3, 72);
     box(ctx, ART_W / 2 - 70, 75, 64, 1, UI.slate);
     box(ctx, ART_W / 2 + 6, 75, 64, 1, UI.slate);
-    blit(ctx, controls(), 6, 92);
-    keyRow(ctx, [[['H'], 'ZURÜCK'], [['LEERTASTE'], 'STARTEN']], ART_W / 2, 160, UI.cream);
+    blit(ctx, controls(), 6, 86);
+    keyRow(ctx, [[['H'], 'ZURÜCK'], [['LEERTASTE'], 'STARTEN']], ART_W / 2, 166, UI.cream);
+    keyRow(ctx, soundRow(info), ART_W / 2, 180, UI.frost);
     return;
   }
   // The words on the left, over the hero; the castle and its moon on the right.
@@ -349,7 +380,15 @@ export function drawTitle(ctx: CanvasRenderingContext2D, info: TitleInfo, time: 
     ...OVER,
     shadow: UI.night,
   });
-  keyRow(ctx, [[['H'], 'STEUERUNG']], TITLE_CALL_X, 240, UI.frost);
+  keyRow(ctx, [[['H'], 'STEUERUNG'], ...soundRow(info)], TITLE_CALL_X, 240, UI.frost);
+}
+
+/** The two sound switches as they stand, for the title's rows. */
+function soundRow(info: TitleInfo): [string[], string][] {
+  return [
+    [['M'], info.music ? 'MUSIK AN' : 'MUSIK AUS'],
+    [['N'], info.sound ? 'EFFEKTE AN' : 'EFFEKTE AUS'],
+  ];
 }
 
 /** The middle of the words, left of the moon; and the call to start, right of the crag. */

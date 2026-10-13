@@ -1,5 +1,5 @@
 import { audio } from '../core/audio';
-import { Input } from '../core/input';
+import type { Keys } from '../core/input';
 import { Rect, TAU, approach, clamp, easeOut, lerp, rand, sign } from '../core/math';
 import { PALETTE, RAMP } from '../render/palette';
 import { ART, makeCanvas, snap } from '../render/pixel';
@@ -112,6 +112,8 @@ const PARRY_WINDOW = 0.18;
 const SPLINTER_PARRY_WINDOW = 0.26;
 /** Dead time after a parry, so it cannot simply be held down. */
 const PARRY_RECOVERY = 0.38;
+/** How long the picked attack's badge stays lit white once it is ready again. */
+export const READY_FLASH = 0.3;
 
 /** Where the blade rests between combos - up and slightly forward. */
 const CARRY_ANGLE = -1.05;
@@ -197,6 +199,8 @@ export class Player extends Body {
   skill: SkillId | null = null;
   /** Seconds until each attack can be used again; missing means ready. */
   readonly skillCooldowns = new Map<SkillId, number>();
+  /** Seconds left of the flash on the picked attack's badge, from the moment it is ready again. */
+  readyFlash = 0;
   /** The attacks under way: what they draw and what they hit. */
   skillEffects: SkillEffect[] = [];
   /** Seidenmantel: up and waiting for a blow, or growing back. */
@@ -389,27 +393,36 @@ export class Player extends Body {
     return this.skillCooldowns.get(id) ?? 0;
   }
 
-  /**
-   * The next learned attack, in the order the road hands them out, round to
-   * the first again. Its name goes up over his head: the HUD is in a corner,
-   * and a hero picking in the middle of a fight is looking at himself.
-   */
-  cycleSkill(world: World): void {
-    if (this.skills.size === 0) return;
-    const owned = SKILLS.filter((k) => this.skills.has(k.id));
-    const at = owned.findIndex((k) => k.id === this.skill);
-    const next = owned[(at + 1) % owned.length];
-    this.skill = next.id;
-    audio.play('blip', 1.3);
-    if (owned.length > 1) world.particles.text(this.cx, this.y - 16, next.name.toUpperCase(), next.color);
+  /** The attacks learned so far, in the order the road hands them out. */
+  ownedSkills(): SkillId[] {
+    return SKILLS.filter((k) => this.skills.has(k.id)).map((k) => k.id);
   }
 
-  /** The picked attack, if it is ready. A dull click if it is not. */
+  /** The next learned attack, round to the first again (a tap of the key that changes it). */
+  cycleSkill(): void {
+    const owned = this.ownedSkills();
+    if (owned.length === 0) return;
+    const at = this.skill ? owned.indexOf(this.skill) : -1;
+    this.pickSkill(owned[(at + 1) % owned.length]);
+  }
+
+  /**
+   * An attack picked, by a tap, the picker or the pause screen: a click
+   * pitched by where it stands in the list, so the ear learns the order too.
+   */
+  pickSkill(id: SkillId): void {
+    if (!this.skills.has(id)) return;
+    this.skill = id;
+    const at = this.ownedSkills().indexOf(id);
+    audio.play('select', Math.pow(2, (at % 12) / 12));
+  }
+
+  /** The picked attack, if it is ready. A short refusal if it is not. */
   private useSkill(world: World): void {
     const id = this.skill;
     if (!id) return;
     if (this.cooldownLeft(id) > 0) {
-      audio.play('blip', 0.6);
+      audio.play('deny');
       return;
     }
     const info = skillInfo(id);
@@ -423,9 +436,16 @@ export class Player extends Body {
   /** The attacks in flight, and the cooldowns running down - faster with Tickmar's beat in him. */
   private updateSkills(dt: number, world: World): void {
     const tick = dt * (this.has('taktgeber') ? TAKT_PACE : 1);
+    this.readyFlash = Math.max(0, this.readyFlash - dt);
     for (const [id, t] of this.skillCooldowns) {
-      if (t <= tick) this.skillCooldowns.delete(id);
-      else this.skillCooldowns.set(id, t - tick);
+      if (t <= tick) {
+        this.skillCooldowns.delete(id);
+        // The picked one ready again: a chime and its badge lit white for a moment.
+        if (id === this.skill) {
+          this.readyFlash = READY_FLASH;
+          audio.play('ready');
+        }
+      } else this.skillCooldowns.set(id, t - tick);
     }
     for (const e of this.skillEffects) e.update(dt, world);
     if (this.skillEffects.some((e) => e.done)) this.skillEffects = this.skillEffects.filter((e) => !e.done);
@@ -505,7 +525,7 @@ export class Player extends Body {
     world.particles.text(this.cx, this.y - 12, '+1', color);
   }
 
-  update(dt: number, input: Input, world: World): void {
+  update(dt: number, input: Keys, world: World): void {
     const level = world.level;
     this.flash = Math.max(0, this.flash - dt * 6);
     this.invuln = Math.max(0, this.invuln - dt);
@@ -673,7 +693,7 @@ export class Player extends Body {
     if (this.parryTimer > 0) this.parryProjectiles(world);
 
     /* ---------------------------------------------------- boss attacks */
-    if (input.pressed('cycle')) this.cycleSkill(world);
+    // Changing it is the attack picker's (ui/picker.ts), which reads the key on its own.
     if (!stunned && !this.isDashing && input.pressed('skill')) this.useSkill(world);
 
     /* ---------------------------------------------------------- attack */

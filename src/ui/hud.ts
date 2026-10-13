@@ -210,40 +210,83 @@ export interface SkillPanelInfo {
   /** Seconds until it can be used again; 0 when it is ready. */
   left: number;
   cooldown: number;
-  /** Every attack learned, in order, and which one is picked. */
-  owned: { id: string; color: string }[];
+  /** Ready again a moment ago: the badge and the word lit white. */
+  flash: boolean;
+  /** The caps of the keys in use: the one that uses it, the one that changes it. */
+  keys: readonly [string, string];
+  /** Every attack learned, in order, and how far each has come back. */
+  owned: { id: string; color: string; left: number; cooldown: number }[];
 }
+
+/** A chip per attack in the panel: three pixels wide, five high, nine to a row. */
+const CHIP_W = 3;
+const CHIP_H = 5;
+const CHIP_PITCH = 4;
+const CHIPS_PER_ROW = 9;
 
 /**
  * The boss attack he has picked, in the bottom left corner where nothing else
- * is: its name, its badge filling as it cools down, F with whether it is
- * ready, and Q with a mark for every other attack he could pick instead.
+ * is: its name, its badge filling as it cools down, the key that uses it with
+ * whether it is ready, and the key that changes it with a chip for every
+ * attack he has - lit in its colour when it is ready, dark and filling from
+ * the bottom while it comes back, the picked one standing a pixel taller. The
+ * caps are the ones of the keys he plays with.
  */
 export function drawSkillPanel(ctx: CanvasRenderingContext2D, info: SkillPanelInfo): void {
   const ready = info.left <= 0;
   const x = LEFT;
   const y = 226;
   // Narrow enough to stay clear of the boss bar, which starts at x 84.
-  drawFrame(ctx, 'plate', x, y, 70, 36);
-  text(ctx, info.name, x + 4, y + 3, { font: 'small', color: ready ? paletteColor(info.color) : UI.slate });
+  drawFrame(ctx, 'plate', x, y, 74, 36);
+  text(ctx, info.name, x + 4, y + 3, { font: 'small', color: info.flash ? UI.white : ready ? paletteColor(info.color) : UI.slate });
   drawSkillBadge(ctx, info.id, x + 4, y + 12, info.color, ready, ready ? null : 1 - info.left / info.cooldown);
-  blit(ctx, keyCap('F'), x + 22, y + 11);
+  if (info.flash) {
+    // Ready again: a frame of white round the badge, for a moment.
+    box(ctx, x + 3, y + 11, BADGE + 2, 1, UI.white);
+    box(ctx, x + 3, y + 12 + BADGE, BADGE + 2, 1, UI.white);
+    box(ctx, x + 3, y + 11, 1, BADGE + 2, UI.white);
+    box(ctx, x + 4 + BADGE, y + 11, 1, BADGE + 2, UI.white);
+  }
+  blit(ctx, keyCap(info.keys[0]), x + 22, y + 11);
   const status = ready ? 'BEREIT' : `${info.left.toFixed(1).replace('.', ',')} S`;
-  text(ctx, status, x + 33, y + 13, { font: 'small', color: ready ? UI.green : UI.mist });
+  text(ctx, status, x + 33, y + 13, { font: 'small', color: info.flash ? UI.white : ready ? UI.green : UI.mist });
   if (info.owned.length > 1) {
-    blit(ctx, keyCap('Q'), x + 22, y + 12 + KEY_H);
-    // A mark a pixel wide for each, two apart - all eighteen fit - and the
-    // picked one standing taller, in its colour.
-    const top = y + 15 + KEY_H;
+    blit(ctx, keyCap(info.keys[1]), x + 22, y + 12 + KEY_H);
+    const rows = Math.ceil(info.owned.length / CHIPS_PER_ROW);
+    const top = rows > 1 ? y + 22 : y + 25;
     info.owned.forEach((k, i) => {
-      const px = x + 33 + i * 2;
-      if (k.id === info.id) {
-        box(ctx, px, top - 1, 1, 5, paletteColor(k.color));
+      const cx = x + 33 + (i % CHIPS_PER_ROW) * CHIP_PITCH;
+      const cy = top + Math.floor(i / CHIPS_PER_ROW) * (CHIP_H + 2);
+      const picked = k.id === info.id;
+      const lift = picked ? 1 : 0;
+      if (k.left <= 0) {
+        box(ctx, cx, cy - lift, CHIP_W, CHIP_H + lift, paletteColor(k.color));
       } else {
-        box(ctx, px, top, 1, 3, UI.steel);
+        // Dark, and filling from the bottom as it comes back.
+        const fill = Math.floor(CHIP_H * (1 - k.left / k.cooldown));
+        box(ctx, cx, cy - lift, CHIP_W, CHIP_H + lift, UI.dusk);
+        box(ctx, cx, cy + CHIP_H - fill, CHIP_W, fill, UI.slate);
       }
+      if (picked) box(ctx, cx, cy - lift, CHIP_W, 1, UI.white);
     });
   }
+}
+
+/**
+ * R held in play: over the hero's head, the word and a bar of old blood
+ * filling to the restart. Let go before it is full, and nothing happened.
+ */
+export function drawRestartHold(ctx: CanvasRenderingContext2D, hx: number, hy: number, progress: number): void {
+  const w = 64;
+  const h = 18;
+  const x = Math.max(2, Math.min(ART_W - w - 2, Math.round(hx - w / 2)));
+  const y = Math.max(36, Math.round(hy - h - 26));
+  drawFrame(ctx, 'plate', x, y, w, h);
+  text(ctx, 'NEUSTART', x + w / 2, y + 3, { font: 'small', color: UI.roseLight, align: 'center' });
+  const bw = w - 10;
+  box(ctx, x + 5, y + 11, bw, 4, UI.ink);
+  box(ctx, x + 6, y + 12, bw - 2, 2, UI.wine);
+  box(ctx, x + 6, y + 12, Math.round((bw - 2) * clamp(progress, 0, 1)), 2, UI.rose);
 }
 
 /* ------------------------------------------------------------- boss bar */
