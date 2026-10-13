@@ -1981,7 +1981,7 @@ Musikkanal leihen, damit sie nicht untergehen, ohne je eine Warnung eines Bosses
 zu verdrängen. Jeder
 Effekt sitzt in einer Lautheitsklasse — Bedienung um −30 LUFS, die Bewegungen
 des Helden um −27, Treffer um −22, Ankündigungen um −19, die großen Momente
-um −15 —, und in fünf Bosskämpfen geht keiner der 1 499 Effekte unter der Musik
+um −15 —, und in fünf Bosskämpfen geht keiner der 1 484 Effekte unter der Musik
 unter. Im Wald klingt ein Effekt im Mittel nach 0,33 s aus, und nur die vier
 großen Momente (Sieg, Bossfall, Tod, Upgrade) länger als eine Sekunde.
 
@@ -2009,28 +2009,36 @@ spielt er mit allen 306 Paaren durch.
 
 Runde a0 gab 3 von 10. Runde a1 gab 8 und eine Bedingung: Das Auswahlraster war
 eine Zeitlupen-Taste — eine Parade von 0,2 s dauerte mit gehaltenem `Q` 0,62 s.
-Runde a2 hat **abgezeichnet, mit 9 von 10**:
+Runde a2 hat abgezeichnet, mit 9 von 10. In Runde a3 hat der Kritiker strenger
+gezählt — ein Klang, der in einem vollen Kampf keinen Kanal bekommt, gilt als
+nicht gehört —, und so gingen 20 % der Auswahl- und 17 % der Ablehnungstöne
+unter. Seit sie sich den Musikkanal leihen dürfen, hat Runde a4 wieder
+**abgezeichnet, mit 9 von 10, die Effekte mit 10**:
 
-| | Runde a0 | Runde a2 |
+| | Runde a0 | Runde a4 |
 |---|---|---|
 | Eingaben von jedem zu jedem der 18 Angriffe | höchstens 17, im Mittel 9,0 | höchstens 5, im Mittel 3,06 |
 | Hinweis am Helden | drei Schilder, 70–91 px hinter ihm, 0,58 s | eines, ≤ 4 px über dem Kopf, 1,32 s, weicht Gefahren aus |
 | Neustart | ein Tippen löscht den Lauf | 0,8 s halten; in der Pause fragt das erste `R` nach |
 | Musik und Effekte getrennt | nur Musik und „alles“ | `M` und `N` je für sich, gespeichert, überall richtig angezeigt |
 | Musik nach `M` weg | nach 1,3 s | −46 dB nach 0,2 s |
+| Auswahl- und Ablehnungston hörbar, auch in vollen Kämpfen | 23 % | 100 % und 92 % |
+| Warnungen der Bosse, die untergehen | — | keine (0 von 58), Tickmars Einzählen 15 von 15 Schlägen |
 | Stimmen gleichzeitig | 41–45 | höchstens 8 |
 | Klangmaterial | ein Puffer und Oszillatoren | 58 Samples, 420 708 Frames |
-| Effekte, die die Musik ganz verdeckt | 13,0 % | 0,0 % von 1 499 |
+| Effekte, die die Musik ganz verdeckt | 13,0 % | 0,0 % von 1 484 |
 | Klang über 12 kHz | 22 von 42 Effekten, 12 von 27 Stücken | keiner |
 | Die Musik wiederholt sich | nach 4 Takten (6–17 s) | nach 16–24 Takten (24–69 s) |
 | Stücke mit eigenen Instrumenten | 2 von 27 | alle, jeder Kampf mit eigenem Motiv |
 
-Seine Empfehlungen aus der letzten Runde sind ebenfalls umgesetzt: Morvains
-Fanfare lag 2,5 dB über der Musik und kommt jetzt eine Oktave höher dreimal im
-Durchlauf, Nyktos' Chor ist freigestellt, Ignivors Motiv beginnt mit einem
-Oktavsprung, den die ausgeschriebene Melodie nie macht, Umbra zitiert das
-Heldenmotiv, bevor er es spiegelt, und die Bosse brüllen und kreischen mit
-eigenen Stimmen.
+Seine Empfehlungen sind ebenfalls umgesetzt: Morvains Fanfare lag 2,5 dB über
+der Musik und kommt jetzt eine Oktave höher dreimal im Durchlauf, Nyktos' Chor
+ist freigestellt, Ignivors Motiv beginnt mit einem Oktavsprung, den die
+ausgeschriebene Melodie nie macht, Umbra zitiert das Heldenmotiv auf der Laute
+des Helden, bevor er es spiegelt, und die Bosse brüllen und kreischen mit
+eigenen Stimmen. Jedes Motiv hebt sich um mindestens 6,8 dB von der Musik ab.
+Nicht umgesetzt ist eine Lautstärke in Stufen: `M` und `N` schalten Musik und
+Effekte je für sich ab, und mehr verlangt der Kritiker nicht.
 
 ## Aufbau des Codes
 
