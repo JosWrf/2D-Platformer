@@ -1066,8 +1066,8 @@ export class Game implements World {
     }
     if (input.pressed('sound')) {
       audio.unlock();
-      const on = audio.toggleSound();
-      this.zoneBanner = { text: on ? 'TON AN' : 'TON AUS', timer: 2.2 };
+      const on = audio.toggleSfx();
+      this.zoneBanner = { text: on ? 'EFFEKTE AN' : 'EFFEKTE AUS', timer: 2.2 };
     }
     this.updateSound();
 
@@ -2245,7 +2245,7 @@ export class Game implements World {
             page: this.pausePage,
             entries: this.pauseEntries(),
             music: !audio.musicOff,
-            sound: !audio.muted,
+            sound: !audio.sfxOff,
             motion: this.camera.motion > 0,
           },
           this.titlePulse,

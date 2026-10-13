@@ -322,8 +322,14 @@ const MIN_GAP: Partial<Record<Sfx, number>> = {
   blip: 0.05,
 };
 
-const STORE_SOUND = 'shadowblade.sound';
+/** The effects' level on their bus. */
+const SFX_LEVEL = 0.9;
+
+/** The effects switch (N), and the music switch (M), as remembered. */
+const STORE_SFX = 'shadowblade.sfx';
 const STORE_MUSIC = 'shadowblade.music';
+/** Where N used to remember "all sound off", music included: read once, then gone. */
+const STORE_LEGACY = 'shadowblade.sound';
 
 /**
  * The sound of the game: effects, music and the room they play in.
@@ -336,9 +342,10 @@ const STORE_MUSIC = 'shadowblade.music';
 export class AudioBus {
   private ctx: AudioContext | null = null;
   private synth: Synth | null = null;
-  private master: GainNode | null = null;
   private sfx: Outlet | null = null;
   private musicBus: GainNode | null = null;
+  private sfxBus: GainNode | null = null;
+  private sfxWet: GainNode | null = null;
   private musicTone: BiquadFilterNode | null = null;
   private reverbReturn: GainNode | null = null;
   private music: Music | null = null;
@@ -346,14 +353,21 @@ export class AudioBus {
   private readonly last = new Map<Sfx, number>();
   private wantedTrack: TrackName | null = null;
   private space = 0.35;
-  /** All sound off (N). */
-  muted = false;
-  /** Music off, effects on (M). */
+  /** The effects off, the music playing on (N). */
+  sfxOff = false;
+  /** The music off, the effects playing on (M). */
   musicOff = false;
 
   constructor() {
     try {
-      this.muted = localStorage.getItem(STORE_SOUND) === '0';
+      // N once switched everything off, music too: whoever chose that gets
+      // both off now.
+      if (localStorage.getItem(STORE_LEGACY) === '0') {
+        localStorage.setItem(STORE_SFX, '0');
+        localStorage.setItem(STORE_MUSIC, '0');
+      }
+      localStorage.removeItem(STORE_LEGACY);
+      this.sfxOff = localStorage.getItem(STORE_SFX) === '0';
       this.musicOff = localStorage.getItem(STORE_MUSIC) === '0';
     } catch {
       // No storage: defaults it is.
@@ -383,9 +397,8 @@ export class AudioBus {
       comp.connect(ctx.destination);
 
       const master = ctx.createGain();
-      master.gain.value = this.muted ? 0 : 0.8;
+      master.gain.value = 0.8;
       master.connect(comp);
-      this.master = master;
 
       const reverb = ctx.createConvolver();
       reverb.buffer = Synth.impulse(ctx, 2.6, 3.2);
@@ -396,14 +409,21 @@ export class AudioBus {
       reverbIn.connect(reverb).connect(reverbReturn).connect(master);
       this.reverbReturn = reverbReturn;
 
+      // The effects on a bus of their own, their share of the reverb too, so
+      // that switching them off (N) silences their tails and not the music's.
       const sfxBus = ctx.createGain();
-      sfxBus.gain.value = 0.9;
+      sfxBus.gain.value = this.sfxOff ? 0 : SFX_LEVEL;
       sfxBus.connect(master);
+      this.sfxBus = sfxBus;
+      const sfxWet = ctx.createGain();
+      sfxWet.gain.value = this.sfxOff ? 0 : 1;
+      sfxWet.connect(reverbIn);
+      this.sfxWet = sfxWet;
       const drive = ctx.createWaveShaper();
       drive.curve = Synth.driveCurve(3);
       drive.oversample = '2x';
       drive.connect(sfxBus);
-      this.sfx = { dry: sfxBus, wet: reverbIn, drive };
+      this.sfx = { dry: sfxBus, wet: sfxWet, drive };
 
       const musicTone = ctx.createBiquadFilter();
       musicTone.type = 'lowpass';
@@ -426,11 +446,11 @@ export class AudioBus {
 
   /** Keeps the music scheduled. Also called from the game loop. */
   tick(): void {
-    if (this.music && !this.musicOff && !this.muted) this.music.tick();
+    if (this.music && !this.musicOff) this.music.tick();
   }
 
   play(name: Sfx, pitch = 1): void {
-    if (this.muted || !this.ctx || !this.synth || !this.sfx) return;
+    if (this.sfxOff || !this.ctx || !this.synth || !this.sfx) return;
     const now = this.ctx.currentTime;
     const gap = MIN_GAP[name] ?? 0.018;
     const before = this.last.get(name) ?? -1;
@@ -447,7 +467,7 @@ export class AudioBus {
   /** Which piece should be playing. Cheap to call every frame. */
   setMusic(track: TrackName | null): void {
     this.wantedTrack = track;
-    if (this.music && !this.musicOff && !this.muted) this.music.play(track);
+    if (this.music && !this.musicOff) this.music.play(track);
   }
 
   get currentTrack(): TrackName | null {
@@ -469,26 +489,25 @@ export class AudioBus {
     this.musicTone.frequency.setTargetAtTime(on ? 700 : 20000, this.ctx.currentTime, 0.15);
   }
 
-  /** N: everything off and back on. Remembered across sessions. */
-  toggleSound(): boolean {
-    this.muted = !this.muted;
-    this.remember(STORE_SOUND, !this.muted);
-    if (this.ctx && this.master) {
-      this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.05);
+  /** N: the effects alone, off and back on - the music plays on. Remembered across sessions. */
+  toggleSfx(): boolean {
+    this.sfxOff = !this.sfxOff;
+    this.remember(STORE_SFX, !this.sfxOff);
+    if (this.ctx && this.sfxBus && this.sfxWet) {
+      this.sfxBus.gain.setTargetAtTime(this.sfxOff ? 0 : SFX_LEVEL, this.ctx.currentTime, 0.05);
+      this.sfxWet.gain.setTargetAtTime(this.sfxOff ? 0 : 1, this.ctx.currentTime, 0.05);
     }
-    if (!this.muted && this.music && !this.musicOff) this.music.play(this.wantedTrack);
-    if (this.muted && this.music) this.music.play(null);
-    return !this.muted;
+    return !this.sfxOff;
   }
 
-  /** M: the music alone. Remembered across sessions. */
+  /** M: the music alone, off and back on - the effects play on. Remembered across sessions. */
   toggleMusic(): boolean {
     this.musicOff = !this.musicOff;
     this.remember(STORE_MUSIC, !this.musicOff);
     if (this.ctx && this.musicBus) {
       this.musicBus.gain.setTargetAtTime(this.musicOff ? 0 : 0.55, this.ctx.currentTime, 0.1);
     }
-    if (this.music) this.music.play(this.musicOff || this.muted ? null : this.wantedTrack);
+    if (this.music) this.music.play(this.musicOff ? null : this.wantedTrack);
     return !this.musicOff;
   }
 

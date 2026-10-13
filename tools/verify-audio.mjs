@@ -15,8 +15,10 @@
  *     the fight's end hands it back to the zone;
  *   - every boss has a fight of its own - no two share one, except Gallert and
  *     the warden, the two short teaching fights;
- *   - M turns the music off and on, N the whole sound, and both are
- *     remembered across a reload.
+ *   - M turns the music off and on and N the effects, each on its own - the
+ *     music plays on without the effects, the effects without the music - and
+ *     both are remembered across a reload; whoever had switched everything
+ *     off with the old N finds both off.
  *
  * Usage: node tools/verify-audio.mjs
  */
@@ -126,21 +128,46 @@ const fights = await page.evaluate(() => {
   return out;
 });
 
-// M and N, then a reload: both switches remembered.
+// N, then M, each on its own; then a reload: both switches remembered.
 await page.evaluate(() => window.loop.start());
-await page.keyboard.press('KeyM');
-await page.waitForTimeout(150);
-const musicOff = await page.evaluate(() => ({ off: window.audio.musicOff, banner: window.game.zoneBanner.text }));
+const state = () => ({
+  sfxOff: window.audio.sfxOff,
+  musicOff: window.audio.musicOff,
+  track: window.audio.currentTrack,
+  banner: window.game.zoneBanner.text,
+});
 await page.keyboard.press('KeyN');
 await page.waitForTimeout(150);
-const soundOff = await page.evaluate(() => ({ muted: window.audio.muted, banner: window.game.zoneBanner.text }));
+const soundOff = await page.evaluate(state);
+await page.keyboard.press('KeyM');
+await page.waitForTimeout(150);
+const musicOff = await page.evaluate(state);
 await page.reload({ waitUntil: 'load' });
 await page.waitForFunction(() => !!window.game);
-const remembered = await page.evaluate(() => ({ musicOff: window.audio.musicOff, muted: window.audio.muted }));
-await page.keyboard.press('KeyM');
+const remembered = await page.evaluate(state);
 await page.keyboard.press('KeyN');
 await page.waitForTimeout(150);
-const back = await page.evaluate(() => ({ musicOff: window.audio.musicOff, muted: window.audio.muted }));
+const sfxBack = await page.evaluate(state);
+await page.keyboard.press('KeyM');
+await page.waitForTimeout(150);
+const back = await page.evaluate(state);
+// The old N switched everything off, music too: that choice carries over.
+await page.evaluate(() => {
+  localStorage.setItem('shadowblade.sound', '0');
+  localStorage.removeItem('shadowblade.sfx');
+  localStorage.removeItem('shadowblade.music');
+});
+await page.reload({ waitUntil: 'load' });
+await page.waitForFunction(() => !!window.game);
+const legacy = await page.evaluate(() => ({
+  sfxOff: window.audio.sfxOff,
+  musicOff: window.audio.musicOff,
+  gone: localStorage.getItem('shadowblade.sound') === null,
+}));
+await page.evaluate(() => {
+  localStorage.removeItem('shadowblade.sfx');
+  localStorage.removeItem('shadowblade.music');
+});
 
 const report = {
   sfx: Object.keys(probe.sfx).length,
@@ -157,7 +184,9 @@ const report = {
   musicOff,
   soundOff,
   remembered,
+  sfxBack,
   back,
+  legacy,
   errors,
 };
 console.log(JSON.stringify(report, null, 2));
@@ -186,10 +215,12 @@ const checks = [
   ],
   [`${FIGHTS.length} bosses, ${FIGHTS.length} different fights`, distinct.size === FIGHTS.length],
   ['the knight has his own', fights.knight.fightTrack === 'bossKnight'],
-  ['M turns the music off, and says so', musicOff.off && /MUSIK AUS/.test(musicOff.banner)],
-  ['N turns the sound off, and says so', soundOff.muted && /TON AUS/.test(soundOff.banner)],
-  ['both are remembered across a reload', remembered.musicOff && remembered.muted],
-  ['and both come back on', !back.musicOff && !back.muted],
+  ['N turns the effects off, says so, and the music plays on', soundOff.sfxOff && !soundOff.musicOff && soundOff.track !== null && /EFFEKTE AUS/.test(soundOff.banner)],
+  ['M turns the music off and says so, the effects switch untouched', musicOff.musicOff && musicOff.track === null && musicOff.sfxOff && /MUSIK AUS/.test(musicOff.banner)],
+  ['both are remembered across a reload', remembered.musicOff && remembered.sfxOff],
+  ['N brings the effects back and leaves the music off', !sfxBack.sfxOff && sfxBack.musicOff],
+  ['and M the music', !back.musicOff && !back.sfxOff],
+  ['the old all-off switch carries over as both off', legacy.sfxOff && legacy.musicOff && legacy.gone],
   ['no page errors', errors.length === 0],
 ];
 let failed = 0;
@@ -202,5 +233,5 @@ if (failed) {
   process.exit(1);
 }
 console.log(
-  `OK: ${report.sfx} effects and ${report.music} pieces render, none silent and none clipping, the music follows the zone and every boss fight, and M and N switch it and are remembered.`,
+  `OK: ${report.sfx} effects and ${report.music} pieces render, none silent and none clipping, the music follows the zone and every boss fight, and M and N switch music and effects, each on its own, and are remembered.`,
 );

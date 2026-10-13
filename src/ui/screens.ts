@@ -169,7 +169,7 @@ export function drawPause(ctx: CanvasRenderingContext2D, p: PauseInfo, time: num
       [['P', 'LEERTASTE'], 'FORTSETZEN'],
       [['R'], 'NEUSTART'],
       [['M'], p.music ? 'MUSIK AN' : 'MUSIK AUS'],
-      [['N'], p.sound ? 'TON AN' : 'TON AUS'],
+      [['N'], p.sound ? 'EFFEKTE AN' : 'EFFEKTE AUS'],
       [['B'], p.motion ? 'BILDWACKELN AN' : 'BILDWACKELN AUS'],
     ],
     ART_W / 2,
@@ -280,7 +280,7 @@ const CONTROLS: [string, string][] = [
   ['F / Q', 'Boss-Angriff · wechseln'],
   ['↓ + SPRUNG', 'Durch Plattform fallen'],
   ['P / R', 'Pause · Neustart'],
-  ['M / N', 'Musik · Ton an/aus'],
+  ['M / N', 'Musik · Effekte an/aus (getrennt)'],
   ['B', 'Bildwackeln an/aus'],
 ];
 
